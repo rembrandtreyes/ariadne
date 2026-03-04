@@ -1,0 +1,17 @@
+[[services]]
+name = "monolith"
+path = "monolith"
+base_url = "http://localhost:8000"
+language = "python"
+
+[[services]]
+name = "payments"
+path = "payments-svc"
+base_url = "http://localhost:8001"
+language = "python"
+
+[[services]]
+name = "notifications"
+path = "notifications-svc"
+base_url = "http://localhost:8002"
+language = "typescript"

@@ -1,0 +1,19 @@
+# Build artifacts
+/target
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Ariadne local data
+.ariadne/

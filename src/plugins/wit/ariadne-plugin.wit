@@ -1,0 +1,82 @@
+// ariadne-plugin.wit — the stable ABI contract
+
+package ariadne:plugin@1.0.0;
+
+interface language-parser {
+    // Metadata
+    record language-info {
+        name: string,
+        extensions: list<string>,
+        version: string,
+    }
+
+    // Parsed output types (match Ariadne's internal types)
+    record parsed-symbol {
+        name: string,
+        qualified-name: string,
+        kind: symbol-kind,
+        line-start: u32,
+        line-end: u32,
+        is-exported: bool,
+        signature: string,
+        decorators: list<string>,
+        parent-name: option<string>,
+    }
+
+    record parsed-import {
+        imported-name: string,
+        module-path: string,
+        line: u32,
+        is-external: bool,
+    }
+
+    record parsed-call {
+        caller-name: string,
+        callee-name: string,
+        line: u32,
+    }
+
+    record api-endpoint {
+        method: string,
+        path-pattern: string,
+        handler-name: string,
+        line: u32,
+    }
+
+    record api-call-site {
+        method: string,
+        url-pattern: string,
+        caller-name: string,
+        line: u32,
+        is-dynamic: bool,
+    }
+
+    enum symbol-kind {
+        function,
+        method,
+        class,
+        interface,
+        module,
+        variable,
+        constant,
+        type-alias,
+        enum-type,
+        trait-type,
+    }
+
+    record parse-result {
+        symbols: list<parsed-symbol>,
+        imports: list<parsed-import>,
+        calls: list<parsed-call>,
+        api-endpoints: list<api-endpoint>,
+        api-calls: list<api-call-site>,
+    }
+
+    // The two functions every plugin must implement
+    get-info: func() -> language-info;
+    parse-file: func(source: string, file-path: string) -> parse-result;
+}
+
+world ariadne-plugin {
+    export language-parser;
+}

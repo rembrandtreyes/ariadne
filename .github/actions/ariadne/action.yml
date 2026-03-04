@@ -1,0 +1,49 @@
+name: 'Ariadne Dependency Graph Check'
+description: 'Run Ariadne dependency graph analysis on your codebase'
+inputs:
+  check-rules:
+    description: 'Run architectural rule checks (true/false)'
+    required: false
+    default: 'true'
+  dead-code-threshold:
+    description: 'Maximum allowed dead code count before failing (0 = skip check)'
+    required: false
+    default: '10'
+  affected-tests:
+    description: 'Output affected tests for the current diff against origin/main (true/false)'
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Ariadne
+      shell: bash
+      run: cargo install ariadne-graph
+
+    - name: Index repository
+      shell: bash
+      run: ariadne index .
+
+    - name: Check architectural rules
+      if: inputs.check-rules == 'true'
+      shell: bash
+      run: ariadne check-rules --json
+
+    - name: Check dead code
+      if: inputs.dead-code-threshold != '0'
+      shell: bash
+      run: |
+        result=$(ariadne dead-code --json)
+        echo "$result"
+        count=$(echo "$result" | jq 'if type == "array" then length else .count // 0 end')
+        threshold=${{ inputs.dead-code-threshold }}
+        if [ "$count" -gt "$threshold" ]; then
+          echo "::error::Dead code count ($count) exceeds threshold ($threshold)"
+          exit 1
+        fi
+        echo "Dead code count ($count) is within threshold ($threshold)"
+
+    - name: Affected tests
+      if: inputs.affected-tests == 'true'
+      shell: bash
+      run: ariadne affected-tests --diff origin/main..HEAD --json

@@ -1,0 +1,113 @@
+use crate::db::Database;
+use crate::db::write;
+use crate::parse;
+use rayon::prelude::*;
+use std::sync::Mutex;
+
+use super::discovery::DiscoveryResult;
+
+/// Phase 3: Parse all discovered files in parallel using rayon.
+///
+/// Reads each file, runs the appropriate language parser, and stores
+/// the extracted symbols, imports, and calls in the database.
+pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<()> {
+    // Collect parse results in parallel
+    let results: Vec<_> = discovery
+        .files
+        .par_iter()
+        .filter_map(|file| {
+            let source = std::fs::read_to_string(&file.path).ok()?;
+            let parser = parse::get_parser(file.language);
+            let file_path = file.path.to_string_lossy().to_string();
+            match parser.parse_file(&source, &file_path) {
+                Ok(result) => Some((file.path.clone(), result)),
+                Err(_) => None,
+            }
+        })
+        .collect();
+
+    // Insert results sequentially (SQLite is single-writer)
+    let errors = Mutex::new(Vec::<String>::new());
+
+    for (path, result) in results {
+        let abs_path = path.to_string_lossy().to_string();
+
+        // Look up file_id by absolute_path
+        let file_id: Option<i64> = db
+            .conn()
+            .query_row(
+                "SELECT id FROM files WHERE absolute_path = ?1",
+                rusqlite::params![abs_path],
+                |row| row.get(0),
+            )
+            .ok();
+
+        let file_id = match file_id {
+            Some(id) => id,
+            None => {
+                errors
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(format!("No file record for: {}", abs_path));
+                continue;
+            }
+        };
+
+        if let Err(e) = write::insert_symbols_batch(db, file_id, &result.symbols) {
+            errors
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(format!("Symbol insert error for {}: {}", abs_path, e));
+        }
+
+        if let Err(e) = write::insert_imports_batch(db, file_id, &result.imports) {
+            errors
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(format!("Import insert error for {}: {}", abs_path, e));
+        }
+
+        // Insert calls: look up caller symbol IDs by name within this file
+        if !result.calls.is_empty() {
+            // Build name->id map for symbols in this file
+            let mut name_to_id = std::collections::HashMap::new();
+            if let Ok(syms) = crate::db::query::get_file_symbols(db, file_id) {
+                for s in &syms {
+                    name_to_id.insert(s.name.clone(), s.id);
+                    name_to_id.insert(s.qualified_name.clone(), s.id);
+                }
+            }
+
+            let mut stmt = db.conn().prepare(
+                "INSERT INTO calls (caller_symbol_id, callee_name, file_id, line, confidence, resolution)
+                 VALUES (?1, ?2, ?3, ?4, 0.5, 'unresolved')",
+            ).ok();
+
+            if let Some(ref mut stmt) = stmt {
+                for call in &result.calls {
+                    let caller_id = name_to_id.get(&call.caller_name).copied();
+                    if let Some(cid) = caller_id {
+                        if let Err(e) = stmt.execute(rusqlite::params![
+                            cid,
+                            call.callee_name,
+                            file_id,
+                            call.line,
+                        ]) {
+                            errors
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push(format!("Call insert error for {}: {}", abs_path, e));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let errs = errors.into_inner().unwrap_or_default();
+    if !errs.is_empty() {
+        eprintln!("Parse phase encountered {} errors", errs.len());
+    }
+
+    Ok(())
+}

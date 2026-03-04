@@ -1,0 +1,19 @@
+[package]
+name = "ariadne-kotlin"
+version = "0.1.0"
+edition = "2021"
+description = "Example Ariadne plugin: Kotlin language support via line-by-line parsing"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = { version = "0.36", default-features = false }
+
+# cargo-component metadata — tells the tooling where to find the WIT world
+[package.metadata.component]
+package = "ariadne:plugin"
+
+[package.metadata.component.target]
+world = "ariadne-plugin"
+path = "wit"
