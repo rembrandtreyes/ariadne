@@ -224,6 +224,70 @@ blast_radius("generatePost")
 Total: 1 tool call, complete picture, <5ms
 ```
 
+### Keep your index fresh
+
+Run Ariadne as a background service that watches for file changes and keeps the MCP server alive:
+
+```bash
+ariadne-graph watch --serve
+```
+
+This does two things at once: re-indexes only changed files when they save, and keeps the MCP server resident so queries are <2ms instead of ~20ms cold-start per call.
+
+For CI or one-shot use, `ariadne-graph serve` starts the server against a static index.
+
+### Steer your AI agent
+
+Claude Code and other MCP-compatible agents will pick up Ariadne's tools automatically, but adding a `CLAUDE.md` (or equivalent project instruction file) gets you consistent tool preference and real token savings:
+
+```markdown
+# Code Search — Use Ariadne MCP Tools
+
+Ariadne is indexed for this codebase. Prefer Ariadne MCP tools over
+built-in Grep/Glob/Read for code navigation. Built-in tools read raw
+files and burn tokens; Ariadne returns pre-resolved semantic data in
+one call.
+
+## Tool Substitution Table
+
+| Instead of this              | Use this Ariadne tool   |
+|------------------------------|-------------------------|
+| Grep for a function/class    | `search_symbol`         |
+| Read a file for its shape    | `get_file_summary`      |
+| Multiple Reads to trace callers | `get_context`        |
+| Grep to find who uses symbol | `get_dependents`        |
+| Grep to assess change impact | `blast_radius`          |
+| Glob/stats on the codebase   | `get_complexity`        |
+
+## When to use built-in tools
+
+- Reading a file to understand *implementation* (not structure)
+- Writing or editing files — Ariadne is read-only
+- Searching for string literals, comments, or patterns (not symbols)
+- Before `ariadne-graph index .` has been run
+```
+
+Typical token reduction: a file-structure exploration that costs ~3K tokens via `Read` costs ~150 tokens via `get_file_summary`. A caller-trace across 6 files via `Grep + Read` costs ~12K tokens; `get_context` returns the same data in ~400 tokens.
+
+### Setup checklist
+
+```bash
+# 1. Index your project (run once per project, re-run after major changes)
+ariadne-graph index .
+
+# 2. Add to .gitignore — the DB is local, not for committing
+echo ".ariadne.db" >> .gitignore
+
+# 3. Start the watch server (persistent MCP + live re-index)
+ariadne-graph watch --serve
+
+# 4. Verify Claude Code sees the tools — in a Claude Code session:
+#    "List the available Ariadne MCP tools"
+#    Should return: search_symbol, get_context, blast_radius, ...
+```
+
+Add `ariadne-graph watch --serve` to your project's dev startup script (Makefile, `package.json` scripts, Procfile) so it runs alongside your dev server.
+
 ## How It Works
 
 1. **Parse** -- Tree-sitter grammars extract symbols, calls, and imports from source files
