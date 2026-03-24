@@ -1,3 +1,11 @@
+//! Pipeline Phase 12: Service Topology Construction
+//!
+//! Reads: `api_calls` (resolved cross-service calls)
+//! Writes: `service_edges` (service-to-service dependency graph)
+//!
+//! Aggregates resolved API calls into service-level edges, building a
+//! high-level dependency topology for multi-service architectures.
+
 use crate::db::Database;
 
 /// Phase 12: Build the service-level dependency topology.

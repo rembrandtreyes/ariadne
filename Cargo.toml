@@ -1,5 +1,5 @@
 [package]
-name = "ariadne-graph"
+name = "ariadne"
 version = "0.1.0"
 edition = "2021"
 description = "The thread through the labyrinth — universal dependency graph for AI agents"
@@ -14,7 +14,9 @@ path = "src/main.rs"
 
 [dependencies]
 # MCP server
-rmcp = { version = "0.1", features = ["server", "transport-io", "transport-sse-server"] }
+# SECURITY: transport-sse-server intentionally excluded — SSE/HTTP transport would expose
+# all MCP tools over the network without authentication. Only stdio transport is safe.
+rmcp = { version = "0.1", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["full"] }
 
 # Parsing
@@ -61,7 +63,7 @@ notify = { version = "7", optional = true }
 tower-lsp = { version = "0.20", optional = true }
 
 # WASM plugin runtime
-wasmtime = { version = "28", optional = true }
+wasmtime = { version = "42", optional = true, features = ["component-model"] }
 
 # Utilities
 rayon = "1.10"
@@ -80,6 +82,10 @@ watch = ["dep:notify"]
 lsp = ["dep:tower-lsp"]
 plugins = ["dep:wasmtime"]
 full = ["watch", "lsp"]
+
+[dev-dependencies]
+tempfile = "3"
+tokio-util = "0.7"
 
 [profile.release]
 opt-level = 3

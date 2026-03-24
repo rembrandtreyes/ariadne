@@ -1,3 +1,11 @@
+//! Pipeline Phase 11: API Boundary Resolution
+//!
+//! Reads: `api_calls` (unresolved), `api_endpoints` (known endpoints)
+//! Writes: `api_calls` (updates `resolved_endpoint_id`, `resolved_service_id`)
+//!
+//! Matches outbound API call sites to known endpoint definitions using
+//! HTTP method and URL pattern matching to establish cross-service links.
+
 use crate::db::Database;
 use rusqlite::params;
 

@@ -26,7 +26,9 @@ impl PluginRegistry {
     }
 
     pub fn find_by_extension(&self, ext: &str) -> Option<&PluginInfo> {
-        self.plugins.iter().find(|p| p.extensions.contains(&ext.to_string()))
+        self.plugins
+            .iter()
+            .find(|p| p.extensions.contains(&ext.to_string()))
     }
 
     fn scan_directory(&mut self, dir: &Path) -> anyhow::Result<()> {
@@ -34,7 +36,8 @@ impl PluginRegistry {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|e| e.to_str()) == Some("wasm") {
-                    let name = path.file_stem()
+                    let name = path
+                        .file_stem()
                         .and_then(|s| s.to_str())
                         .unwrap_or("unknown")
                         .to_string();

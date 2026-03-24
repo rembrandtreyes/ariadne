@@ -90,7 +90,7 @@ fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Resul
         }
     }
 
-    println!("  Re-indexed: {}", rel_path.display());
+    tracing::info!(path = %rel_path.display(), "Re-indexed file");
 
     Ok(())
 }

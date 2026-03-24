@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — Navigator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+/* ── Catppuccin Mocha palette ── */
+:root {
+  --bg:       #1E1E2E;
+  --surface:  #181825;
+  --mantle:   #11111B;
+  --elevated: #313244;
+  --border:   rgba(205,214,244,0.1);
+  --text:     #CDD6F4;
+  --text-2:   #BAC2DE;
+  --text-3:   #6C7086;
+  --mauve:    #CBA6F7;
+  --blue:     #89B4FA;
+  --green:    #A6E3A1;
+  --red:      #F38BA8;
+  --peach:    #FAB387;
+  --yellow:   #F9E2AF;
+  --teal:     #94E2D5;
+  --sky:      #89DCEB;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --hdr: 44px;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; font-family: var(--mono); background: var(--bg); color: var(--text); font-size: 13px; }
+
+/* ── Header ── */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--hdr); z-index: 100;
+  display: flex; align-items: center; gap: 12px; padding: 0 16px;
+  background: var(--mantle); border-bottom: 1px solid var(--border);
+}
+.logo { color: var(--mauve); font-weight: 700; font-size: 14px; letter-spacing: -0.02em; flex-shrink: 0; }
+.breadcrumb { flex: 1; font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.crumb { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb-sep { color: var(--text-3); flex-shrink: 0; }
+.crumb-active { color: var(--mauve); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-tabs { display: flex; gap: 4px; flex-shrink: 0; }
+.nav-tab { padding: 4px 10px; border-radius: 5px; font-size: 11px; color: var(--text-3); text-decoration: none; border: 1px solid transparent; transition: all 0.15s; }
+.nav-tab:hover { color: var(--text-2); border-color: var(--border); }
+.nav-tab.active { color: var(--mauve); border-color: rgba(203,166,247,0.3); background: rgba(203,166,247,0.08); }
+.hdr-status { display: flex; gap: 12px; flex-shrink: 0; font-size: 11px; color: var(--text-3); }
+.stat-val { color: var(--text-2); }
+.stat-dead { color: var(--red); }
+
+/* ── Body: 3-pane ── */
+.body {
+  position: fixed; top: var(--hdr); left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: 240px 1fr 300px;
+}
+
+/* ── Left: File Panel ── */
+.panel-left {
+  display: flex; flex-direction: column;
+  background: var(--surface); border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.panel-hdr {
+  flex-shrink: 0; padding: 8px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.panel-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+.panel-badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; background: var(--elevated); color: var(--text-3); }
+.file-search {
+  flex-shrink: 0; margin: 8px; padding: 5px 8px;
+  background: var(--elevated); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 12px;
+  outline: none; transition: border-color 0.15s;
+}
+.file-search:focus { border-color: rgba(203,166,247,0.4); }
+.file-list { flex: 1; overflow-y: auto; }
+
+/* File item */
+.file-item { border-bottom: 1px solid rgba(255,255,255,0.03); }
+.file-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px 6px 8px; cursor: pointer;
+  transition: background 0.1s; user-select: none;
+}
+.file-row:hover { background: var(--elevated); }
+.file-row.active { background: rgba(203,166,247,0.1); }
+.file-health { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.file-name { flex: 1; font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-counts { display: flex; gap: 4px; flex-shrink: 0; }
+.file-count { font-size: 10px; color: var(--text-3); }
+.file-count.dead { color: var(--red); }
+.file-arrow { font-size: 10px; color: var(--text-3); transition: transform 0.15s; flex-shrink: 0; }
+.file-arrow.open { transform: rotate(90deg); }
+
+/* Symbol list under a file */
+.symbol-list { display: none; }
+.symbol-list.open { display: block; }
+.symbol-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 20px; cursor: pointer;
+  transition: background 0.1s;
+}
+.symbol-row:hover { background: var(--elevated); }
+.symbol-row.active { background: rgba(203,166,247,0.12); }
+.sym-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.sym-name { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sym-deg { font-size: 10px; color: var(--text-3); flex-shrink: 0; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--elevated); border-radius: 3px; }
+
+/* ── Center: Graph Panel ── */
+.panel-center {
+  position: relative; overflow: hidden; background: var(--bg);
+}
+.graph-canvas { display: block; position: absolute; top: 0; left: 0; }
+
+/* Welcome overlay */
+.welcome {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; pointer-events: none;
+}
+.welcome-icon { opacity: 0.15; }
+.welcome-title { font-size: 13px; color: var(--text-3); }
+.welcome-stats { font-size: 11px; color: var(--text-3); }
+
+/* Graph status bar */
+.graph-status {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 4px 12px; background: rgba(17,17,27,0.8);
+  border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--text-3);
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+/* Graph loading */
+.graph-loading {
+  position: absolute; inset: 0; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(30,30,46,0.7);
+}
+.graph-loading.visible { display: flex; }
+.spinner { width: 20px; height: 20px; border: 2px solid var(--elevated); border-top-color: var(--mauve); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tooltip */
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 200;
+  background: var(--mantle); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; display: none;
+  max-width: 240px;
+}
+.tt-name { font-size: 12px; color: var(--text); font-weight: 500; margin-bottom: 3px; }
+.tt-meta { font-size: 10px; color: var(--text-3); }
+
+/* ── Right: Story Panel ── */
+.panel-right {
+  display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--border);
+  overflow: hidden;
+}
+.story-placeholder {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px; color: var(--text-3); font-size: 11px;
+}
+.story-placeholder svg { opacity: 0.2; }
+.story-scroll { flex: 1; overflow-y: auto; padding: 16px; display: none; flex-direction: column; gap: 0; }
+.story-scroll.visible { display: flex; }
+
+.story-name { font-size: 18px; font-weight: 700; color: var(--mauve); word-break: break-word; line-height: 1.3; margin-bottom: 8px; }
+.story-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 500; letter-spacing: 0.04em; }
+.badge-fn   { background: rgba(137,180,250,0.15); color: var(--blue); }
+.badge-cls  { background: rgba(203,166,247,0.15); color: var(--mauve); }
+.badge-meth { background: rgba(166,227,161,0.15); color: var(--green); }
+.badge-oth  { background: var(--elevated); color: var(--text-3); }
+.badge-dead { background: rgba(243,139,168,0.15); color: var(--red); }
+.badge-entry { background: rgba(249,226,175,0.15); color: var(--yellow); }
+.badge-leaf  { background: rgba(148,226,213,0.15); color: var(--teal); }
+.badge-inter { background: rgba(250,179,135,0.15); color: var(--peach); }
+
+.story-file { font-size: 10px; color: var(--text-3); word-break: break-all; margin-bottom: 14px; padding: 6px 8px; background: var(--mantle); border-radius: 4px; border-left: 2px solid var(--elevated); }
+
+.story-sep { height: 1px; background: var(--border); margin: 12px 0; }
+
+.story-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.story-metric { background: var(--mantle); border-radius: 6px; padding: 8px 10px; text-align: center; }
+.story-metric-num { font-size: 22px; font-weight: 700; line-height: 1; margin-bottom: 2px; }
+.story-metric-num.callers { color: var(--blue); }
+.story-metric-num.callees { color: var(--green); }
+.story-metric-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-3); }
+
+.story-section { margin-top: 14px; }
+.story-section-title { font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-3); margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.story-empty { font-size: 11px; color: var(--text-3); font-style: italic; padding: 6px 0; }
+
+.story-node-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 6px; border-radius: 5px;
+  cursor: pointer; transition: background 0.12s; margin-bottom: 2px;
+}
+.story-node-item:hover { background: var(--elevated); }
+.story-node-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.story-node-name { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.story-node-kind { font-size: 9px; color: var(--text-3); flex-shrink: 0; }
+
+.story-position-note { font-size: 11px; color: var(--text-3); padding: 8px 0; font-style: italic; }
+
+/* ── Source Code Block ── */
+.source-block { background: var(--mantle); border-radius: 6px; border: 1px solid var(--border); margin-top: 4px; }
+.source-header { display: flex; align-items: center; justify-content: space-between; padding: 5px 10px; background: var(--elevated); border-bottom: 1px solid var(--border); }
+.source-filename { font-size: 10px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-linerange { font-size: 10px; color: var(--text-3); flex-shrink: 0; margin-left: 6px; }
+.source-pre { overflow-x: auto; overflow-y: auto; max-height: 380px; padding: 6px 0; }
+.source-line { display: flex; align-items: baseline; padding: 1px 0; border-left: 2px solid transparent; min-width: max-content; }
+.source-line-body { background: rgba(203,166,247,0.07); border-left-color: var(--mauve); }
+.source-ln { flex-shrink: 0; width: 38px; text-align: right; padding: 0 8px 0 4px; color: var(--text-3); font-size: 10px; user-select: none; line-height: 1.6; }
+.source-code { padding: 0 12px 0 4px; white-space: pre; color: var(--text); font-size: 11px; line-height: 1.6; tab-size: 2; }
+.source-loading { padding: 12px; color: var(--text-3); font-size: 11px; text-align: center; font-style: italic; }
+.source-error   { padding: 10px 12px; color: var(--red); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="header">
+  <div class="logo">ariadne</div>
+  <div class="breadcrumb" id="breadcrumb">
+    <span class="crumb">Files</span>
+  </div>
+  <nav class="nav-tabs">
+    <a class="nav-tab" href="/v1">Command Center</a>
+    <a class="nav-tab active" href="/v2">Navigator</a>
+    <a class="nav-tab" href="/v3">Audit Report</a>
+  </nav>
+  <div class="hdr-status">
+    <span>res <span class="stat-val" id="stat-res">—</span></span>
+    <span>dead <span class="stat-dead" id="stat-dead">—</span></span>
+  </div>
+</header>
+
+<!-- ── BODY ── -->
+<div class="body">
+
+  <!-- LEFT: File Panel -->
+  <div class="panel-left">
+    <div class="panel-hdr">
+      <span class="panel-label">Files</span>
+      <span class="panel-badge" id="file-count-badge">0</span>
+    </div>
+    <input class="file-search" id="file-search" type="text" placeholder="Filter files…" autocomplete="off">
+    <div class="file-list" id="file-list">
+      <div style="padding:16px;color:var(--text-3);font-size:11px;text-align:center">Loading…</div>
+    </div>
+  </div>
+
+  <!-- CENTER: Graph Canvas -->
+  <div class="panel-center" id="panel-center">
+    <canvas class="graph-canvas" id="graph-canvas"></canvas>
+
+    <!-- Welcome state -->
+    <div class="welcome" id="welcome">
+      <svg class="welcome-icon" width="52" height="52" viewBox="0 0 52 52" fill="none">
+        <circle cx="26" cy="26" r="24" stroke="var(--mauve)" stroke-width="1.5"/>
+        <circle cx="26" cy="13" r="3.5" fill="var(--mauve)"/>
+        <circle cx="13" cy="35" r="3.5" fill="var(--blue)"/>
+        <circle cx="39" cy="35" r="3.5" fill="var(--green)"/>
+        <circle cx="26" cy="26" r="4.5" fill="var(--mauve)"/>
+        <line x1="26" y1="17" x2="26" y2="21.5" stroke="var(--mauve)" stroke-width="1.5"/>
+        <line x1="15.2" y1="33" x2="22.5" y2="28.5" stroke="var(--mauve)" stroke-width="1.5"/>
+        <line x1="36.8" y1="33" x2="29.5" y2="28.5" stroke="var(--mauve)" stroke-width="1.5"/>
+      </svg>
+      <div class="welcome-title">Select a symbol to explore its call graph</div>
+      <div class="welcome-stats" id="welcome-stats"></div>
+    </div>
+
+    <!-- Loading spinner -->
+    <div class="graph-loading" id="graph-loading">
+      <div class="spinner"></div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="graph-status" id="graph-status" style="display:none"></div>
+
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <!-- RIGHT: Story Panel -->
+  <div class="panel-right">
+    <div class="story-placeholder" id="story-placeholder">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>Select a symbol</span>
+    </div>
+    <div class="story-scroll" id="story-scroll"></div>
+  </div>
+
+</div>
+
+<script>
+/* ════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════ */
+var allNodes = [];      // all graph nodes
+var allEdges = [];      // all graph edges
+var fileMap = {};       // path → {path, symbols[], total, dead}
+var selectedNode = null;
+var neighborhoodData = null;
+
+/* Canvas / rendering */
+var canvas = document.getElementById('graph-canvas');
+var ctx = canvas.getContext('2d');
+var dpr = window.devicePixelRatio || 1;
+var W = 0, H = 0;
+var transform = d3.zoomIdentity;
+var renderNodes = [];
+var renderEdges = [];
+var hoveredNode = null;
+
+/* ════════════════════════════════════════════
+   COLOURS
+════════════════════════════════════════════ */
+var C = {
+  mauve: '#CBA6F7', blue: '#89B4FA', green: '#A6E3A1',
+  red: '#F38BA8', peach: '#FAB387', yellow: '#F9E2AF',
+  teal: '#94E2D5', text3: '#6C7086', elevated: '#313244',
+  mantle: '#11111B', bg: '#1E1E2E'
+};
+
+function kindColor(node) {
+  if (node.is_dead) return C.red;
+  switch (node.kind) {
+    case 'function':  return C.blue;
+    case 'class':     return C.mauve;
+    case 'method':    return C.green;
+    case 'interface': return C.peach;
+    default:          return C.teal;
+  }
+}
+
+function kindBadgeClass(kind) {
+  switch (kind) {
+    case 'function':  return 'badge-fn';
+    case 'class':     return 'badge-cls';
+    case 'method':    return 'badge-meth';
+    default:          return 'badge-oth';
+  }
+}
+
+/* ════════════════════════════════════════════
+   CANVAS SETUP
+════════════════════════════════════════════ */
+function resizeCanvas() {
+  var panel = document.getElementById('panel-center');
+  W = panel.clientWidth;
+  H = panel.clientHeight - 22; // minus status bar
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (renderNodes.length) drawGraph();
+}
+window.addEventListener('resize', resizeCanvas);
+
+/* Zoom / pan */
+var zoom = d3.zoom().scaleExtent([0.05, 12]).on('zoom', function(e) {
+  transform = e.transform;
+  drawGraph();
+});
+d3.select(canvas).call(zoom);
+
+/* ════════════════════════════════════════════
+   HIERARCHICAL LAYOUT
+   Layers: 0=grand-callers 1=callers 2=selected 3=callees 4=grand-callees
+════════════════════════════════════════════ */
+function computeHierarchicalLayout(nodes, edges, selectedId) {
+  var nodeMap = {};
+  nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+  /* Build directed adjacency */
+  var inEdges = {};   /* id → [source ids calling it] */
+  var outEdges = {};  /* id → [target ids it calls] */
+  nodes.forEach(function(n) { inEdges[n.id] = []; outEdges[n.id] = []; });
+  edges.forEach(function(e) {
+    if (inEdges[e.target])  inEdges[e.target].push(e.source);
+    if (outEdges[e.source]) outEdges[e.source].push(e.target);
+  });
+
+  /* Assign layers */
+  var layer = {};
+  layer[selectedId] = 2;
+
+  /* Direct callers/callees */
+  (inEdges[selectedId]  || []).forEach(function(id) { if (!(id in layer)) layer[id] = 1; });
+  (outEdges[selectedId] || []).forEach(function(id) { if (!(id in layer)) layer[id] = 3; });
+
+  /* Grand-callers: nodes that call the callers */
+  Object.keys(layer).filter(function(id) { return layer[id] === 1; }).forEach(function(cid) {
+    (inEdges[cid] || []).forEach(function(id) { if (!(id in layer)) layer[id] = 0; });
+  });
+  /* Grand-callees: nodes that callees call */
+  Object.keys(layer).filter(function(id) { return layer[id] === 3; }).forEach(function(cid) {
+    (outEdges[cid] || []).forEach(function(id) { if (!(id in layer)) layer[id] = 4; });
+  });
+  /* Fallback: anything unclassified goes to selected layer */
+  nodes.forEach(function(n) { if (!(n.id in layer)) layer[n.id] = 2; });
+
+  /* Group by layer */
+  var byLayer = [[], [], [], [], []];
+  nodes.forEach(function(n) {
+    var l = Math.max(0, Math.min(4, layer[n.id]));
+    byLayer[l].push(n);
+  });
+
+  /* Y positions per layer (fraction of H) */
+  var layerY = [0.10, 0.28, 0.50, 0.72, 0.90];
+  /* Opacity per layer (center is brightest) */
+  var layerAlpha = [0.45, 0.75, 1.0, 0.75, 0.45];
+
+  byLayer.forEach(function(layerNodes, li) {
+    var y = layerY[li] * H;
+    var count = layerNodes.length;
+    layerNodes.forEach(function(n, i) {
+      var maxSpacing = 140;
+      var totalW = Math.min(maxSpacing * (count - 1), W * 0.85);
+      var spacing = count > 1 ? totalW / (count - 1) : 0;
+      n.x = W / 2 - totalW / 2 + spacing * i;
+      n.y = y;
+      n._layer = li;
+      n._alpha = layerAlpha[li];
+    });
+  });
+
+  return { nodes: nodes, edges: edges, layer: layer };
+}
+
+/* ════════════════════════════════════════════
+   DRAW
+════════════════════════════════════════════ */
+function drawGraph() {
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+  ctx.translate(transform.x, transform.y);
+  ctx.scale(transform.k, transform.k);
+
+  if (!renderNodes.length) { ctx.restore(); return; }
+
+  var nodeMap = {};
+  renderNodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+  /* Draw edges */
+  renderEdges.forEach(function(e) {
+    var s = nodeMap[e.source], t = nodeMap[e.target];
+    if (!s || !t) return;
+    drawBezierArrow(s.x, s.y, t.x, t.y, s === hoveredNode || t === hoveredNode);
+  });
+
+  /* Draw nodes */
+  renderNodes.forEach(function(n) {
+    var isSelected = n.id === (selectedNode && selectedNode.id);
+    var isHovered  = n === hoveredNode;
+    var r = isSelected ? 12 : 8;
+    var alpha = n._alpha !== undefined ? n._alpha : 1;
+    var col = kindColor(n);
+
+    ctx.globalAlpha = alpha;
+
+    /* Glow for selected */
+    if (isSelected) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 7, 0, Math.PI * 2);
+      ctx.fillStyle = col + '30';
+      ctx.fill();
+    }
+
+    /* Node circle */
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, isHovered ? r * 1.25 : r, 0, Math.PI * 2);
+    ctx.fillStyle = col;
+    ctx.fill();
+
+    /* Border ring for selected */
+    if (isSelected) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5 / transform.k;
+      ctx.stroke();
+    }
+
+    /* Label — always shown */
+    var label = n.name.length > 22 ? n.name.slice(0, 20) + '…' : n.name;
+    var fontSize = isSelected ? 11 : 10;
+    ctx.font = fontSize + 'px JetBrains Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = isSelected ? col : '#BAC2DE';
+    ctx.globalAlpha = alpha * (isSelected ? 1 : 0.85);
+    ctx.fillText(label, n.x, n.y + r + 4);
+
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+}
+
+function drawBezierArrow(x1, y1, x2, y2, highlight) {
+  var dx = x2 - x1, dy = y2 - y1;
+  var dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 1) return;
+
+  /* Shorten endpoints to node radius */
+  var r = 9;
+  var ux = dx / dist, uy = dy / dist;
+  var sx = x1 + ux * r, sy = y1 + uy * r;
+  var ex = x2 - ux * r, ey = y2 - uy * r;
+
+  /* Cubic bezier — control points curve outward */
+  var cp1x = sx + (ex - sx) * 0.25 + uy * 30;
+  var cp1y = sy + (ey - sy) * 0.25 - ux * 30;
+  var cp2x = sx + (ex - sx) * 0.75 + uy * 30;
+  var cp2y = sy + (ey - sy) * 0.75 - ux * 30;
+
+  ctx.beginPath();
+  ctx.moveTo(sx, sy);
+  ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, ex, ey);
+  ctx.strokeStyle = highlight ? 'rgba(137,180,250,0.6)' : 'rgba(108,112,134,0.35)';
+  ctx.lineWidth = highlight ? 1.5 / transform.k : 1 / transform.k;
+  ctx.stroke();
+
+  /* Arrowhead */
+  var angle = Math.atan2(ey - cp2y, ex - cp2x);
+  var alen = 8 / transform.k;
+  var awidth = 4 / transform.k;
+  ctx.beginPath();
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - alen * Math.cos(angle) + awidth * Math.sin(angle),
+             ey - alen * Math.sin(angle) - awidth * Math.cos(angle));
+  ctx.lineTo(ex - alen * Math.cos(angle) - awidth * Math.sin(angle),
+             ey - alen * Math.sin(angle) + awidth * Math.cos(angle));
+  ctx.closePath();
+  ctx.fillStyle = highlight ? 'rgba(137,180,250,0.6)' : 'rgba(108,112,134,0.35)';
+  ctx.fill();
+}
+
+/* ════════════════════════════════════════════
+   HOVER + CLICK on canvas
+════════════════════════════════════════════ */
+canvas.addEventListener('mousemove', function(e) {
+  var rect = canvas.getBoundingClientRect();
+  var mx = (e.clientX - rect.left - transform.x) / transform.k;
+  var my = (e.clientY - rect.top  - transform.y) / transform.k;
+  var found = null;
+  for (var i = 0; i < renderNodes.length; i++) {
+    var n = renderNodes[i];
+    var dx = n.x - mx, dy = n.y - my;
+    var r = (n.id === (selectedNode && selectedNode.id)) ? 12 : 8;
+    if (dx*dx + dy*dy < (r+4)*(r+4)) { found = n; break; }
+  }
+  if (found !== hoveredNode) {
+    hoveredNode = found;
+    canvas.style.cursor = found ? 'pointer' : 'default';
+    drawGraph();
+  }
+  var tip = document.getElementById('tooltip');
+  if (found) {
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 6) + 'px';
+    tip.innerHTML = '<div class="tt-name">' + esc(found.name) + '</div>' +
+      '<div class="tt-meta">' + found.kind +
+      (found.is_dead ? ' · ⚰ dead' : '') +
+      '<br>' + found.in_degree + ' caller' + (found.in_degree !== 1 ? 's' : '') +
+      ' · ' + found.out_degree + ' callee' + (found.out_degree !== 1 ? 's' : '') +
+      '</div>';
+  } else {
+    tip.style.display = 'none';
+  }
+});
+
+canvas.addEventListener('mouseleave', function() {
+  hoveredNode = null;
+  document.getElementById('tooltip').style.display = 'none';
+  drawGraph();
+});
+
+canvas.addEventListener('click', function(e) {
+  if (!hoveredNode || hoveredNode === selectedNode) return;
+  selectNode(hoveredNode);
+});
+
+/* ════════════════════════════════════════════
+   SELECT NODE → load neighborhood
+════════════════════════════════════════════ */
+function selectNode(node) {
+  selectedNode = node;
+  highlightFileForNode(node);
+  updateBreadcrumb(node);
+
+  /* Show loading */
+  document.getElementById('graph-loading').classList.add('visible');
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('graph-status').style.display = 'flex';
+  document.getElementById('graph-status').textContent = 'Loading neighborhood…';
+
+  fetch('/api/graph/neighborhood?id=' + encodeURIComponent(node.id) + '&depth=2')
+    .then(function(r) { return r.json(); })
+    .catch(function() { return { nodes: [], edges: [] }; })
+    .then(function(data) {
+      document.getElementById('graph-loading').classList.remove('visible');
+      neighborhoodData = data;
+
+      if (!data.nodes || !data.nodes.length) {
+        renderNodes = [Object.assign({x: W/2, y: H/2, _alpha: 1, _layer: 2}, node)];
+        renderEdges = [];
+      } else {
+        /* Compute hierarchical layout — NO force simulation */
+        var nodesCopy = data.nodes.map(function(n) { return Object.assign({}, n); });
+        var result = computeHierarchicalLayout(nodesCopy, data.edges, node.id);
+        renderNodes = result.nodes;
+        renderEdges = result.edges;
+      }
+
+      /* Reset zoom to identity so layout is fully visible */
+      d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+      transform = d3.zoomIdentity;
+      drawGraph();
+
+      /* Update status bar */
+      var callerCount = data.edges ? data.edges.filter(function(e) { return e.target === node.id; }).length : 0;
+      var calleeCount = data.edges ? data.edges.filter(function(e) { return e.source === node.id; }).length : 0;
+      document.getElementById('graph-status').textContent =
+        node.name + ' · ' + (data.nodes ? data.nodes.length : 0) + ' symbols · ' +
+        callerCount + ' direct callers · ' + calleeCount + ' direct callees';
+
+      /* Render story panel */
+      renderStoryPanel(node, data);
+
+      /* Load source code asynchronously */
+      loadSourceCode(node);
+    });
+}
+
+/* ════════════════════════════════════════════
+   STORY PANEL
+════════════════════════════════════════════ */
+function renderStoryPanel(node, data) {
+  var edges = data.edges || [];
+  var nodes = data.nodes || [];
+  var nodeMap = {};
+  nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+  /* Direct callers and callees */
+  var callerIds = [];
+  var calleeIds = [];
+  edges.forEach(function(e) {
+    if (e.target === node.id && e.source !== node.id) callerIds.push(e.source);
+    if (e.source === node.id && e.target !== node.id) calleeIds.push(e.target);
+  });
+  /* Deduplicate */
+  callerIds = callerIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
+  calleeIds = calleeIds.filter(function(v, i, a) { return a.indexOf(v) === i; });
+
+  var callers = callerIds.map(function(id) { return nodeMap[id]; }).filter(Boolean);
+  var callees = calleeIds.map(function(id) { return nodeMap[id]; }).filter(Boolean);
+
+  /* Position in hierarchy */
+  var posLabel, posClass;
+  if (callers.length === 0 && callees.length > 0) { posLabel = 'entry point'; posClass = 'badge-entry'; }
+  else if (callees.length === 0 && callers.length > 0) { posLabel = 'leaf'; posClass = 'badge-leaf'; }
+  else if (callers.length === 0 && callees.length === 0) { posLabel = 'isolated'; posClass = 'badge-oth'; }
+  else { posLabel = 'intermediary'; posClass = 'badge-inter'; }
+
+  var kindClass = kindBadgeClass(node.kind);
+  var shortFile = node.file ? node.file.split('/').slice(-2).join('/') : '—';
+
+  var html = '';
+
+  /* Name */
+  html += '<div class="story-name">' + esc(node.name) + '</div>';
+
+  /* Badges */
+  html += '<div class="story-badges">';
+  html += '<span class="badge ' + kindClass + '">' + esc(node.kind) + '</span>';
+  html += '<span class="badge ' + posClass + '">' + posLabel + '</span>';
+  if (node.is_dead) html += '<span class="badge badge-dead">unreachable</span>';
+  html += '</div>';
+
+  /* File */
+  html += '<div class="story-file" title="' + esc(node.file || '') + '">' + esc(node.file || '—') + '</div>';
+
+  /* Metrics */
+  html += '<div class="story-metrics">';
+  html += '<div class="story-metric"><div class="story-metric-num callers">' + callers.length + '</div><div class="story-metric-label">Callers</div></div>';
+  html += '<div class="story-metric"><div class="story-metric-num callees">' + callees.length + '</div><div class="story-metric-label">Callees</div></div>';
+  html += '</div>';
+
+  /* Position note */
+  if (posLabel === 'entry point') {
+    html += '<div class="story-position-note">Nothing calls this — likely a top-level entry point or unused code.</div>';
+  } else if (posLabel === 'leaf') {
+    html += '<div class="story-position-note">This function makes no outgoing calls — it\'s a leaf in the call tree.</div>';
+  } else if (posLabel === 'isolated') {
+    html += '<div class="story-position-note">No callers or callees found in this neighborhood.</div>';
+  }
+
+  html += '<div class="story-sep"></div>';
+
+  /* Callers section */
+  html += '<div class="story-section">';
+  html += '<div class="story-section-title">Called by (' + callers.length + ')</div>';
+  if (callers.length === 0) {
+    html += '<div class="story-empty">No callers in this neighborhood</div>';
+  } else {
+    callers.forEach(function(n) {
+      html += storyNodeItem(n);
+    });
+  }
+  html += '</div>';
+
+  /* Callees section */
+  html += '<div class="story-section">';
+  html += '<div class="story-section-title">Calls into (' + callees.length + ')</div>';
+  if (callees.length === 0) {
+    html += '<div class="story-empty">No outgoing calls — leaf function</div>';
+  } else {
+    callees.forEach(function(n) {
+      html += storyNodeItem(n);
+    });
+  }
+  html += '</div>';
+
+  /* Grand-callers section */
+  var grandCallerSet = new Set();
+  callerIds.forEach(function(cid) {
+    edges.forEach(function(e) {
+      if (e.target === cid && e.source !== node.id && !callerIds.includes(e.source)) {
+        grandCallerSet.add(e.source);
+      }
+    });
+  });
+  var grandCallers = Array.from(grandCallerSet).map(function(id) { return nodeMap[id]; }).filter(Boolean);
+  if (grandCallers.length) {
+    html += '<div class="story-sep"></div>';
+    html += '<div class="story-section">';
+    html += '<div class="story-section-title">Upstream callers (' + grandCallers.length + ')</div>';
+    grandCallers.slice(0, 8).forEach(function(n) { html += storyNodeItem(n); });
+    if (grandCallers.length > 8) html += '<div class="story-empty">+ ' + (grandCallers.length - 8) + ' more…</div>';
+    html += '</div>';
+  }
+
+  var scroll = document.getElementById('story-scroll');
+  scroll.innerHTML = html;
+  scroll.classList.add('visible');
+  document.getElementById('story-placeholder').style.display = 'none';
+
+  /* Wire up click handlers for story items */
+  scroll.querySelectorAll('.story-node-item[data-id]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var id = el.getAttribute('data-id');
+      var n = nodeMap[id] || allNodes.find(function(x) { return x.id === id; });
+      if (n) selectNode(n);
+    });
+  });
+}
+
+function storyNodeItem(node) {
+  if (!node) return '';
+  var col = kindColor(node);
+  return '<div class="story-node-item" data-id="' + esc(node.id) + '">' +
+    '<span class="story-node-dot" style="background:' + col + '"></span>' +
+    '<span class="story-node-name" title="' + esc(node.name) + '">' + esc(node.name) + '</span>' +
+    '<span class="story-node-kind">' + esc(node.kind) + '</span>' +
+    '</div>';
+}
+
+/* ════════════════════════════════════════════
+   SOURCE CODE
+════════════════════════════════════════════ */
+function loadSourceCode(node) {
+  /* Insert placeholder immediately */
+  var scroll = document.getElementById('story-scroll');
+  var existing = scroll.querySelector('.source-section');
+  if (existing) existing.remove();
+
+  var section = document.createElement('div');
+  section.className = 'source-section';
+  section.innerHTML =
+    '<div class="story-sep"></div>' +
+    '<div class="story-section-title">Source</div>' +
+    '<div class="source-block"><div class="source-loading">Loading source…</div></div>';
+  scroll.appendChild(section);
+
+  fetch('/api/source?id=' + encodeURIComponent(node.id))
+    .then(function(r) { return r.json(); })
+    .catch(function() { return null; })
+    .then(function(src) {
+      var sourceSection = scroll.querySelector('.source-section');
+      if (!sourceSection) return;
+      if (!src || !src.code) {
+        sourceSection.innerHTML =
+          '<div class="story-sep"></div>' +
+          '<div class="story-section-title">Source</div>' +
+          '<div class="source-block"><div class="source-error">Source not available for this symbol.</div></div>';
+        return;
+      }
+      sourceSection.innerHTML =
+        '<div class="story-sep"></div>' +
+        '<div class="story-section-title">Source</div>' +
+        renderSourceBlock(src);
+    });
+}
+
+function renderSourceBlock(src) {
+  var lines = src.code.split('\n');
+  var context = 3;
+  /* First displayed line number (1-indexed) */
+  var firstLineNum = Math.max(1, src.line_start - context);
+  var shortFile = src.file ? src.file.split('/').slice(-2).join('/') : src.file;
+
+  var html = '<div class="source-block">';
+  html += '<div class="source-header">';
+  html += '<span class="source-filename" title="' + esc(src.file) + '">' + esc(shortFile) + '</span>';
+  html += '<span class="source-linerange">:' + src.line_start + '–' + src.line_end + '</span>';
+  html += '</div>';
+  html += '<div class="source-pre">';
+
+  lines.forEach(function(line, i) {
+    var lineNum = firstLineNum + i;
+    var isBody = lineNum >= src.line_start && lineNum <= src.line_end;
+    html += '<div class="source-line' + (isBody ? ' source-line-body' : '') + '">';
+    html += '<span class="source-ln">' + lineNum + '</span>';
+    html += '<span class="source-code">' + esc(line) + '</span>';
+    html += '</div>';
+  });
+
+  html += '</div></div>';
+  return html;
+}
+
+/* ════════════════════════════════════════════
+   FILE LIST
+════════════════════════════════════════════ */
+function buildFileMap(nodes) {
+  fileMap = {};
+  nodes.forEach(function(n) {
+    var path = n.file || '(unknown)';
+    if (!fileMap[path]) fileMap[path] = { path: path, symbols: [], total: 0, dead: 0 };
+    fileMap[path].symbols.push(n);
+    fileMap[path].total++;
+    if (n.is_dead) fileMap[path].dead++;
+  });
+  /* Sort alphabetically by filename (last segment) */
+  return Object.values(fileMap).sort(function(a, b) {
+    var an = a.path.split('/').pop().toLowerCase();
+    var bn = b.path.split('/').pop().toLowerCase();
+    return an.localeCompare(bn);
+  });
+}
+
+function renderFileList(filterQuery) {
+  var q = (filterQuery || '').toLowerCase();
+  var files = buildFileMap(allNodes);
+  if (q) files = files.filter(function(f) {
+    return f.path.toLowerCase().includes(q) ||
+      f.symbols.some(function(s) { return s.name.toLowerCase().includes(q); });
+  });
+
+  document.getElementById('file-count-badge').textContent = files.length;
+
+  var html = '';
+  files.forEach(function(file) {
+    var filename = file.path.split('/').slice(-2).join('/');
+    var health = file.dead > 0 ? C.red : C.green;
+    var hasDead = file.dead > 0;
+
+    /* Sort symbols alphabetically */
+    var syms = file.symbols.slice().sort(function(a, b) {
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+
+    html += '<div class="file-item">';
+    html += '<div class="file-row" data-path="' + esc(file.path) + '">' +
+      '<span class="file-health" style="background:' + health + '"></span>' +
+      '<span class="file-name" title="' + esc(file.path) + '">' + esc(filename) + '</span>' +
+      '<span class="file-counts">' +
+        '<span class="file-count">' + file.total + '</span>' +
+        (hasDead ? '<span class="file-count dead">' + file.dead + '✗</span>' : '') +
+      '</span>' +
+      '<svg class="file-arrow" width="10" height="10" viewBox="0 0 10 10"><path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+      '</div>';
+    html += '<div class="symbol-list">';
+    syms.forEach(function(sym) {
+      var col = kindColor(sym);
+      html += '<div class="symbol-row" data-id="' + esc(sym.id) + '">' +
+        '<span class="sym-dot" style="background:' + col + '"></span>' +
+        '<span class="sym-name" title="' + esc(sym.name) + '">' + esc(sym.name) + '</span>' +
+        '<span class="sym-deg">' + sym.in_degree + '↙' + sym.out_degree + '↗</span>' +
+        '</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+  });
+
+  document.getElementById('file-list').innerHTML = html || '<div style="padding:16px;color:var(--text-3);font-size:11px;text-align:center">No results</div>';
+
+  /* Wire up file row toggles */
+  document.querySelectorAll('.file-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var item = row.parentElement;
+      var symList = item.querySelector('.symbol-list');
+      var arrow = row.querySelector('.file-arrow');
+      var isOpen = symList.classList.contains('open');
+      symList.classList.toggle('open', !isOpen);
+      arrow.classList.toggle('open', !isOpen);
+      row.classList.toggle('active', !isOpen);
+    });
+  });
+
+  /* Wire up symbol row clicks */
+  document.querySelectorAll('.symbol-row').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var id = row.getAttribute('data-id');
+      var node = allNodes.find(function(n) { return n.id === id; });
+      if (node) {
+        /* Mark active */
+        document.querySelectorAll('.symbol-row').forEach(function(r) { r.classList.remove('active'); });
+        row.classList.add('active');
+        selectNode(node);
+      }
+    });
+  });
+}
+
+function highlightFileForNode(node) {
+  /* Expand and highlight the file containing this node in the left panel */
+  document.querySelectorAll('.symbol-row').forEach(function(r) {
+    if (r.getAttribute('data-id') === node.id) {
+      r.classList.add('active');
+      /* Expand parent file */
+      var item = r.closest('.file-item');
+      if (item) {
+        var symList = item.querySelector('.symbol-list');
+        var arrow = item.querySelector('.file-arrow');
+        var fileRow = item.querySelector('.file-row');
+        symList.classList.add('open');
+        arrow.classList.add('open');
+        fileRow.classList.add('active');
+        r.scrollIntoView({ block: 'nearest' });
+      }
+    } else {
+      r.classList.remove('active');
+    }
+  });
+}
+
+function updateBreadcrumb(node) {
+  var filename = node.file ? node.file.split('/').pop() : '';
+  var html = '<span class="crumb">Files</span>' +
+    (filename ? '<span class="crumb-sep">/</span><span class="crumb">' + esc(filename) + '</span>' : '') +
+    '<span class="crumb-sep">/</span><span class="crumb-active">' + esc(node.name) + '</span>';
+  document.getElementById('breadcrumb').innerHTML = html;
+}
+
+/* ════════════════════════════════════════════
+   SEARCH
+════════════════════════════════════════════ */
+document.getElementById('file-search').addEventListener('input', function() {
+  renderFileList(this.value);
+});
+
+/* ════════════════════════════════════════════
+   UTILITY
+════════════════════════════════════════════ */
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════ */
+Promise.all([
+  fetch('/api/graph').then(function(r) { return r.json(); }).catch(function() { return { nodes: [], edges: [] }; }),
+  fetch('/api/stats').then(function(r) { return r.json(); }).catch(function() { return {}; })
+]).then(function(results) {
+  var graph  = results[0];
+  var stats  = results[1];
+
+  allNodes = graph.nodes || [];
+  allEdges = graph.edges || [];
+
+  /* Status bar */
+  var res = stats.resolution_rate != null ? (stats.resolution_rate * 100).toFixed(1) + '%' : '—';
+  document.getElementById('stat-res').textContent = res;
+  document.getElementById('stat-dead').textContent = (stats.dead_functions != null ? stats.dead_functions : '—');
+
+  /* Welcome stats */
+  var langs = (stats.languages || []).join(' · ');
+  document.getElementById('welcome-stats').textContent =
+    (stats.files || 0) + ' files · ' + (stats.symbols || allNodes.length) + ' symbols' + (langs ? ' · ' + langs : '');
+
+  /* Build file list */
+  renderFileList('');
+
+  /* Size canvas */
+  resizeCanvas();
+});
+</script>
+</body>
+</html>

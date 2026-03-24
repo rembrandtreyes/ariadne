@@ -17,3 +17,13 @@
 
 # Ariadne local data
 .ariadne/
+.ariadne.db
+**/.ariadne.db
+**/.ariadne.db-shm
+**/.ariadne.db-wal
+
+# Private planning and session artifacts (personal, not for OSS repo)
+Plans/
+.prd/
+docs/plans/
+LAUNCH-AUDIT.md

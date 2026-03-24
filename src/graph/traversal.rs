@@ -3,7 +3,11 @@ use petgraph::Direction;
 use std::collections::{HashSet, VecDeque};
 
 /// Get all symbols that depend on the given symbol (upstream callers).
-pub fn get_dependents(graph: &CallGraph, symbol_id: i64, max_depth: Option<u32>) -> Vec<&SymbolNode> {
+pub fn get_dependents(
+    graph: &CallGraph,
+    symbol_id: i64,
+    max_depth: Option<u32>,
+) -> Vec<&SymbolNode> {
     let Some(&start) = graph.symbol_index.get(&symbol_id) else {
         return Vec::new();
     };
@@ -32,7 +36,11 @@ pub fn get_dependents(graph: &CallGraph, symbol_id: i64, max_depth: Option<u32>)
 }
 
 /// Get all symbols that the given symbol depends on (downstream callees).
-pub fn get_dependencies(graph: &CallGraph, symbol_id: i64, max_depth: Option<u32>) -> Vec<&SymbolNode> {
+pub fn get_dependencies(
+    graph: &CallGraph,
+    symbol_id: i64,
+    max_depth: Option<u32>,
+) -> Vec<&SymbolNode> {
     let Some(&start) = graph.symbol_index.get(&symbol_id) else {
         return Vec::new();
     };

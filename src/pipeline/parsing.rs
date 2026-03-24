@@ -1,8 +1,7 @@
-use crate::db::Database;
 use crate::db::write;
+use crate::db::Database;
 use crate::parse;
 use rayon::prelude::*;
-use std::sync::Mutex;
 
 use super::discovery::DiscoveryResult;
 
@@ -27,7 +26,7 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
         .collect();
 
     // Insert results sequentially (SQLite is single-writer)
-    let errors = Mutex::new(Vec::<String>::new());
+    let mut errors = Vec::<String>::new();
 
     for (path, result) in results {
         let abs_path = path.to_string_lossy().to_string();
@@ -45,26 +44,17 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
         let file_id = match file_id {
             Some(id) => id,
             None => {
-                errors
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push(format!("No file record for: {}", abs_path));
+                errors.push(format!("No file record for: {}", abs_path));
                 continue;
             }
         };
 
         if let Err(e) = write::insert_symbols_batch(db, file_id, &result.symbols) {
-            errors
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(format!("Symbol insert error for {}: {}", abs_path, e));
+            errors.push(format!("Symbol insert error for {}: {}", abs_path, e));
         }
 
         if let Err(e) = write::insert_imports_batch(db, file_id, &result.imports) {
-            errors
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(format!("Import insert error for {}: {}", abs_path, e));
+            errors.push(format!("Import insert error for {}: {}", abs_path, e));
         }
 
         // Insert calls: look up caller symbol IDs by name within this file
@@ -79,8 +69,11 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
             }
 
             let mut stmt = db.conn().prepare(
-                "INSERT INTO calls (caller_symbol_id, callee_name, file_id, line, confidence, resolution)
-                 VALUES (?1, ?2, ?3, ?4, 0.5, 'unresolved')",
+                &format!(
+                    "INSERT INTO calls (caller_symbol_id, callee_name, file_id, line, confidence, resolution)
+                     VALUES (?1, ?2, ?3, ?4, 0.5, '{}')",
+                    crate::db::RESOLUTION_UNRESOLVED,
+                ),
             ).ok();
 
             if let Some(ref mut stmt) = stmt {
@@ -93,10 +86,7 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
                             file_id,
                             call.line,
                         ]) {
-                            errors
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push(format!("Call insert error for {}: {}", abs_path, e));
+                            errors.push(format!("Call insert error for {}: {}", abs_path, e));
                         }
                     }
                 }
@@ -104,9 +94,11 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
         }
     }
 
-    let errs = errors.into_inner().unwrap_or_default();
-    if !errs.is_empty() {
-        eprintln!("Parse phase encountered {} errors", errs.len());
+    if !errors.is_empty() {
+        tracing::warn!(count = errors.len(), "Parse phase encountered errors");
+        for err in &errors {
+            tracing::warn!(error = %err, "Parse error");
+        }
     }
 
     Ok(())

@@ -1,13 +1,13 @@
-pub mod types;
-pub mod python;
-pub mod javascript;
-pub mod typescript;
+pub mod csharp;
 pub mod go;
 pub mod java;
-pub mod rust_lang;
-pub mod csharp;
-pub mod ruby;
+pub mod javascript;
 pub mod php;
+pub mod python;
+pub mod ruby;
+pub mod rust_lang;
+pub mod types;
+pub mod typescript;
 
 use types::{Language, ParseResult};
 

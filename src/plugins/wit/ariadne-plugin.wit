@@ -55,7 +55,7 @@ interface language-parser {
         function,
         method,
         class,
-        interface,
+        interface-type,
         module,
         variable,
         constant,

@@ -1,3 +1,11 @@
+//! Pipeline Phase 9: Temporal Coupling Analysis
+//!
+//! Reads: `files` (to resolve file IDs from git paths)
+//! Writes: `coupling` (file pairs with co-change counts and strength)
+//!
+//! Analyzes git history to detect files that frequently change together,
+//! revealing implicit coupling not visible through imports or call graphs.
+
 use crate::db::Database;
 use std::path::Path;
 
@@ -37,11 +45,7 @@ pub fn analyze_coupling(db: &Database, root: &Path) -> anyhow::Result<()> {
         }
 
         let parent = commit.parent(0)?;
-        let diff = repo.diff_tree_to_tree(
-            Some(&parent.tree()?),
-            Some(&commit.tree()?),
-            None,
-        )?;
+        let diff = repo.diff_tree_to_tree(Some(&parent.tree()?), Some(&commit.tree()?), None)?;
 
         let mut files_in_commit = Vec::new();
         diff.foreach(
@@ -64,7 +68,8 @@ pub fn analyze_coupling(db: &Database, root: &Path) -> anyhow::Result<()> {
     }
 
     // Count co-changes between file pairs
-    let mut co_changes: std::collections::HashMap<(String, String), i32> = std::collections::HashMap::new();
+    let mut co_changes: std::collections::HashMap<(String, String), i32> =
+        std::collections::HashMap::new();
     for files in &commit_files {
         for i in 0..files.len() {
             for j in (i + 1)..files.len() {

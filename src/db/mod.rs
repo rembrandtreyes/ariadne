@@ -1,9 +1,15 @@
+pub mod query;
 pub mod schema;
 pub mod write;
-pub mod query;
 
 use rusqlite::Connection;
 use std::path::Path;
+
+/// Resolution status for unresolved calls (not yet matched to a callee symbol).
+pub const RESOLUTION_UNRESOLVED: &str = "unresolved";
+
+/// Resolution status for resolved calls (successfully matched to a callee symbol).
+pub const RESOLUTION_RESOLVED: &str = "resolved";
 
 /// Database handle wrapping a SQLite connection for the Ariadne graph store.
 /// Escape special characters in a string for use in SQL LIKE patterns.

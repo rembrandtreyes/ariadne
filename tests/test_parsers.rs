@@ -1,5 +1,5 @@
-use ariadne_graph::parse::get_parser;
-use ariadne_graph::parse::types::{Language, SymbolKind};
+use ariadne::parse::get_parser;
+use ariadne::parse::types::{Language, SymbolKind};
 
 // ---------------------------------------------------------------------------
 // Python
@@ -8,9 +8,11 @@ use ariadne_graph::parse::types::{Language, SymbolKind};
 #[test]
 fn test_python_parser() {
     let parser = get_parser(Language::Python);
-    let source = std::fs::read_to_string("tests/fixtures/python_repo/main.py")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "main.py").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/python_repo/main.py").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "main.py")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
     assert!(!result.calls.is_empty(), "should find calls");
 }
@@ -22,9 +24,11 @@ fn test_python_parser() {
 #[test]
 fn test_javascript_parser() {
     let parser = get_parser(Language::JavaScript);
-    let source = std::fs::read_to_string("tests/fixtures/js_ts_repo/index.js")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "index.js").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/js_ts_repo/index.js").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "index.js")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
 }
 
@@ -35,9 +39,11 @@ fn test_javascript_parser() {
 #[test]
 fn test_typescript_parser() {
     let parser = get_parser(Language::TypeScript);
-    let source = std::fs::read_to_string("tests/fixtures/js_ts_repo/utils.ts")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "utils.ts").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/js_ts_repo/utils.ts").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "utils.ts")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
 }
 
@@ -48,9 +54,10 @@ fn test_typescript_parser() {
 #[test]
 fn test_go_parser() {
     let parser = get_parser(Language::Go);
-    let source = std::fs::read_to_string("tests/fixtures/go_repo/main.go")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "main.go").expect("parse succeeds");
+    let source = std::fs::read_to_string("tests/fixtures/go_repo/main.go").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "main.go")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
 }
 
@@ -61,9 +68,11 @@ fn test_go_parser() {
 #[test]
 fn test_java_parser() {
     let parser = get_parser(Language::Java);
-    let source = std::fs::read_to_string("tests/fixtures/java_repo/Main.java")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "Main.java").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/java_repo/Main.java").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "Main.java")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
 }
 
@@ -74,9 +83,11 @@ fn test_java_parser() {
 #[test]
 fn test_rust_parser() {
     let parser = get_parser(Language::Rust);
-    let source = std::fs::read_to_string("tests/fixtures/rust_repo/lib.rs")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "lib.rs").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/rust_repo/lib.rs").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "lib.rs")
+        .expect("parse succeeds");
     assert!(!result.symbols.is_empty(), "should find symbols");
     // Rust structs are mapped to SymbolKind::Class
     let has_struct = result.symbols.iter().any(|s| s.kind == SymbolKind::Class);
@@ -90,16 +101,21 @@ fn test_rust_parser() {
 #[test]
 fn test_csharp_parser() {
     let parser = get_parser(Language::CSharp);
-    let source = std::fs::read_to_string("tests/fixtures/csharp_repo/Program.cs")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "Program.cs").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/csharp_repo/Program.cs").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "Program.cs")
+        .expect("parse succeeds");
 
     assert!(!result.symbols.is_empty(), "should find symbols");
 
     let has_class = result.symbols.iter().any(|s| s.kind == SymbolKind::Class);
     assert!(has_class, "should find classes");
 
-    let has_interface = result.symbols.iter().any(|s| s.kind == SymbolKind::Interface);
+    let has_interface = result
+        .symbols
+        .iter()
+        .any(|s| s.kind == SymbolKind::Interface);
     assert!(has_interface, "should find interfaces");
 
     let has_method = result.symbols.iter().any(|s| s.kind == SymbolKind::Method);
@@ -115,9 +131,11 @@ fn test_csharp_parser() {
 #[test]
 fn test_ruby_parser() {
     let parser = get_parser(Language::Ruby);
-    let source = std::fs::read_to_string("tests/fixtures/ruby_repo/app.rb")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "app.rb").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/ruby_repo/app.rb").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "app.rb")
+        .expect("parse succeeds");
 
     assert!(!result.symbols.is_empty(), "should find symbols");
 
@@ -127,7 +145,10 @@ fn test_ruby_parser() {
     let has_module = result.symbols.iter().any(|s| s.kind == SymbolKind::Module);
     assert!(has_module, "should find modules");
 
-    let has_method = result.symbols.iter().any(|s| s.kind == SymbolKind::Method || s.kind == SymbolKind::Function);
+    let has_method = result
+        .symbols
+        .iter()
+        .any(|s| s.kind == SymbolKind::Method || s.kind == SymbolKind::Function);
     assert!(has_method, "should find methods");
 
     assert!(!result.imports.is_empty(), "should find require statements");
@@ -140,16 +161,21 @@ fn test_ruby_parser() {
 #[test]
 fn test_php_parser() {
     let parser = get_parser(Language::Php);
-    let source = std::fs::read_to_string("tests/fixtures/php_repo/index.php")
-        .expect("fixture exists");
-    let result = parser.parse_file(&source, "index.php").expect("parse succeeds");
+    let source =
+        std::fs::read_to_string("tests/fixtures/php_repo/index.php").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "index.php")
+        .expect("parse succeeds");
 
     assert!(!result.symbols.is_empty(), "should find symbols");
 
     let has_class = result.symbols.iter().any(|s| s.kind == SymbolKind::Class);
     assert!(has_class, "should find classes");
 
-    let has_interface = result.symbols.iter().any(|s| s.kind == SymbolKind::Interface);
+    let has_interface = result
+        .symbols
+        .iter()
+        .any(|s| s.kind == SymbolKind::Interface);
     assert!(has_interface, "should find interfaces");
 
     assert!(!result.imports.is_empty(), "should find use statements");

@@ -52,7 +52,10 @@ pub fn get_symbol_by_name(db: &Database, name: &str) -> anyhow::Result<Vec<Symbo
     Ok(rows)
 }
 
-/// Find symbols that depend on (call) the given symbol.
+/// Returns symbols that CALL `symbol_id` (upstream callers / dependents).
+///
+/// Example: if `login()` calls `hash_password()`, then `login` is a dependent of `hash_password`.
+/// Use this to find what code would break if `symbol_id` changes.
 pub fn get_dependents(db: &Database, symbol_id: i64) -> anyhow::Result<Vec<SymbolRow>> {
     let mut stmt = db.conn().prepare(
         "SELECT s.id, s.file_id, s.name, s.qualified_name, s.kind, s.line_start, s.line_end, s.is_dead, s.is_test
@@ -66,7 +69,10 @@ pub fn get_dependents(db: &Database, symbol_id: i64) -> anyhow::Result<Vec<Symbo
     Ok(rows)
 }
 
-/// Find symbols that the given symbol depends on (calls).
+/// Returns symbols that `symbol_id` CALLS (downstream dependencies / callees).
+///
+/// Example: if `login()` calls `hash_password()`, then `hash_password` is a dependency of `login`.
+/// Use this to find what `symbol_id` relies on.
 pub fn get_dependencies(db: &Database, symbol_id: i64) -> anyhow::Result<Vec<SymbolRow>> {
     let mut stmt = db.conn().prepare(
         "SELECT s.id, s.file_id, s.name, s.qualified_name, s.kind, s.line_start, s.line_end, s.is_dead, s.is_test
@@ -127,9 +133,9 @@ pub fn get_service_files(db: &Database, service_id: i64) -> anyhow::Result<Vec<F
 
 /// Get all files in the database.
 pub fn all_files(db: &Database) -> anyhow::Result<Vec<FileRow>> {
-    let mut stmt = db.conn().prepare(
-        "SELECT id, path, absolute_path, language FROM files ORDER BY path",
-    )?;
+    let mut stmt = db
+        .conn()
+        .prepare("SELECT id, path, absolute_path, language FROM files ORDER BY path")?;
     let rows = stmt
         .query_map([], |row| {
             Ok(FileRow {
@@ -147,7 +153,8 @@ pub fn all_files(db: &Database) -> anyhow::Result<Vec<FileRow>> {
 pub fn get_dead_symbols(db: &Database) -> anyhow::Result<Vec<SymbolRow>> {
     let mut stmt = db.conn().prepare(
         "SELECT id, file_id, name, qualified_name, kind, line_start, line_end, is_dead, is_test
-         FROM symbols WHERE is_dead = 1 ORDER BY file_id, line_start",
+         FROM symbols WHERE is_dead = 1 ORDER BY file_id, line_start
+         LIMIT 500",
     )?;
     let rows = stmt
         .query_map([], row_to_symbol)?
@@ -174,7 +181,10 @@ pub fn count_symbols(db: &Database) -> anyhow::Result<u64> {
 /// Count resolved calls in the database.
 pub fn count_resolved_calls(db: &Database) -> anyhow::Result<u64> {
     let count: i64 = db.conn().query_row(
-        "SELECT COUNT(*) FROM calls WHERE resolution != 'unresolved'",
+        &format!(
+            "SELECT COUNT(*) FROM calls WHERE resolution != '{}'",
+            super::RESOLUTION_UNRESOLVED
+        ),
         [],
         |row| row.get(0),
     )?;
@@ -197,7 +207,10 @@ pub fn resolution_rate(db: &Database) -> anyhow::Result<f64> {
         .conn()
         .query_row("SELECT COUNT(*) FROM calls", [], |row| row.get(0))?;
     let resolved: i64 = db.conn().query_row(
-        "SELECT COUNT(*) FROM calls WHERE resolution != 'unresolved'",
+        &format!(
+            "SELECT COUNT(*) FROM calls WHERE resolution != '{}'",
+            super::RESOLUTION_UNRESOLVED
+        ),
         [],
         |row| row.get(0),
     )?;
@@ -234,7 +247,7 @@ pub fn find_symbol_by_name(db: &Database, name: &str) -> anyhow::Result<Option<S
         Some(row) => Ok(Some(row_to_symbol(row)?)),
         None => {
             // Try suffix match (e.g., "module:func" -> qualified_name LIKE "%func")
-            let suffix = name.split(':').last().unwrap_or(name);
+            let suffix = name.split(':').next_back().unwrap_or(name);
             let mut stmt2 = db.conn().prepare(
                 "SELECT id, file_id, name, qualified_name, kind, line_start, line_end, is_dead, is_test
                  FROM symbols WHERE name = ?1 LIMIT 1",
@@ -312,7 +325,10 @@ pub fn get_languages(db: &Database) -> anyhow::Result<Vec<String>> {
 }
 
 /// Build an in-memory CallGraph from the database.
-pub fn build_call_graph(db: &Database) -> anyhow::Result<crate::graph::CallGraph> {
+pub fn build_call_graph(
+    db: &Database,
+    limit: Option<usize>,
+) -> anyhow::Result<crate::graph::CallGraph> {
     use crate::graph::{CallEdge, CallGraph, SymbolNode};
 
     let mut graph = CallGraph::new();
@@ -360,7 +376,11 @@ pub fn build_call_graph(db: &Database) -> anyhow::Result<crate::graph::CallGraph
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
-    for (caller_id, callee_id, confidence, resolution, line) in calls {
+    let edge_limit = limit.unwrap_or(usize::MAX);
+    for (i, (caller_id, callee_id, confidence, resolution, line)) in calls.into_iter().enumerate() {
+        if i >= edge_limit {
+            break;
+        }
         graph.add_call(
             caller_id,
             callee_id,

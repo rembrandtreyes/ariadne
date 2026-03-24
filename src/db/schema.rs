@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS imports (
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
     imported_name TEXT NOT NULL,
     module_path TEXT NOT NULL,
-    resolved_file_id INTEGER REFERENCES files(id),
-    resolved_symbol_id INTEGER REFERENCES symbols(id),
+    resolved_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+    resolved_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
     line INTEGER NOT NULL,
     is_external BOOLEAN DEFAULT FALSE
 );
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS imports (
 CREATE TABLE IF NOT EXISTS calls (
     id INTEGER PRIMARY KEY,
     caller_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,
-    callee_symbol_id INTEGER REFERENCES symbols(id),
+    callee_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
     callee_name TEXT NOT NULL,
     file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
     line INTEGER NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS heritage (
     id INTEGER PRIMARY KEY,
     child_symbol_id INTEGER NOT NULL REFERENCES symbols(id) ON DELETE CASCADE,
     parent_name TEXT NOT NULL,
-    parent_symbol_id INTEGER REFERENCES symbols(id),
+    parent_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
     kind TEXT NOT NULL DEFAULT 'extends'
 );
 
@@ -125,8 +125,8 @@ CREATE TABLE IF NOT EXISTS api_calls (
     file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
     line INTEGER,
     is_dynamic BOOLEAN DEFAULT FALSE,
-    resolved_endpoint_id INTEGER REFERENCES api_endpoints(id),
-    resolved_service_id INTEGER REFERENCES services(id)
+    resolved_endpoint_id INTEGER REFERENCES api_endpoints(id) ON DELETE SET NULL,
+    resolved_service_id INTEGER REFERENCES services(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS service_edges (

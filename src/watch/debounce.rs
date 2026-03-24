@@ -21,7 +21,9 @@ impl DebounceBatcher {
 
     pub fn drain_ready(&mut self) -> Vec<PathBuf> {
         let now = Instant::now();
-        let ready: Vec<PathBuf> = self.pending.iter()
+        let ready: Vec<PathBuf> = self
+            .pending
+            .iter()
             .filter(|(_, &last_event)| now.duration_since(last_event) >= self.debounce_duration)
             .map(|(path, _)| path.clone())
             .collect();

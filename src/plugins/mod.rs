@@ -53,7 +53,10 @@ pub fn install_plugin(wasm_path: &Path) -> anyhow::Result<PathBuf> {
     // Validate it's a .wasm file
     match wasm_path.extension().and_then(|e| e.to_str()) {
         Some("wasm") => {}
-        _ => anyhow::bail!("Plugin file must have a .wasm extension: {}", wasm_path.display()),
+        _ => anyhow::bail!(
+            "Plugin file must have a .wasm extension: {}",
+            wasm_path.display()
+        ),
     }
 
     if !wasm_path.exists() {
@@ -63,7 +66,10 @@ pub fn install_plugin(wasm_path: &Path) -> anyhow::Result<PathBuf> {
     // Reject symlinks to prevent following links to unintended files
     let metadata = std::fs::symlink_metadata(wasm_path)?;
     if metadata.file_type().is_symlink() {
-        anyhow::bail!("Symlinks are not supported for plugin installation: {}", wasm_path.display());
+        anyhow::bail!(
+            "Symlinks are not supported for plugin installation: {}",
+            wasm_path.display()
+        );
     }
 
     let file_name = wasm_path

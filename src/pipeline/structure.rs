@@ -1,5 +1,5 @@
-use crate::db::Database;
 use crate::db::write;
+use crate::db::Database;
 use std::path::Path;
 
 use super::discovery::DiscoveryResult;

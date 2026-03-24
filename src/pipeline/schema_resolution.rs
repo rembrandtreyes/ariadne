@@ -1,3 +1,12 @@
+//! Pipeline Phase 14: Schema Resolution
+//!
+//! Reads: `files`, `symbols`, `api_calls`, `api_endpoints`, filesystem (OpenAPI/protobuf files)
+//! Writes: `api_endpoints`, `metadata`, `api_calls` (boosts confidence), `service_edges`
+//!
+//! Scans for OpenAPI specs and protobuf definitions, parses them into
+//! API endpoint records, links endpoints to handler symbols, and boosts
+//! resolution confidence for matching API calls.
+
 use crate::db::Database;
 use rusqlite::params;
 use std::fs;
@@ -54,8 +63,7 @@ pub fn resolve_schemas(db: &Database, root: &Path) -> anyhow::Result<()> {
         .into_iter()
         .filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
-            !["node_modules", ".git", "target", "vendor", ".venv"]
-                .contains(&name.as_ref())
+            !["node_modules", ".git", "target", "vendor", ".venv"].contains(&name.as_ref())
         })
         .flatten()
     {
@@ -101,7 +109,10 @@ pub fn resolve_schemas(db: &Database, root: &Path) -> anyhow::Result<()> {
                     conn.execute(
                         "INSERT OR REPLACE INTO metadata (key, value) VALUES (?1, ?2)",
                         params![
-                            format!("schema:{}", path.strip_prefix(root).unwrap_or(path).display()),
+                            format!(
+                                "schema:{}",
+                                path.strip_prefix(root).unwrap_or(path).display()
+                            ),
                             path.to_string_lossy().to_string()
                         ],
                     )?;
@@ -123,11 +134,7 @@ pub fn resolve_schemas(db: &Database, root: &Path) -> anyhow::Result<()> {
 }
 
 /// Parse an OpenAPI spec file and insert endpoints into api_endpoints.
-fn parse_openapi(
-    conn: &rusqlite::Connection,
-    path: &Path,
-    service_id: i64,
-) -> anyhow::Result<()> {
+fn parse_openapi(conn: &rusqlite::Connection, path: &Path, service_id: i64) -> anyhow::Result<()> {
     let content = fs::read_to_string(path)?;
 
     // Parse the OpenAPI document (serde_yaml handles both YAML and JSON)
@@ -217,7 +224,7 @@ fn find_handler_symbol(
     let path_clean = path_str
         .trim_start_matches('/')
         .replace('/', "_")
-        .replace(|c: char| c == '{' || c == '}', "");
+        .replace(['{', '}'], "");
     let candidate = format!("{}_{}", method.to_lowercase(), path_clean);
 
     let found: Option<i64> = conn
@@ -237,7 +244,7 @@ fn find_handler_symbol(
         .rsplit('/')
         .next()
         .unwrap_or("")
-        .replace(|c: char| c == '{' || c == '}', "");
+        .replace(['{', '}'], "");
     if !last_segment.is_empty() {
         let pattern = format!(
             "%{}%{}%",
@@ -265,11 +272,7 @@ fn find_handler_symbol(
 ///
 /// Extracts `service X { ... }` blocks and `rpc MethodName(Request) returns (Response)`
 /// declarations, inserting them as gRPC endpoints.
-fn parse_proto(
-    conn: &rusqlite::Connection,
-    path: &Path,
-    service_id: i64,
-) -> anyhow::Result<()> {
+fn parse_proto(conn: &rusqlite::Connection, path: &Path, service_id: i64) -> anyhow::Result<()> {
     let content = fs::read_to_string(path)?;
 
     // Look up the file_id for this proto file
@@ -289,10 +292,7 @@ fn parse_proto(
 
         // Detect `service ServiceName {`
         if trimmed.starts_with("service ") && trimmed.contains('{') {
-            let after_service = trimmed
-                .strip_prefix("service ")
-                .unwrap_or("")
-                .trim();
+            let after_service = trimmed.strip_prefix("service ").unwrap_or("").trim();
             // Extract the service name (everything before the `{`)
             let svc_name = after_service
                 .split(|c: char| c == '{' || c.is_whitespace())
@@ -328,17 +328,9 @@ fn parse_proto(
         // Detect `rpc MethodName(` inside a service block
         if let Some(ref svc_name) = current_service {
             if trimmed.starts_with("rpc ") {
-                let after_rpc = trimmed
-                    .strip_prefix("rpc ")
-                    .unwrap_or("")
-                    .trim();
+                let after_rpc = trimmed.strip_prefix("rpc ").unwrap_or("").trim();
                 // Extract method name (everything before the `(`)
-                let rpc_name = after_rpc
-                    .split('(')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
+                let rpc_name = after_rpc.split('(').next().unwrap_or("").trim().to_string();
 
                 if !rpc_name.is_empty() {
                     // gRPC path convention: /package.ServiceName/MethodName

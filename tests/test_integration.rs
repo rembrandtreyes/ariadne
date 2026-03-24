@@ -1,4 +1,4 @@
-use ariadne_graph::db::Database;
+use ariadne::db::Database;
 
 #[test]
 fn test_database_creation() {

@@ -1,10 +1,6 @@
 use super::CallGraph;
 
-pub fn extract_call_chain(
-    graph: &CallGraph,
-    symbol_id: i64,
-    _cross_service: bool,
-) -> String {
+pub fn extract_call_chain(graph: &CallGraph, symbol_id: i64, _cross_service: bool) -> String {
     let deps = super::traversal::get_dependencies(graph, symbol_id, Some(10));
 
     let mut mermaid = String::from("graph LR\n");

@@ -1,7 +1,7 @@
-pub mod traversal;
 pub mod blast_radius;
 pub mod call_chain;
 pub mod circular;
+pub mod traversal;
 
 use std::collections::{HashMap, HashSet};
 
@@ -53,9 +53,10 @@ impl CallGraph {
     }
 
     pub fn add_call(&mut self, from_id: i64, to_id: i64, edge: CallEdge) {
-        if let (Some(&from_idx), Some(&to_idx)) =
-            (self.symbol_index.get(&from_id), self.symbol_index.get(&to_id))
-        {
+        if let (Some(&from_idx), Some(&to_idx)) = (
+            self.symbol_index.get(&from_id),
+            self.symbol_index.get(&to_id),
+        ) {
             self.graph.add_edge(from_idx, to_idx, edge);
         }
     }

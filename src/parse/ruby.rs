@@ -1,20 +1,36 @@
-use crate::parse::types::{Language, ParseResult, ParsedCall, ParsedImport, ParsedSymbol, SymbolKind};
+use crate::parse::types::{
+    Language, ParseResult, ParsedCall, ParsedImport, ParsedSymbol, SymbolKind,
+};
 use crate::parse::LanguageParser;
 
 pub struct RubyParser;
+
+impl Default for RubyParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RubyParser {
     pub fn new() -> Self {
         Self
     }
 
-    fn extract_symbols(node: tree_sitter::Node, source: &str, result: &mut ParseResult, parent_name: Option<&str>) {
+    fn extract_symbols(
+        node: tree_sitter::Node,
+        source: &str,
+        result: &mut ParseResult,
+        parent_name: Option<&str>,
+    ) {
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
             match child.kind() {
                 "method" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source.as_bytes()).unwrap_or_default().to_string();
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or_default()
+                            .to_string();
                         let qualified = match parent_name {
                             Some(p) => format!("{}#{}", p, name),
                             None => name.clone(),
@@ -31,7 +47,8 @@ impl RubyParser {
                             line_start: child.start_position().row as u32 + 1,
                             line_end: child.end_position().row as u32 + 1,
                             is_exported: true,
-                            signature: child.utf8_text(source.as_bytes())
+                            signature: child
+                                .utf8_text(source.as_bytes())
                                 .unwrap_or_default()
                                 .lines()
                                 .next()
@@ -44,7 +61,10 @@ impl RubyParser {
                 }
                 "singleton_method" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source.as_bytes()).unwrap_or_default().to_string();
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or_default()
+                            .to_string();
                         let qualified = match parent_name {
                             Some(p) => format!("{}.{}", p, name),
                             None => name.clone(),
@@ -64,7 +84,10 @@ impl RubyParser {
                 }
                 "class" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source.as_bytes()).unwrap_or_default().to_string();
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or_default()
+                            .to_string();
                         let qualified = match parent_name {
                             Some(p) => format!("{}::{}", p, name),
                             None => name.clone(),
@@ -85,7 +108,10 @@ impl RubyParser {
                 }
                 "module" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
-                        let name = name_node.utf8_text(source.as_bytes()).unwrap_or_default().to_string();
+                        let name = name_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or_default()
+                            .to_string();
                         let qualified = match parent_name {
                             Some(p) => format!("{}::{}", p, name),
                             None => name.clone(),
@@ -106,10 +132,14 @@ impl RubyParser {
                 }
                 "call" => {
                     if let Some(method_node) = child.child_by_field_name("method") {
-                        let callee = method_node.utf8_text(source.as_bytes()).unwrap_or_default().to_string();
+                        let callee = method_node
+                            .utf8_text(source.as_bytes())
+                            .unwrap_or_default()
+                            .to_string();
                         if callee == "require" || callee == "require_relative" {
                             if let Some(args) = child.child_by_field_name("arguments") {
-                                let text = args.utf8_text(source.as_bytes())
+                                let text = args
+                                    .utf8_text(source.as_bytes())
                                     .unwrap_or_default()
                                     .trim_matches('(')
                                     .trim_matches(')')
@@ -123,6 +153,42 @@ impl RubyParser {
                                     line: child.start_position().row as u32 + 1,
                                     is_external: !is_relative,
                                 });
+                            }
+                        } else if callee == "attr_accessor"
+                            || callee == "attr_reader"
+                            || callee == "attr_writer"
+                        {
+                            // attr_accessor/attr_reader/attr_writer generate methods
+                            // Extract each symbol argument as a Method symbol
+                            if let Some(args) = child.child_by_field_name("arguments") {
+                                let mut arg_cursor = args.walk();
+                                for arg in args.children(&mut arg_cursor) {
+                                    if arg.kind() == "simple_symbol" {
+                                        let sym_text = arg
+                                            .utf8_text(source.as_bytes())
+                                            .unwrap_or_default()
+                                            .trim_start_matches(':')
+                                            .to_string();
+                                        if sym_text.is_empty() {
+                                            continue;
+                                        }
+                                        let qualified = match parent_name {
+                                            Some(p) => format!("{}#{}", p, sym_text),
+                                            None => sym_text.clone(),
+                                        };
+                                        result.symbols.push(ParsedSymbol {
+                                            name: sym_text.clone(),
+                                            qualified_name: qualified,
+                                            kind: SymbolKind::Method,
+                                            line_start: child.start_position().row as u32 + 1,
+                                            line_end: child.end_position().row as u32 + 1,
+                                            is_exported: true,
+                                            signature: format!("{} :{}", callee, sym_text),
+                                            decorators: Vec::new(),
+                                            parent_name: parent_name.map(String::from),
+                                        });
+                                    }
+                                }
                             }
                         } else {
                             let caller = parent_name.unwrap_or("<main>").to_string();

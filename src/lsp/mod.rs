@@ -90,7 +90,10 @@ impl AriadneLsp {
                         },
                         severity: Some(DiagnosticSeverity::WARNING),
                         source: Some("ariadne".to_string()),
-                        message: format!("Dead code: `{}` has no callers and is not exported", name),
+                        message: format!(
+                            "Dead code: `{}` has no callers and is not exported",
+                            name
+                        ),
                         ..Default::default()
                     });
                 }
@@ -126,7 +129,10 @@ impl AriadneLsp {
                             format!("Rule `{}` violated: `{}` -> `{}`", rule_name, from, to)
                         }
                         (_, Some(to)) => {
-                            format!("Rule `{}` violated: forbidden dependency on `{}`", rule_name, to)
+                            format!(
+                                "Rule `{}` violated: forbidden dependency on `{}`",
+                                rule_name, to
+                            )
                         }
                         _ => {
                             format!("Rule `{}` violated", rule_name)
@@ -219,7 +225,6 @@ impl LanguageServer for AriadneLsp {
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
             capabilities: capabilities::server_capabilities(),
-            ..Default::default()
         })
     }
 
@@ -236,13 +241,17 @@ impl LanguageServer for AriadneLsp {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         let diagnostics = self.build_diagnostics_for_file(&uri);
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let uri = params.text_document.uri;
         let diagnostics = self.build_diagnostics_for_file(&uri);
-        self.client.publish_diagnostics(uri, diagnostics, None).await;
+        self.client
+            .publish_diagnostics(uri, diagnostics, None)
+            .await;
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
@@ -273,9 +282,8 @@ impl LanguageServer for AriadneLsp {
             Err(_) => return Ok(Some(Vec::new())),
         };
 
-        let symbols: Vec<(i64, String, u32, u32, bool, bool)> = match stmt.query_map(
-            params![pattern],
-            |row| {
+        let symbols: Vec<(i64, String, u32, u32, bool, bool)> =
+            match stmt.query_map(params![pattern], |row| {
                 Ok((
                     row.get::<_, i64>(0)?,
                     row.get::<_, String>(1)?,
@@ -284,11 +292,10 @@ impl LanguageServer for AriadneLsp {
                     row.get::<_, bool>(4)?,
                     row.get::<_, bool>(5)?,
                 ))
-            },
-        ) {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
-            Err(_) => return Ok(Some(Vec::new())),
-        };
+            }) {
+                Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+                Err(_) => return Ok(Some(Vec::new())),
+            };
 
         let mut lenses = Vec::new();
 
@@ -426,7 +433,7 @@ impl LanguageServer for AriadneLsp {
         };
 
         // Build the call graph and find all callers
-        let graph = match crate::db::query::build_call_graph(&db) {
+        let graph = match crate::db::query::build_call_graph(&db, None) {
             Ok(g) => g,
             Err(_) => return Ok(Some(Vec::new())),
         };
@@ -523,7 +530,9 @@ impl LanguageServer for AriadneLsp {
 
         // Dead code warning: no callers and not exported
         if caller_count == 0 && !sym.is_exported {
-            markdown.push_str("\n\n**WARNING: Potential dead code** -- no incoming calls and not exported");
+            markdown.push_str(
+                "\n\n**WARNING: Potential dead code** -- no incoming calls and not exported",
+            );
         }
 
         // Also flag if the DB already marks it dead
@@ -715,8 +724,7 @@ pub async fn serve_lsp_stdio(db_path: PathBuf) -> anyhow::Result<()> {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) =
-        LspService::new(|client| AriadneLsp::new(client, db_path.clone()));
+    let (service, socket) = LspService::new(|client| AriadneLsp::new(client, db_path.clone()));
     Server::new(stdin, stdout, socket).serve(service).await;
     Ok(())
 }

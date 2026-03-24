@@ -1,4 +1,4 @@
-use ariadne_graph::config::autodetect;
+use ariadne::config::autodetect;
 use std::path::Path;
 
 #[test]

@@ -24,9 +24,13 @@ pub fn detect_dead_code(db: &Database) -> anyhow::Result<()> {
     // Collect all reachable symbol IDs via BFS from entry points and exported symbols
     let mut reachable = HashSet::new();
 
-    // Seed: entry points and exported symbols
+    // Seed: entry points, exported symbols, test symbols, and trait impl methods.
+    // Trait implementations (e.g. Display::fmt, From::from, Default::default) are
+    // satisfied through the trait's dispatch contract — they are always "reachable"
+    // even when no direct call site appears in the codebase.
     let mut seed_stmt = conn.prepare(
-        "SELECT id FROM symbols WHERE is_entry_point = 1 OR is_exported = 1 OR is_test = 1",
+        "SELECT id FROM symbols WHERE is_entry_point = 1 OR is_exported = 1 OR is_test = 1
+         OR decorators LIKE '%trait_impl%'",
     )?;
     let seeds: Vec<i64> = seed_stmt
         .query_map([], |row| row.get(0))?
@@ -55,9 +59,8 @@ pub fn detect_dead_code(db: &Database) -> anyhow::Result<()> {
     }
 
     // Mark unreachable functions and methods as dead
-    let mut all_funcs_stmt = conn.prepare(
-        "SELECT id FROM symbols WHERE kind IN ('function', 'method') AND is_test = 0",
-    )?;
+    let mut all_funcs_stmt = conn
+        .prepare("SELECT id FROM symbols WHERE kind IN ('function', 'method') AND is_test = 0")?;
     let all_funcs: Vec<i64> = all_funcs_stmt
         .query_map([], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;

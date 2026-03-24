@@ -71,7 +71,11 @@ pub fn search(
         for result in &mut results {
             result.score = strsim::jaro_winkler(&result.name, query);
         }
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
     }
 
     results.truncate(limit);
@@ -162,7 +166,7 @@ fn fuzzy_search(
     let mut stmt = conn.prepare(
         "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start
          FROM symbols s JOIN files f ON s.file_id = f.id
-         LIMIT 1000",
+         LIMIT 200",
     )?;
 
     let mut results: Vec<SearchResult> = stmt
@@ -190,7 +194,11 @@ fn fuzzy_search(
         .filter_map(|r| r.ok())
         .collect();
 
-    results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     results.truncate(limit);
 
     Ok(results)

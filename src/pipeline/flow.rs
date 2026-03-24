@@ -1,3 +1,11 @@
+//! Pipeline Phase 8: Execution Flow Tracing
+//!
+//! Reads: `symbols` (entry points), `calls` (resolved call graph)
+//! Writes: `flows`, `flow_steps` (complete execution paths from entry points)
+//!
+//! Performs BFS traversal from each entry-point symbol through the resolved
+//! call graph, recording ordered execution flow steps with depth tracking.
+
 use crate::db::Database;
 use rusqlite::params;
 
@@ -9,9 +17,7 @@ pub fn trace_flows(db: &Database) -> anyhow::Result<()> {
     let conn = db.conn();
 
     // Find all entry point symbols
-    let mut entry_stmt = conn.prepare(
-        "SELECT id, name FROM symbols WHERE is_entry_point = 1",
-    )?;
+    let mut entry_stmt = conn.prepare("SELECT id, name FROM symbols WHERE is_entry_point = 1")?;
 
     let entries: Vec<(i64, String)> = entry_stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?

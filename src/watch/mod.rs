@@ -1,7 +1,7 @@
 pub mod debounce;
 pub mod incremental;
 
-use notify::{Watcher, RecursiveMode, Event, EventKind};
+use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -49,15 +49,12 @@ pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyho
     let watcher = FileWatcher::new(root)?;
     let debounce = Duration::from_millis(debounce_ms);
 
-    println!("Watching {} for changes...", root.display());
+    tracing::info!(path = %root.display(), "Watching for changes");
 
     loop {
         let events = watcher.poll_events(debounce);
         if !events.is_empty() {
-            let changed_files: Vec<_> = events
-                .iter()
-                .flat_map(|e| e.paths.iter())
-                .collect();
+            let changed_files: Vec<_> = events.iter().flat_map(|e| e.paths.iter()).collect();
 
             let indexable: Vec<&Path> = changed_files
                 .iter()
@@ -71,9 +68,9 @@ pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyho
                 .collect();
 
             if !indexable.is_empty() {
-                println!("Re-indexing {} changed files...", indexable.len());
+                tracing::info!(count = indexable.len(), "Re-indexing changed files");
                 if let Err(e) = incremental::reindex_files(&db, root, &indexable) {
-                    eprintln!("Re-index error: {}", e);
+                    tracing::error!(error = %e, "Re-index error");
                 }
             }
         }
@@ -86,12 +83,12 @@ pub async fn watch_and_serve(
     db_path: std::path::PathBuf,
     debounce_ms: u64,
 ) -> anyhow::Result<()> {
-    println!("Starting watch mode with MCP server...");
+    tracing::info!("Starting watch mode with MCP server");
 
     // Spawn the file watcher in a background thread
     std::thread::spawn(move || {
         if let Err(e) = watch_and_reindex(&root, &db_path, debounce_ms) {
-            eprintln!("Watch error: {}", e);
+            tracing::error!(error = %e, "Watch error");
         }
     });
 

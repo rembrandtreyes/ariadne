@@ -1,6 +1,6 @@
+pub mod autodetect;
 pub mod repo;
 pub mod workspace;
-pub mod autodetect;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

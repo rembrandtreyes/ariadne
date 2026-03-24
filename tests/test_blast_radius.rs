@@ -1,5 +1,5 @@
-use ariadne_graph::graph::{CallGraph, SymbolNode, CallEdge};
-use ariadne_graph::graph::blast_radius::analyze_blast_radius;
+use ariadne::graph::blast_radius::analyze_blast_radius;
+use ariadne::graph::{CallEdge, CallGraph, SymbolNode};
 
 #[test]
 fn test_empty_blast_radius() {
@@ -32,11 +32,15 @@ fn test_blast_radius_with_dependents() {
         is_test: false,
     });
 
-    graph.add_call(2, 1, CallEdge {
-        confidence: 1.0,
-        resolution: "import".to_string(),
-        line: 10,
-    });
+    graph.add_call(
+        2,
+        1,
+        CallEdge {
+            confidence: 1.0,
+            resolution: "import".to_string(),
+            line: 10,
+        },
+    );
 
     let result = analyze_blast_radius(&graph, 1, None, false);
     assert_eq!(result.total_affected, 1);

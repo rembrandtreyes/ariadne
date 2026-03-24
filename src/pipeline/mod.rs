@@ -1,17 +1,17 @@
-pub mod discovery;
-pub mod structure;
-pub mod parsing;
-pub mod import_resolution;
-pub mod call_resolution;
-pub mod heritage;
-pub mod dead_code;
-pub mod flow;
-pub mod coupling;
-pub mod search_index;
 pub mod api_resolution;
-pub mod service_topology;
+pub mod call_resolution;
 pub mod community;
+pub mod coupling;
+pub mod dead_code;
+pub mod discovery;
+pub mod flow;
+pub mod heritage;
+pub mod import_resolution;
+pub mod parsing;
 pub mod schema_resolution;
+pub mod search_index;
+pub mod service_topology;
+pub mod structure;
 
 use crate::config::RepoConfig;
 use crate::db::Database;
@@ -26,27 +26,27 @@ pub fn run_full_pipeline(
 ) -> anyhow::Result<PipelineStats> {
     let start = Instant::now();
 
+    // Clear stale data before re-indexing to avoid FK constraint violations
+    crate::db::write::clear_all_data(db)?;
+
     let discovered = discovery::discover(root, config)?;
     let file_count = discovered.files.len();
 
-    structure::create_structure(db, &discovered, root)?;
-    parsing::parse_all(db, &discovered)?;
-    import_resolution::resolve_imports(db)?;
-    call_resolution::resolve_calls(db)?;
-    heritage::build_heritage(db)?;
-    dead_code::detect_dead_code(db)?;
-    flow::trace_flows(db)?;
-    coupling::analyze_coupling(db, root)?;
-    search_index::build_search_index(db)?;
-    api_resolution::resolve_api_boundaries(db)?;
-    service_topology::build_topology(db)?;
-    community::detect_communities(db)?;
-    schema_resolution::resolve_schemas(db, root)?;
+    // Wrap all pipeline phases in a single transaction for performance and atomicity
+    db.conn().execute_batch("BEGIN")?;
+    let result = run_pipeline_phases(db, root, &discovered);
+    match result {
+        Ok(()) => {
+            db.conn().execute_batch("COMMIT")?;
+        }
+        Err(e) => {
+            let _ = db.conn().execute_batch("ROLLBACK");
+            return Err(e);
+        }
+    }
 
-    let (sym_count, _file_count, call_count) =
-        crate::db::query::count_symbols(db)
-            .map(|s| (s, 0u64, 0u64))
-            .unwrap_or((0, 0, 0));
+    let sym_count = crate::db::query::count_symbols(db).unwrap_or(0);
+    let call_count = crate::db::query::count_calls(db).unwrap_or(0);
 
     let dead_count = crate::db::query::count_dead(db).unwrap_or(0);
     let rate = crate::db::query::resolution_rate(db).unwrap_or(0.0);
@@ -59,6 +59,28 @@ pub fn run_full_pipeline(
         resolution_rate: rate,
         duration_ms: start.elapsed().as_millis() as u64,
     })
+}
+
+/// Run all pipeline phases. Separated to allow transactional wrapping.
+fn run_pipeline_phases(
+    db: &Database,
+    root: &Path,
+    discovered: &discovery::DiscoveryResult,
+) -> anyhow::Result<()> {
+    structure::create_structure(db, discovered, root)?;
+    parsing::parse_all(db, discovered)?;
+    import_resolution::resolve_imports(db)?;
+    call_resolution::resolve_calls(db)?;
+    heritage::build_heritage(db)?;
+    dead_code::detect_dead_code(db)?;
+    flow::trace_flows(db)?;
+    coupling::analyze_coupling(db, root)?;
+    search_index::build_search_index(db)?;
+    api_resolution::resolve_api_boundaries(db)?;
+    service_topology::build_topology(db)?;
+    community::detect_communities(db)?;
+    schema_resolution::resolve_schemas(db, root)?;
+    Ok(())
 }
 
 /// Represents the result of running the full indexing pipeline.

@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ariadne — Audit Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400&display=swap" rel="stylesheet">
+    <style>
+/* ═══════════════════ RESET ═══════════════════ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* ═══════════════════ CSS CUSTOM PROPERTIES ═══════════════════ */
+:root {
+    --bg: #0D1117;
+    --surface: #161B22;
+    --elevated: #21262D;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #E6EDF3;
+    --text-2: #8B949E;
+    --text-3: #484F58;
+    --amber: #F0883E;
+    --green: #3FB950;
+    --red: #F85149;
+    --blue: #58A6FF;
+    --purple: #BC8CFF;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --transition: 180ms ease;
+    --max-width: 1100px;
+}
+
+/* ═══════════════════ BASE ═══════════════════ */
+html {
+    font-size: 15px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ═══════════════════ SCROLLBAR ═══════════════════ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-2); }
+
+/* ═══════════════════ LAYOUT ═══════════════════ */
+.container {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 24px 80px;
+}
+
+/* ═══════════════════ HEADER ═══════════════════ */
+.page-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13, 17, 23, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    margin-bottom: 32px;
+}
+.header-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    height: 56px;
+    gap: 24px;
+}
+.logo {
+    font-weight: 600;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    user-select: none;
+    flex-shrink: 0;
+}
+.logo span { color: var(--purple); }
+.nav-tabs {
+    display: flex;
+    gap: 2px;
+    margin-left: auto;
+    background: var(--elevated);
+    border-radius: 8px;
+    padding: 3px;
+}
+.nav-tab {
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all var(--transition);
+    border: none;
+    background: none;
+    white-space: nowrap;
+    text-decoration: none;
+}
+.nav-tab:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.04);
+    text-decoration: none;
+}
+.nav-tab.active {
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+/* ═══════════════════ LOADING ═══════════════════ */
+.loading-overlay {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+}
+.spinner {
+    width: 36px;
+    height: 36px;
+    border: 3px solid var(--elevated);
+    border-top-color: var(--purple);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+    color: var(--text-2);
+    font-size: 0.875rem;
+}
+
+/* ═══════════════════ ERROR ═══════════════════ */
+.error-banner {
+    background: rgba(248, 81, 73, 0.1);
+    border: 1px solid rgba(248, 81, 73, 0.3);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    color: var(--red);
+    font-size: 0.875rem;
+}
+.error-banner svg { flex-shrink: 0; }
+
+/* ═══════════════════ SECTION ═══════════════════ */
+.section {
+    margin-bottom: 32px;
+}
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+}
+.section-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--text-2);
+    flex-shrink: 0;
+}
+.count-badge {
+    background: var(--elevated);
+    color: var(--text-2);
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-family: var(--font-mono);
+}
+
+/* ═══════════════════ HEALTH GRADE CARD ═══════════════════ */
+.health-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    text-align: center;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+}
+.health-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--grade-color, var(--text-3));
+    transition: background var(--transition);
+}
+.grade-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    margin-bottom: 28px;
+}
+.grade-letter {
+    font-size: 5rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--grade-color, var(--text-3));
+    text-shadow: 0 0 40px color-mix(in srgb, var(--grade-color, var(--text-3)) 30%, transparent);
+    transition: color var(--transition);
+}
+.grade-meta {
+    text-align: left;
+}
+.grade-score {
+    font-size: 2.5rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.1;
+    font-family: var(--font-mono);
+}
+.grade-score-suffix {
+    font-size: 1.2rem;
+    color: var(--text-2);
+    font-weight: 400;
+}
+.grade-label {
+    font-size: 0.95rem;
+    color: var(--grade-color, var(--text-2));
+    font-weight: 500;
+    margin-top: 4px;
+}
+.health-indicators {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 600px;
+    margin: 0 auto;
+}
+.indicator {
+    background: var(--elevated);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+}
+.indicator-label {
+    font-size: 0.75rem;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+}
+.indicator-value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+.indicator-bar {
+    height: 4px;
+    background: var(--elevated);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+.indicator-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+}
+
+/* ═══════════════════ STATS GRID ═══════════════════ */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
+}
+@media (max-width: 700px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .health-indicators { grid-template-columns: 1fr; }
+    .grade-display { flex-direction: column; gap: 16px; }
+    .grade-meta { text-align: center; }
+}
+@media (max-width: 480px) {
+    .stats-grid { grid-template-columns: 1fr; }
+}
+.stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+}
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.stat-value {
+    font-size: 1.6rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text);
+    line-height: 1.2;
+}
+.stat-sub {
+    font-size: 0.8rem;
+    color: var(--text-2);
+    margin-top: 4px;
+}
+.stat-progress {
+    height: 6px;
+    background: var(--elevated);
+    border-radius: 3px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+.stat-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+}
+.lang-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+.lang-tag {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--elevated);
+    color: var(--text-2);
+    border: 1px solid var(--border);
+}
+
+/* ═══════════════════ BAR CHART ═══════════════════ */
+.bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.bar-row {
+    display: grid;
+    grid-template-columns: 200px 1fr 50px;
+    gap: 12px;
+    align-items: center;
+    padding: 6px 0;
+    transition: background var(--transition);
+    border-radius: 4px;
+}
+.bar-row:hover {
+    background: rgba(255,255,255,0.02);
+}
+.bar-name {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.bar-track {
+    height: 22px;
+    background: var(--elevated);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+.bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.5s ease;
+    min-width: 2px;
+}
+.bar-count {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-2);
+    text-align: right;
+}
+@media (max-width: 600px) {
+    .bar-row { grid-template-columns: 120px 1fr 40px; }
+}
+
+/* ═══════════════════ KIND BADGE ═══════════════════ */
+.kind-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+.kind-function { background: rgba(88, 166, 255, 0.12); color: var(--blue); }
+.kind-class { background: rgba(188, 140, 255, 0.12); color: var(--purple); }
+.kind-method { background: rgba(63, 185, 80, 0.12); color: var(--green); }
+.kind-interface { background: rgba(240, 136, 62, 0.12); color: var(--amber); }
+.kind-other { background: rgba(139, 148, 158, 0.12); color: var(--text-2); }
+
+/* ═══════════════════ GOD FILES LIST ═══════════════════ */
+.god-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.god-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: border-color var(--transition), background var(--transition);
+}
+.god-item:hover {
+    background: var(--elevated);
+    border-color: var(--border-strong);
+    border-left-color: var(--amber);
+}
+.god-rank {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-3);
+    min-width: 24px;
+}
+.god-info { flex: 1; min-width: 0; }
+.god-name {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text);
+    word-break: break-all;
+}
+.god-file {
+    font-size: 0.75rem;
+    color: var(--text-2);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.god-conn {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--amber);
+    flex-shrink: 0;
+}
+
+/* ═══════════════════ EMPTY STATE ═══════════════════ */
+.empty-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    background: rgba(63, 185, 80, 0.06);
+    border: 1px solid rgba(63, 185, 80, 0.15);
+    border-radius: var(--radius);
+    color: var(--green);
+    font-size: 0.875rem;
+}
+.empty-state svg { flex-shrink: 0; }
+
+/* ═══════════════════ CIRCULAR DEPS ═══════════════════ */
+.cycle-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.cycle-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--red);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.cycle-node {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text);
+    background: var(--elevated);
+    padding: 3px 10px;
+    border-radius: 4px;
+}
+.cycle-arrow {
+    color: var(--red);
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+}
+
+/* ═══════════════════ DEAD CODE TABLE ═══════════════════ */
+.table-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.table-search {
+    flex: 1;
+    min-width: 200px;
+    padding: 8px 12px 8px 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    outline: none;
+    transition: border-color var(--transition);
+}
+.table-search:focus { border-color: var(--blue); }
+.table-search-wrap {
+    position: relative;
+    flex: 1;
+    min-width: 200px;
+}
+.table-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-3);
+    pointer-events: none;
+}
+.table-filter {
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    outline: none;
+    cursor: pointer;
+    transition: border-color var(--transition);
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B949E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 30px;
+}
+.table-filter:focus { border-color: var(--blue); }
+.table-info {
+    font-size: 0.75rem;
+    color: var(--text-3);
+    margin-left: auto;
+    white-space: nowrap;
+}
+.btn-export {
+    padding: 8px 14px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-2);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.btn-export:hover {
+    background: var(--surface);
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+.data-table thead th {
+    text-align: left;
+    padding: 10px 12px;
+    background: var(--elevated);
+    color: var(--text-2);
+    font-weight: 500;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    transition: color var(--transition);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+.data-table thead th:hover { color: var(--text); }
+.data-table thead th.sorted { color: var(--blue); }
+.sort-arrow {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.65rem;
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+.data-table thead th.sorted .sort-arrow { opacity: 1; }
+.data-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background var(--transition);
+}
+.data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+.data-table tbody td {
+    padding: 8px 12px;
+    vertical-align: middle;
+}
+.td-name {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text);
+    word-break: break-all;
+}
+.td-file {
+    font-size: 0.75rem;
+    color: var(--text-2);
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+}
+.td-line {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-2);
+}
+
+/* ═══════════════════ PAGINATION ═══════════════════ */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+.page-btn {
+    min-width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-2);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all var(--transition);
+    padding: 0 6px;
+}
+.page-btn:hover:not(:disabled) {
+    background: var(--elevated);
+    color: var(--text);
+    border-color: var(--border-strong);
+}
+.page-btn.active {
+    background: var(--blue);
+    color: #fff;
+    border-color: var(--blue);
+}
+.page-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+.page-ellipsis {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+    font-size: 0.8rem;
+}
+
+/* ═══════════════════ TABLE WRAPPER ═══════════════════ */
+.table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.table-scroll {
+    overflow-x: auto;
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+/* ═══════════════════ FOOTER ═══════════════════ */
+.page-footer {
+    text-align: center;
+    padding: 32px 0;
+    color: var(--text-3);
+    font-size: 0.75rem;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+}
+
+/* ═══════════════════ HIDDEN ═══════════════════ */
+.hidden { display: none !important; }
+
+/* ═══════════════════ FADE-IN ANIMATION ═══════════════════ */
+.fade-in {
+    animation: fadeIn 0.35s ease forwards;
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════ HEADER ═══════════════════ -->
+<header class="page-header">
+    <div class="header-inner">
+        <div class="logo"><span>ariadne</span></div>
+        <nav class="nav-tabs">
+            <a class="nav-tab" href="/">Command Center</a>
+            <a class="nav-tab" href="/v2">Navigator</a>
+            <a class="nav-tab active" href="/v3">Audit Report</a>
+        </nav>
+    </div>
+</header>
+
+<!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+<main class="container" id="main">
+    <!-- Loading state -->
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Analyzing codebase health...</div>
+    </div>
+
+    <!-- Error state -->
+    <div class="error-banner hidden" id="error-banner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        <span id="error-text">Failed to load data from Ariadne server.</span>
+    </div>
+
+    <!-- Report content (hidden until loaded) -->
+    <div id="report" class="hidden">
+
+        <!-- ═══════════ HEALTH GRADE ═══════════ -->
+        <section class="section fade-in" id="health-section">
+            <div class="health-card" id="health-card">
+                <div class="grade-display">
+                    <div class="grade-letter" id="grade-letter">-</div>
+                    <div class="grade-meta">
+                        <div class="grade-score"><span id="grade-score">--</span><span class="grade-score-suffix"> / 100</span></div>
+                        <div class="grade-label" id="grade-label">Loading...</div>
+                    </div>
+                </div>
+                <div class="health-indicators">
+                    <div class="indicator">
+                        <div class="indicator-label">Resolution Rate</div>
+                        <div class="indicator-value" id="ind-resolution">--</div>
+                        <div class="indicator-bar"><div class="indicator-bar-fill" id="ind-resolution-bar" style="width: 0; background: var(--text-3);"></div></div>
+                    </div>
+                    <div class="indicator">
+                        <div class="indicator-label">Dead Code</div>
+                        <div class="indicator-value" id="ind-dead">--</div>
+                        <div class="indicator-bar"><div class="indicator-bar-fill" id="ind-dead-bar" style="width: 0; background: var(--text-3);"></div></div>
+                    </div>
+                    <div class="indicator">
+                        <div class="indicator-label">Coupling</div>
+                        <div class="indicator-value" id="ind-coupling">--</div>
+                        <div class="indicator-bar"><div class="indicator-bar-fill" id="ind-coupling-bar" style="width: 0; background: var(--text-3);"></div></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═══════════ OVERVIEW STATS ═══════════ -->
+        <section class="section fade-in" id="stats-section">
+            <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7"/>
+                    <rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <h2 class="section-title">Overview</h2>
+            </div>
+            <div class="stats-grid" id="stats-grid">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- ═══════════ MOST CONNECTED ═══════════ -->
+        <section class="section fade-in" id="connected-section">
+            <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+                </svg>
+                <h2 class="section-title">Top Call Hubs</h2>
+                <span class="count-badge" id="connected-count">0</span>
+            </div>
+            <div id="connected-chart" class="bar-chart">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- ═══════════ GOD FILES ═══════════ -->
+        <section class="section fade-in" id="god-section">
+            <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <h2 class="section-title">High Coupling Hotspots</h2>
+                <span class="count-badge" id="god-count">0</span>
+            </div>
+            <div id="god-list">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- ═══════════ CIRCULAR DEPS ═══════════ -->
+        <section class="section fade-in" id="cycles-section">
+            <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"/>
+                    <polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                <h2 class="section-title">Dependency Cycles</h2>
+                <span class="count-badge" id="cycles-count">0</span>
+            </div>
+            <div id="cycles-list">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- ═══════════ DEAD CODE TABLE ═══════════ -->
+        <section class="section fade-in" id="dead-section">
+            <div class="section-header">
+                <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 6h18"/>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+                <h2 class="section-title">Unreachable Code</h2>
+                <span class="count-badge" id="dead-count">0</span>
+            </div>
+            <div class="table-controls">
+                <div class="table-search-wrap">
+                    <svg class="table-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <input type="text" class="table-search" id="dead-search" placeholder="Filter by name or file...">
+                </div>
+                <select class="table-filter" id="dead-kind-filter">
+                    <option value="all">All kinds</option>
+                    <option value="function">function</option>
+                    <option value="class">class</option>
+                    <option value="method">method</option>
+                    <option value="other">other</option>
+                </select>
+                <span class="table-info" id="dead-table-info">-- of -- items</span>
+                <button class="btn-export" id="dead-export">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7 10 12 15 17 10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    Export CSV
+                </button>
+            </div>
+            <div class="table-wrap">
+                <div class="table-scroll">
+                    <table class="data-table" id="dead-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="name">Name <span class="sort-arrow"></span></th>
+                                <th data-sort="kind">Kind <span class="sort-arrow"></span></th>
+                                <th data-sort="file">File <span class="sort-arrow"></span></th>
+                                <th data-sort="line_start">Line <span class="sort-arrow"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="dead-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="pagination hidden" id="dead-pagination">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- ═══════════ FOOTER ═══════════ -->
+        <footer class="page-footer">
+            Generated by Ariadne <span id="gen-time"></span>
+        </footer>
+    </div>
+</main>
+
+<script>
+(function() {
+    'use strict';
+
+    /* ═══════════════════ CONSTANTS ═══════════════════ */
+    const PAGE_SIZE = 25;
+    const KIND_COLORS = {
+        function:  { bar: '#58A6FF', cls: 'kind-function' },
+        class:     { bar: '#BC8CFF', cls: 'kind-class' },
+        method:    { bar: '#3FB950', cls: 'kind-method' },
+        interface: { bar: '#F0883E', cls: 'kind-interface' },
+    };
+    const DEFAULT_KIND = { bar: '#8B949E', cls: 'kind-other' };
+
+    /* ═══════════════════ STATE ═══════════════════ */
+    let statsData = null;
+    let insightsData = null;
+    let deadCodeAll = [];
+    let deadCodeFiltered = [];
+    let deadPage = 1;
+    let deadSortCol = 'file';
+    let deadSortAsc = true;
+
+    /* ═══════════════════ DOM REFS ═══════════════════ */
+    const $  = (s) => document.querySelector(s);
+    const $$ = (s) => document.querySelectorAll(s);
+
+    /* ═══════════════════ HELPERS ═══════════════════ */
+    function fmt(n) {
+        if (n === undefined || n === null) return '--';
+        return n.toLocaleString('en-US');
+    }
+    function pct(n, d) {
+        if (!d) return '0%';
+        return ((n / d) * 100).toFixed(1) + '%';
+    }
+    function escHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s;
+        return d.innerHTML;
+    }
+    function kindInfo(kind) {
+        const k = (kind || '').toLowerCase();
+        return KIND_COLORS[k] || DEFAULT_KIND;
+    }
+    function gradeColor(score) {
+        if (score >= 90) return 'var(--green)';
+        if (score >= 75) return 'var(--blue)';
+        if (score >= 55) return 'var(--amber)';
+        if (score >= 35) return '#E3742F';
+        return 'var(--red)';
+    }
+    function gradeLetter(score) {
+        if (score >= 90) return 'A';
+        if (score >= 75) return 'B';
+        if (score >= 55) return 'C';
+        if (score >= 35) return 'D';
+        return 'F';
+    }
+    function gradeLabel(score) {
+        if (score >= 90) return 'Excellent';
+        if (score >= 75) return 'Good';
+        if (score >= 55) return 'Fair';
+        if (score >= 35) return 'Poor';
+        return 'Critical';
+    }
+
+    /* ═══════════════════ HEALTH SCORE ═══════════════════ */
+    function computeHealthScore(stats, insights) {
+        let score = 100;
+
+        /* Resolution rate */
+        const rr = stats.resolution_rate || 0;
+        if (rr < 0.5) score -= 40;
+        else if (rr < 0.7) score -= 25;
+        else if (rr < 0.9) score -= 10;
+
+        /* Dead code ratio */
+        const deadPct = stats.symbols > 0 ? (stats.dead_functions / stats.symbols) : 0;
+        if (deadPct > 0.30) score -= 30;
+        else if (deadPct > 0.15) score -= 20;
+        else if (deadPct > 0.05) score -= 10;
+
+        /* God files */
+        const godPenalty = Math.min((insights.god_files || []).length * 3, 20);
+        score -= godPenalty;
+
+        /* Circular deps */
+        const cyclePenalty = Math.min((insights.circular_deps || []).length * 5, 25);
+        score -= cyclePenalty;
+
+        return Math.max(0, Math.min(100, score));
+    }
+
+    /* ═══════════════════ RENDER: HEALTH ═══════════════════ */
+    function renderHealth(stats, insights) {
+        const score = computeHealthScore(stats, insights);
+        const color = gradeColor(score);
+        const letter = gradeLetter(score);
+        const label = gradeLabel(score);
+
+        const card = $('#health-card');
+        card.style.setProperty('--grade-color', color);
+
+        $('#grade-letter').textContent = letter;
+        $('#grade-letter').style.color = color;
+        $('#grade-score').textContent = score;
+        $('#grade-label').textContent = label;
+        $('#grade-label').style.color = color;
+
+        /* Resolution indicator */
+        const rrPct = Math.round((stats.resolution_rate || 0) * 100);
+        $('#ind-resolution').textContent = rrPct + '%';
+        $('#ind-resolution').style.color = rrPct >= 90 ? 'var(--green)' : rrPct >= 70 ? 'var(--amber)' : 'var(--red)';
+        const rrBar = $('#ind-resolution-bar');
+        rrBar.style.width = rrPct + '%';
+        rrBar.style.background = rrPct >= 90 ? 'var(--green)' : rrPct >= 70 ? 'var(--amber)' : 'var(--red)';
+
+        /* Dead code indicator */
+        const deadPct = stats.symbols > 0 ? ((stats.dead_functions / stats.symbols) * 100) : 0;
+        const deadPctR = deadPct.toFixed(1);
+        $('#ind-dead').textContent = deadPctR + '%';
+        $('#ind-dead').style.color = deadPct <= 5 ? 'var(--green)' : deadPct <= 15 ? 'var(--amber)' : 'var(--red)';
+        /* Invert: lower is better. Bar represents "cleanliness" */
+        const cleanPct = Math.max(0, 100 - deadPct);
+        const deadBar = $('#ind-dead-bar');
+        deadBar.style.width = cleanPct + '%';
+        deadBar.style.background = deadPct <= 5 ? 'var(--green)' : deadPct <= 15 ? 'var(--amber)' : 'var(--red)';
+
+        /* Coupling indicator */
+        const godCount = (insights.god_files || []).length;
+        const cycleCount = (insights.circular_deps || []).length;
+        const couplingIssues = godCount + cycleCount;
+        $('#ind-coupling').textContent = couplingIssues === 0 ? 'Clean' : couplingIssues + ' issues';
+        $('#ind-coupling').style.color = couplingIssues === 0 ? 'var(--green)' : couplingIssues <= 3 ? 'var(--amber)' : 'var(--red)';
+        /* Coupling bar: max 10 issues = 0% */
+        const couplingClean = Math.max(0, 100 - (couplingIssues * 10));
+        const couplingBar = $('#ind-coupling-bar');
+        couplingBar.style.width = couplingClean + '%';
+        couplingBar.style.background = couplingIssues === 0 ? 'var(--green)' : couplingIssues <= 3 ? 'var(--amber)' : 'var(--red)';
+    }
+
+    /* ═══════════════════ RENDER: STATS ═══════════════════ */
+    function renderStats(stats) {
+        const grid = $('#stats-grid');
+        const rrPct = Math.round((stats.resolution_rate || 0) * 100);
+        const deadPct = stats.symbols > 0 ? ((stats.dead_functions / stats.symbols) * 100).toFixed(1) : '0.0';
+        const rrColor = rrPct >= 90 ? 'var(--green)' : rrPct >= 70 ? 'var(--amber)' : 'var(--red)';
+
+        grid.innerHTML = `
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Files
+                </div>
+                <div class="stat-value">${fmt(stats.files)}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                    Symbols
+                </div>
+                <div class="stat-value">${fmt(stats.symbols)}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Calls
+                </div>
+                <div class="stat-value">${fmt(stats.calls)}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Resolution Rate
+                </div>
+                <div class="stat-value" style="color: ${rrColor}">${rrPct}%</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-fill" style="width: ${rrPct}%; background: ${rrColor};"></div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                    Dead Functions
+                </div>
+                <div class="stat-value">${fmt(stats.dead_functions)}</div>
+                <div class="stat-sub">${deadPct}% of codebase</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                    Languages
+                </div>
+                <div class="stat-value">${(stats.languages || []).length}</div>
+                <div class="lang-tags">${(stats.languages || []).map(l => `<span class="lang-tag">${escHtml(l)}</span>`).join('')}</div>
+            </div>
+        `;
+    }
+
+    /* ═══════════════════ RENDER: BAR CHART ═══════════════════ */
+    function renderConnected(items) {
+        const container = $('#connected-chart');
+        $('#connected-count').textContent = items.length;
+
+        if (!items.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    No highly connected symbols found.
+                </div>`;
+            return;
+        }
+
+        const maxConn = Math.max(...items.map(i => i.connections), 1);
+        const top10 = items.slice(0, 10);
+
+        container.innerHTML = top10.map(item => {
+            const ki = kindInfo(item.kind);
+            const widthPct = Math.max(2, (item.connections / maxConn) * 100);
+            return `
+                <div class="bar-row" title="${escHtml(item.file)}">
+                    <div class="bar-name">${escHtml(item.name)}</div>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="width: ${widthPct}%; background: ${ki.bar};"></div>
+                    </div>
+                    <div class="bar-count">${item.connections}</div>
+                </div>`;
+        }).join('');
+    }
+
+    /* ═══════════════════ RENDER: GOD FILES ═══════════════════ */
+    function renderGodFiles(items) {
+        const container = $('#god-list');
+        $('#god-count').textContent = items.length;
+
+        if (!items.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    No highly coupled symbols found.
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = '<div class="god-list">' + items.map((item, i) => {
+            const ki = kindInfo(item.kind);
+            return `
+                <div class="god-item">
+                    <div class="god-rank">#${i + 1}</div>
+                    <div class="god-info">
+                        <div class="god-name">${escHtml(item.name)} <span class="kind-badge ${ki.cls}">${escHtml(item.kind)}</span></div>
+                        <div class="god-file">${escHtml(item.file)}</div>
+                    </div>
+                    <div class="god-conn">${item.connections}</div>
+                </div>`;
+        }).join('') + '</div>';
+    }
+
+    /* ═══════════════════ RENDER: CIRCULAR DEPS ═══════════════════ */
+    function renderCycles(cycles) {
+        const container = $('#cycles-list');
+        $('#cycles-count').textContent = cycles.length;
+
+        if (!cycles.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    No circular dependencies detected.
+                </div>`;
+            return;
+        }
+
+        const arrowSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
+        container.innerHTML = '<div class="cycle-list">' + cycles.map(cycle => {
+            const nodes = cycle.map(id => `<span class="cycle-node">${escHtml(id)}</span>`);
+            /* Add a return arrow to show it's a cycle */
+            const chain = nodes.join(`<span class="cycle-arrow">${arrowSvg}</span>`);
+            return `<div class="cycle-card">${chain}<span class="cycle-arrow">${arrowSvg}</span>${nodes[0]}</div>`;
+        }).join('') + '</div>';
+    }
+
+    /* ═══════════════════ DEAD CODE: FILTER & SORT ═══════════════════ */
+    function filterDeadCode() {
+        const searchVal = ($('#dead-search').value || '').toLowerCase().trim();
+        const kindVal = $('#dead-kind-filter').value;
+
+        deadCodeFiltered = deadCodeAll.filter(item => {
+            /* Kind filter */
+            if (kindVal !== 'all') {
+                const k = (item.kind || '').toLowerCase();
+                if (kindVal === 'other') {
+                    if (k === 'function' || k === 'class' || k === 'method') return false;
+                } else {
+                    if (k !== kindVal) return false;
+                }
+            }
+            /* Search filter */
+            if (searchVal) {
+                const name = (item.name || '').toLowerCase();
+                const file = (item.file || '').toLowerCase();
+                const qn = (item.qualified_name || '').toLowerCase();
+                if (!name.includes(searchVal) && !file.includes(searchVal) && !qn.includes(searchVal)) return false;
+            }
+            return true;
+        });
+
+        sortDeadCode();
+        deadPage = 1;
+        renderDeadTable();
+    }
+
+    function sortDeadCode() {
+        const col = deadSortCol;
+        const asc = deadSortAsc;
+        deadCodeFiltered.sort((a, b) => {
+            let va, vb;
+            if (col === 'line_start') {
+                va = a.line_start || 0;
+                vb = b.line_start || 0;
+                return asc ? va - vb : vb - va;
+            }
+            va = (a[col] || '').toLowerCase();
+            vb = (b[col] || '').toLowerCase();
+            if (va < vb) return asc ? -1 : 1;
+            if (va > vb) return asc ? 1 : -1;
+            return 0;
+        });
+    }
+
+    /* ═══════════════════ RENDER: DEAD CODE TABLE ═══════════════════ */
+    function renderDeadTable() {
+        const tbody = $('#dead-tbody');
+        const totalAll = deadCodeAll.length;
+        const totalFiltered = deadCodeFiltered.length;
+        const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
+
+        if (deadPage > totalPages) deadPage = totalPages;
+
+        const start = (deadPage - 1) * PAGE_SIZE;
+        const pageItems = deadCodeFiltered.slice(start, start + PAGE_SIZE);
+
+        /* Update info */
+        const info = $('#dead-table-info');
+        if (totalFiltered === totalAll) {
+            info.textContent = `${fmt(totalAll)} items`;
+        } else {
+            info.textContent = `${fmt(totalFiltered)} of ${fmt(totalAll)} items`;
+        }
+
+        /* Update count badge */
+        $('#dead-count').textContent = totalAll;
+
+        /* Sort indicators */
+        $$('#dead-table thead th').forEach(th => {
+            const col = th.dataset.sort;
+            th.classList.toggle('sorted', col === deadSortCol);
+            const arrow = th.querySelector('.sort-arrow');
+            if (arrow) {
+                arrow.textContent = (col === deadSortCol) ? (deadSortAsc ? '\u2191' : '\u2193') : '';
+            }
+        });
+
+        /* Table body */
+        if (!pageItems.length) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:32px; color:var(--text-3);">No matching items.</td></tr>`;
+        } else {
+            tbody.innerHTML = pageItems.map(item => {
+                const ki = kindInfo(item.kind);
+                return `
+                    <tr>
+                        <td class="td-name">${escHtml(item.name)}</td>
+                        <td><span class="kind-badge ${ki.cls}">${escHtml(item.kind)}</span></td>
+                        <td class="td-file" title="${escHtml(item.file)}">${escHtml(item.file)}</td>
+                        <td class="td-line">${item.line_start}</td>
+                    </tr>`;
+            }).join('');
+        }
+
+        /* Pagination */
+        renderPagination(totalPages);
+    }
+
+    /* ═══════════════════ RENDER: PAGINATION ═══════════════════ */
+    function renderPagination(totalPages) {
+        const container = $('#dead-pagination');
+        if (totalPages <= 1) {
+            container.classList.add('hidden');
+            return;
+        }
+        container.classList.remove('hidden');
+
+        let html = '';
+
+        /* Prev button */
+        html += `<button class="page-btn" ${deadPage <= 1 ? 'disabled' : ''} data-page="${deadPage - 1}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>`;
+
+        /* Page buttons with smart ellipsis */
+        const pages = buildPageNumbers(deadPage, totalPages);
+        pages.forEach(p => {
+            if (p === '...') {
+                html += '<span class="page-ellipsis">...</span>';
+            } else {
+                html += `<button class="page-btn ${p === deadPage ? 'active' : ''}" data-page="${p}">${p}</button>`;
+            }
+        });
+
+        /* Next button */
+        html += `<button class="page-btn" ${deadPage >= totalPages ? 'disabled' : ''} data-page="${deadPage + 1}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`;
+
+        container.innerHTML = html;
+
+        /* Attach click handlers */
+        container.querySelectorAll('.page-btn:not(:disabled)').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = parseInt(btn.dataset.page, 10);
+                if (p >= 1 && p <= totalPages) {
+                    deadPage = p;
+                    renderDeadTable();
+                    /* Scroll table into view */
+                    $('#dead-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    }
+
+    function buildPageNumbers(current, total) {
+        if (total <= 7) {
+            return Array.from({ length: total }, (_, i) => i + 1);
+        }
+        const pages = [];
+        pages.push(1);
+        if (current > 3) pages.push('...');
+        for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+            pages.push(i);
+        }
+        if (current < total - 2) pages.push('...');
+        pages.push(total);
+        return pages;
+    }
+
+    /* ═══════════════════ EXPORT CSV ═══════════════════ */
+    function exportCSV() {
+        /* Export filtered set */
+        const data = deadCodeFiltered.length ? deadCodeFiltered : deadCodeAll;
+        if (!data.length) return;
+
+        const header = 'Name,Kind,File,Line,Qualified Name\n';
+        const rows = data.map(item => {
+            return [
+                csvEscape(item.name),
+                csvEscape(item.kind),
+                csvEscape(item.file),
+                item.line_start,
+                csvEscape(item.qualified_name),
+            ].join(',');
+        }).join('\n');
+
+        const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ariadne-dead-code.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    function csvEscape(val) {
+        if (val == null) return '';
+        const s = String(val);
+        if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+    }
+
+    /* ═══════════════════ EVENT HANDLERS ═══════════════════ */
+    function setupEventHandlers() {
+        /* Dead code search */
+        let searchTimeout;
+        $('#dead-search').addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(filterDeadCode, 200);
+        });
+
+        /* Dead code kind filter */
+        $('#dead-kind-filter').addEventListener('change', filterDeadCode);
+
+        /* Dead code sort */
+        $$('#dead-table thead th[data-sort]').forEach(th => {
+            th.addEventListener('click', () => {
+                const col = th.dataset.sort;
+                if (deadSortCol === col) {
+                    deadSortAsc = !deadSortAsc;
+                } else {
+                    deadSortCol = col;
+                    deadSortAsc = true;
+                }
+                sortDeadCode();
+                deadPage = 1;
+                renderDeadTable();
+            });
+        });
+
+        /* Export */
+        $('#dead-export').addEventListener('click', exportCSV);
+    }
+
+    /* ═══════════════════ MAIN INIT ═══════════════════ */
+    async function init() {
+        try {
+            const [statsRes, insightsRes] = await Promise.all([
+                fetch('/api/stats'),
+                fetch('/api/graph/insights'),
+            ]);
+
+            if (!statsRes.ok || !insightsRes.ok) {
+                throw new Error(`Server returned ${statsRes.status} / ${insightsRes.status}`);
+            }
+
+            statsData = await statsRes.json();
+            insightsData = await insightsRes.json();
+
+            /* Hide loading, show report */
+            $('#loading').classList.add('hidden');
+            $('#report').classList.remove('hidden');
+
+            /* Render all sections */
+            renderHealth(statsData, insightsData);
+            renderStats(statsData);
+            renderConnected(insightsData.most_connected || []);
+            renderGodFiles(insightsData.god_files || []);
+            renderCycles(insightsData.circular_deps || []);
+
+            /* Dead code */
+            deadCodeAll = (insightsData.dead_code || []).slice();
+            deadCodeFiltered = deadCodeAll.slice();
+            sortDeadCode();
+            renderDeadTable();
+
+            /* Footer timestamp */
+            $('#gen-time').textContent = '\u2022 ' + new Date().toLocaleString();
+
+            /* Setup interactions */
+            setupEventHandlers();
+
+        } catch (err) {
+            console.error('Failed to load Ariadne data:', err);
+            $('#loading').classList.add('hidden');
+            const banner = $('#error-banner');
+            banner.classList.remove('hidden');
+            $('#error-text').textContent = 'Failed to load data from Ariadne server. ' + (err.message || '');
+        }
+    }
+
+    /* Start on DOM ready */
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>
+</body>
+</html>

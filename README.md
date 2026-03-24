@@ -6,9 +6,6 @@
   <strong>The thread through the labyrinth -- universal dependency graph for AI coding agents</strong>
 </p>
 
-<p align="center">
-  <img src="demo.gif" width="700" alt="Ariadne demo">
-</p>
 
 <p align="center">
   <a href="#install">Install</a> |
@@ -22,9 +19,9 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/ariadne-graph"><img src="https://img.shields.io/crates/v/ariadne-graph.svg" alt="Crates.io"></a>
+  <a href="https://crates.io/crates/ariadne"><img src="https://img.shields.io/crates/v/ariadne.svg" alt="Crates.io"></a>
   <a href="https://github.com/loremllc/ariadne/actions"><img src="https://github.com/loremllc/ariadne/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://docs.rs/ariadne-graph"><img src="https://docs.rs/ariadne-graph/badge.svg" alt="Docs"></a>
+  <a href="https://docs.rs/ariadne"><img src="https://docs.rs/ariadne/badge.svg" alt="Docs"></a>
   <a href="https://github.com/loremllc/ariadne/blob/main/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License"></a>
 </p>
 
@@ -64,7 +61,7 @@ brew install loremllc/tap/ariadne
 
 **Cargo:**
 ```bash
-cargo install ariadne-graph
+cargo install ariadne
 ```
 
 **From source:**
@@ -78,25 +75,25 @@ cargo build --release
 
 ```bash
 # Index your codebase (takes seconds)
-ariadne-graph index .
+ariadne index .
 
 # Search for any symbol
-ariadne-graph search "UserService"
+ariadne search "UserService"
 
 # See what breaks if you change a function
-ariadne-graph blast-radius "auth::validate_token" --depth 5
+ariadne blast-radius "auth::validate_token" --depth 5
 
 # Find dead code
-ariadne-graph dead-code --threshold 80
+ariadne dead-code --threshold 80
 
 # Which tests need to run for your changes?
-ariadne-graph affected-tests --diff origin/main..HEAD
+ariadne affected-tests --diff origin/main..HEAD
 
 # Start the MCP server for your AI agent
-ariadne-graph serve
+ariadne serve
 
 # Launch the visual dashboard
-ariadne-graph dash
+ariadne dash
 ```
 
 ## Features
@@ -134,7 +131,7 @@ Ariadne speaks the Model Context Protocol natively. Point your AI agent at Ariad
 {
   "mcpServers": {
     "ariadne": {
-      "command": "ariadne-graph",
+      "command": "ariadne",
       "args": ["serve"]
     }
   }
@@ -145,14 +142,14 @@ Ariadne speaks the Model Context Protocol natively. Point your AI agent at Ariad
 Get dependency-aware editor features: go-to-definition that understands your whole graph, find-all-references across languages, and hover information showing blast radius.
 
 ```bash
-ariadne-graph lsp
+ariadne lsp
 ```
 
 ### Web Dashboard
 Visual exploration of your dependency graph with interactive force-directed layouts, search, filtering, and drill-down.
 
 ```bash
-ariadne-graph dash --port 1337
+ariadne dash --port 1337
 ```
 
 ### Plugin System
@@ -167,7 +164,7 @@ parse-file: func(source: string, file-path: string) -> parse-result;
 Keep your index fresh automatically. Ariadne watches for file changes and incrementally re-indexes only what changed.
 
 ```bash
-ariadne-graph watch --serve --dash
+ariadne watch --serve --dash
 ```
 
 ## Claude Code Integration
@@ -180,14 +177,14 @@ Ariadne is purpose-built for AI coding agents. Add it to Claude Code's MCP confi
 {
   "mcpServers": {
     "ariadne": {
-      "command": "ariadne-graph",
+      "command": "ariadne",
       "args": ["serve"]
     }
   }
 }
 ```
 
-Run `ariadne-graph index .` once in your project root first. The MCP server reads from the local `.ariadne.db` index.
+Run `ariadne index .` once in your project root first. The MCP server reads from the local `.ariadne.db` index.
 
 ### Available MCP Tools
 
@@ -229,12 +226,12 @@ Total: 1 tool call, complete picture, <5ms
 Run Ariadne as a background service that watches for file changes and keeps the MCP server alive:
 
 ```bash
-ariadne-graph watch --serve
+ariadne watch --serve
 ```
 
 This does two things at once: re-indexes only changed files when they save, and keeps the MCP server resident so queries are <2ms instead of ~20ms cold-start per call.
 
-For CI or one-shot use, `ariadne-graph serve` starts the server against a static index.
+For CI or one-shot use, `ariadne serve` starts the server against a static index.
 
 ### Steer your AI agent
 
@@ -264,7 +261,7 @@ one call.
 - Reading a file to understand *implementation* (not structure)
 - Writing or editing files — Ariadne is read-only
 - Searching for string literals, comments, or patterns (not symbols)
-- Before `ariadne-graph index .` has been run
+- Before `ariadne index .` has been run
 ```
 
 Typical token reduction: a file-structure exploration that costs ~3K tokens via `Read` costs ~150 tokens via `get_file_summary`. A caller-trace across 6 files via `Grep + Read` costs ~12K tokens; `get_context` returns the same data in ~400 tokens.
@@ -273,20 +270,20 @@ Typical token reduction: a file-structure exploration that costs ~3K tokens via 
 
 ```bash
 # 1. Index your project (run once per project, re-run after major changes)
-ariadne-graph index .
+ariadne index .
 
 # 2. Add to .gitignore — the DB is local, not for committing
 echo ".ariadne.db" >> .gitignore
 
 # 3. Start the watch server (persistent MCP + live re-index)
-ariadne-graph watch --serve
+ariadne watch --serve
 
 # 4. Verify Claude Code sees the tools — in a Claude Code session:
 #    "List the available Ariadne MCP tools"
 #    Should return: search_symbol, get_context, blast_radius, ...
 ```
 
-Add `ariadne-graph watch --serve` to your project's dev startup script (Makefile, `package.json` scripts, Procfile) so it runs alongside your dev server.
+Add `ariadne watch --serve` to your project's dev startup script (Makefile, `package.json` scripts, Procfile) so it runs alongside your dev server.
 
 ## How It Works
 

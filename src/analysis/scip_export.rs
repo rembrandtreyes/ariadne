@@ -57,17 +57,11 @@ pub struct ScipSymbolInfo {
 /// Queries all files, symbols, and call references from the database and
 /// writes a JSON structure that follows SCIP's logical model. This avoids
 /// any protobuf dependency by using pure JSON via serde.
-pub fn export_scip(
-    db: &Database,
-    output_path: &Path,
-    project_root: &Path,
-) -> anyhow::Result<()> {
+pub fn export_scip(db: &Database, output_path: &Path, project_root: &Path) -> anyhow::Result<()> {
     let conn = db.conn();
 
     // Query all indexed files
-    let mut file_stmt = conn.prepare(
-        "SELECT id, path, language FROM files ORDER BY path",
-    )?;
+    let mut file_stmt = conn.prepare("SELECT id, path, language FROM files ORDER BY path")?;
 
     struct FileInfo {
         id: i64,
@@ -92,9 +86,7 @@ pub fn export_scip(
     )?;
 
     // Build a lookup of call references per file
-    let mut call_stmt = conn.prepare(
-        "SELECT callee_name, line FROM calls WHERE file_id = ?1",
-    )?;
+    let mut call_stmt = conn.prepare("SELECT callee_name, line FROM calls WHERE file_id = ?1")?;
 
     let mut documents = Vec::with_capacity(files.len());
 
@@ -263,11 +255,19 @@ mod tests {
         assert_eq!(doc.symbols.len(), 2);
 
         // Verify definitions have symbol_roles = 1
-        let defs: Vec<_> = doc.occurrences.iter().filter(|o| o.symbol_roles == 1).collect();
+        let defs: Vec<_> = doc
+            .occurrences
+            .iter()
+            .filter(|o| o.symbol_roles == 1)
+            .collect();
         assert_eq!(defs.len(), 2);
 
         // Verify references have symbol_roles = 0
-        let refs: Vec<_> = doc.occurrences.iter().filter(|o| o.symbol_roles == 0).collect();
+        let refs: Vec<_> = doc
+            .occurrences
+            .iter()
+            .filter(|o| o.symbol_roles == 0)
+            .collect();
         assert_eq!(refs.len(), 1);
         assert_eq!(refs[0].symbol, "src.main.helper");
 
@@ -306,7 +306,11 @@ mod tests {
 
         let doc = &index.documents[0];
         // Symbol 'main' is at lines 1-5 in DB, should be 0-4 in SCIP
-        let main_def = doc.occurrences.iter().find(|o| o.symbol == "src.main.main" && o.symbol_roles == 1).unwrap();
+        let main_def = doc
+            .occurrences
+            .iter()
+            .find(|o| o.symbol == "src.main.main" && o.symbol_roles == 1)
+            .unwrap();
         assert_eq!(main_def.range[0], 0); // line_start - 1
         assert_eq!(main_def.range[2], 4); // line_end - 1
 

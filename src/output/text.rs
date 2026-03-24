@@ -2,7 +2,7 @@ use console::style;
 
 pub fn print_header(title: &str) {
     println!("{}", style(title).bold().cyan());
-    let separator: String = std::iter::repeat('\u{2500}').take(title.len()).collect();
+    let separator: String = "\u{2500}".repeat(title.len());
     println!("{}", style(separator).dim());
 }
 

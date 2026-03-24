@@ -1,5 +1,5 @@
-pub mod mermaid;
 pub mod json;
+pub mod mermaid;
 pub mod text;
 
 use serde::Serialize;
@@ -23,23 +23,25 @@ impl OutputFormat {
 }
 
 /// Render a serializable value in the requested format.
-pub fn render<T: Serialize + std::fmt::Debug>(value: &T, format: OutputFormat) -> anyhow::Result<String> {
+pub fn render<T: Serialize + std::fmt::Debug>(
+    value: &T,
+    format: OutputFormat,
+) -> anyhow::Result<String> {
     match format {
         OutputFormat::Json => {
             let json = serde_json::to_string_pretty(value)?;
             Ok(json)
         }
-        OutputFormat::Text => {
-            Ok(format!("{:#?}", value))
-        }
-        OutputFormat::Csv => {
-            Ok(format!("{:#?}", value))
-        }
+        OutputFormat::Text => Ok(format!("{:#?}", value)),
+        OutputFormat::Csv => Ok(format!("{:#?}", value)),
     }
 }
 
 /// Print a serializable value to stdout in the requested format.
-pub fn print_output<T: Serialize + std::fmt::Debug>(value: &T, format: OutputFormat) -> anyhow::Result<()> {
+pub fn print_output<T: Serialize + std::fmt::Debug>(
+    value: &T,
+    format: OutputFormat,
+) -> anyhow::Result<()> {
     let rendered = render(value, format)?;
     println!("{}", rendered);
     Ok(())

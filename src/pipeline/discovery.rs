@@ -38,13 +38,29 @@ const EXCLUDED_DIRS: &[&str] = &[
 ];
 
 /// Phase 1: Discover source files in the repository.
-pub fn discover(root: &Path, _config: &RepoConfig) -> anyhow::Result<DiscoveryResult> {
+///
+/// Filters directories using the hardcoded EXCLUDED_DIRS list and any
+/// additional exclude patterns specified in the RepoConfig.
+pub fn discover(root: &Path, config: &RepoConfig) -> anyhow::Result<DiscoveryResult> {
     let mut files = Vec::new();
     let mut languages = HashSet::new();
 
+    // Merge hardcoded exclusions with user-configured exclude patterns
+    let extra_excludes: Vec<String> = config.exclude.as_ref().cloned().unwrap_or_default();
+
     for entry in WalkDir::new(root).into_iter().filter_entry(|e| {
         let name = e.file_name().to_string_lossy();
-        !EXCLUDED_DIRS.contains(&name.as_ref())
+        if EXCLUDED_DIRS.contains(&name.as_ref()) {
+            return false;
+        }
+        // Check user-configured exclude patterns against the directory/file name
+        if extra_excludes
+            .iter()
+            .any(|pat| name.as_ref() == pat.as_str())
+        {
+            return false;
+        }
+        true
     }) {
         let entry = entry?;
         if entry.file_type().is_file() {

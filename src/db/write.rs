@@ -42,6 +42,8 @@ pub fn insert_file(
 }
 
 /// Insert a single symbol record and return its row id.
+// TODO(P3): Refactor into a SymbolInsert builder struct to reduce argument count.
+#[allow(clippy::too_many_arguments)]
 pub fn insert_symbol(
     db: &Database,
     file_id: i64,
@@ -51,13 +53,14 @@ pub fn insert_symbol(
     line_start: u32,
     line_end: u32,
     is_exported: bool,
+    is_test: bool,
     signature: &str,
     decorators: &str,
     parent_symbol_id: Option<i64>,
 ) -> anyhow::Result<i64> {
     db.conn().execute(
-        "INSERT INTO symbols (file_id, name, qualified_name, kind, line_start, line_end, is_exported, signature, decorators, parent_symbol_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO symbols (file_id, name, qualified_name, kind, line_start, line_end, is_exported, is_test, signature, decorators, parent_symbol_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             file_id,
             name,
@@ -66,6 +69,7 @@ pub fn insert_symbol(
             line_start,
             line_end,
             is_exported,
+            is_test,
             signature,
             decorators,
             parent_symbol_id,
@@ -90,6 +94,9 @@ pub fn insert_symbols_batch(
 ) -> anyhow::Result<()> {
     for sym in symbols {
         let decorators_json = serde_json::to_string(&sym.decorators).unwrap_or_default();
+        // A symbol is a test if its decorators include "test" (set by language parsers
+        // for #[test] functions and symbols inside #[cfg(test)] modules).
+        let is_test = sym.decorators.iter().any(|d| d == "test");
         insert_symbol(
             db,
             file_id,
@@ -99,6 +106,7 @@ pub fn insert_symbols_batch(
             sym.line_start,
             sym.line_end,
             sym.is_exported,
+            is_test,
             &sym.signature,
             &decorators_json,
             None,
@@ -146,12 +154,7 @@ pub fn insert_calls_batch(
     )?;
 
     for call in calls {
-        stmt.execute(params![
-            caller_id,
-            call.callee_name,
-            file_id,
-            call.line,
-        ])?;
+        stmt.execute(params![caller_id, call.callee_name, file_id, call.line,])?;
     }
 
     Ok(())
@@ -176,6 +179,8 @@ pub fn insert_api_endpoint(
 }
 
 /// Insert an API call site record.
+// TODO(P3): Refactor into an ApiCallInsert builder struct to reduce argument count.
+#[allow(clippy::too_many_arguments)]
 pub fn insert_api_call(
     db: &Database,
     service_id: i64,
@@ -237,7 +242,13 @@ pub fn insert_community(
     db.conn().execute(
         "INSERT INTO communities (name, symbol_count, internal_edges, external_edges, modularity)
          VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![name, symbol_count, internal_edges, external_edges, modularity],
+        params![
+            name,
+            symbol_count,
+            internal_edges,
+            external_edges,
+            modularity
+        ],
     )?;
     Ok(db.conn().last_insert_rowid())
 }
@@ -255,6 +266,30 @@ pub fn insert_service_edge(
         "INSERT OR REPLACE INTO service_edges (from_service_id, to_service_id, protocol, call_count, confidence)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![from_service_id, to_service_id, protocol, call_count, confidence],
+    )?;
+    Ok(())
+}
+
+/// Clear all data from the database in FK-safe order for re-indexing.
+pub fn clear_all_data(db: &Database) -> anyhow::Result<()> {
+    // Delete in dependency order: children before parents
+    db.conn().execute_batch(
+        "DELETE FROM flow_steps;
+         DELETE FROM flows;
+         DELETE FROM rule_violations;
+         DELETE FROM service_edges;
+         DELETE FROM api_calls;
+         DELETE FROM api_endpoints;
+         DELETE FROM coupling;
+         DELETE FROM heritage;
+         DELETE FROM calls;
+         DELETE FROM imports;
+         DELETE FROM symbols_fts;
+         DELETE FROM symbols;
+         DELETE FROM communities;
+         DELETE FROM files;
+         DELETE FROM services;
+         DELETE FROM metadata;",
     )?;
     Ok(())
 }

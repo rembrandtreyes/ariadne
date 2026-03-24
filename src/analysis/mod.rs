@@ -175,10 +175,7 @@ pub fn check_rules(
 }
 
 /// Find all tests affected by changes to the given symbols.
-pub fn find_affected_tests(
-    _graph: &DependencyGraph,
-    _changed_symbols: &[String],
-) -> Vec<String> {
+pub fn find_affected_tests(_graph: &DependencyGraph, _changed_symbols: &[String]) -> Vec<String> {
     Vec::new()
 }
 

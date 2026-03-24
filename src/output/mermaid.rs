@@ -28,7 +28,13 @@ pub fn generate_service_topology(services: &[(String, String, String)]) -> Strin
 
 fn sanitize_id(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 

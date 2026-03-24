@@ -1,3 +1,11 @@
+//! Pipeline Phase 13: Community Detection
+//!
+//! Reads: `calls` (resolved caller/callee pairs), `symbols`
+//! Writes: `communities` (detected groups with modularity scores), `symbols` (updates `community_id`)
+//!
+//! Groups symbols into communities using BFS-based connected component analysis
+//! on the resolved call graph, computing internal/external edge ratios and modularity.
+
 use crate::db::Database;
 use rusqlite::params;
 use std::collections::{HashMap, HashSet, VecDeque};

@@ -176,7 +176,7 @@ enum Commands {
 
 const DB_FILENAME: &str = ".ariadne.db";
 
-fn require_db(root: &std::path::Path) -> anyhow::Result<ariadne_graph::db::Database> {
+fn require_db(root: &std::path::Path) -> anyhow::Result<ariadne::db::Database> {
     let db_path = root.join(DB_FILENAME);
     if !db_path.exists() {
         anyhow::bail!(
@@ -184,7 +184,7 @@ fn require_db(root: &std::path::Path) -> anyhow::Result<ariadne_graph::db::Datab
             db_path.display()
         );
     }
-    ariadne_graph::db::Database::open(&db_path)
+    ariadne::db::Database::open(&db_path)
 }
 
 #[tokio::main]
@@ -212,9 +212,12 @@ async fn main() -> anyhow::Result<()> {
             symbol,
             cross_service,
         } => cmd_call_chain(&symbol, cross_service),
-        Commands::DeadCode { json, threshold: _ } => cmd_dead_code(json),
+        Commands::DeadCode { json, threshold } => cmd_dead_code(json, threshold),
         Commands::Stats => cmd_stats(),
-        Commands::Serve { http: _ } => ariadne_graph::mcp::serve_stdio().await,
+        // SECURITY: The --http flag is intentionally unused. Wiring up HTTP/SSE transport
+        // would expose all 10 MCP tools over the network without authentication.
+        // Only stdio transport (OS process isolation) is safe for the current threat model.
+        Commands::Serve { http: _ } => ariadne::mcp::serve_stdio().await,
         Commands::Communities { json } => cmd_communities(json),
         Commands::Boundaries { json } => cmd_boundaries(json),
         Commands::AffectedTests { diff, json } => cmd_affected_tests(&diff, json),
@@ -227,7 +230,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Lsp => {
             let root = std::env::current_dir()?;
             let db_path = root.join(DB_FILENAME);
-            ariadne_graph::lsp::serve_lsp_stdio(db_path).await
+            ariadne::lsp::serve_lsp_stdio(db_path).await
         }
         #[cfg(feature = "watch")]
         Commands::Watch { serve, debounce } => {
@@ -237,7 +240,7 @@ async fn main() -> anyhow::Result<()> {
                 if !db_path.exists() {
                     anyhow::bail!("No index found. Run `ariadne index` first.");
                 }
-                ariadne_graph::watch::watch_and_serve(root, db_path, debounce).await
+                ariadne::watch::watch_and_serve(root, db_path, debounce).await
             } else {
                 cmd_watch(debounce)
             }
@@ -249,7 +252,7 @@ fn cmd_index(path: &std::path::Path, full: bool) -> anyhow::Result<()> {
     let root = std::fs::canonicalize(path)?;
 
     // Check for workspace mode
-    let workspace_config = ariadne_graph::config::workspace::load(&root)?;
+    let workspace_config = ariadne::config::workspace::load(&root)?;
     if !workspace_config.services.is_empty() {
         return cmd_index_workspace(&root, full, &workspace_config);
     }
@@ -263,17 +266,17 @@ fn cmd_index(path: &std::path::Path, full: bool) -> anyhow::Result<()> {
     pb.enable_steady_tick(std::time::Duration::from_millis(80));
 
     // Load config
-    let config = ariadne_graph::config::repo::load(&root)?;
+    let config = ariadne::config::repo::load(&root)?;
 
     // Open (or create) the database
     let db_path = root.join(DB_FILENAME);
     if full && db_path.exists() {
         std::fs::remove_file(&db_path)?;
     }
-    let db = ariadne_graph::db::Database::open(&db_path)?;
+    let db = ariadne::db::Database::open(&db_path)?;
 
     // Run the auto-detection to show detected languages
-    let discovery = ariadne_graph::pipeline::discovery::discover(&root, &config)?;
+    let discovery = ariadne::pipeline::discovery::discover(&root, &config)?;
     let lang_names: Vec<String> = discovery
         .languages
         .iter()
@@ -289,7 +292,7 @@ fn cmd_index(path: &std::path::Path, full: bool) -> anyhow::Result<()> {
     ));
 
     // Run the full pipeline
-    let stats = ariadne_graph::pipeline::run_full_pipeline(&db, &root, &config)?;
+    let stats = ariadne::pipeline::run_full_pipeline(&db, &root, &config)?;
 
     pb.finish_and_clear();
 
@@ -313,7 +316,7 @@ fn cmd_index(path: &std::path::Path, full: bool) -> anyhow::Result<()> {
 fn cmd_index_workspace(
     root: &std::path::Path,
     full: bool,
-    workspace: &ariadne_graph::config::WorkspaceConfig,
+    workspace: &ariadne::config::WorkspaceConfig,
 ) -> anyhow::Result<()> {
     println!(
         "{} Workspace mode: indexing {} services\n",
@@ -325,7 +328,7 @@ fn cmd_index_workspace(
     if full && db_path.exists() {
         std::fs::remove_file(&db_path)?;
     }
-    let db = ariadne_graph::db::Database::open(&db_path)?;
+    let db = ariadne::db::Database::open(&db_path)?;
 
     let mut total_symbols = 0usize;
     let start = std::time::Instant::now();
@@ -350,8 +353,8 @@ fn cmd_index_workspace(
         pb.set_message(format!("Indexing {}...", svc.name));
         pb.enable_steady_tick(std::time::Duration::from_millis(80));
 
-        let svc_config = ariadne_graph::config::repo::load(&svc_root)?;
-        let stats = ariadne_graph::pipeline::run_full_pipeline(&db, &svc_root, &svc_config)?;
+        let svc_config = ariadne::config::repo::load(&svc_root)?;
+        let stats = ariadne::pipeline::run_full_pipeline(&db, &svc_root, &svc_config)?;
         total_symbols += stats.symbols_found;
 
         pb.finish_and_clear();
@@ -381,13 +384,13 @@ fn cmd_search(query: &str) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let options = ariadne_graph::search::SearchOptions {
+    let options = ariadne::search::SearchOptions {
         limit: Some(20),
         fuzzy: true,
         ..Default::default()
     };
 
-    let results = ariadne_graph::search::search(&db, query, &options)?;
+    let results = ariadne::search::search(&db, query, &options)?;
 
     if results.is_empty() {
         println!("No symbols found matching \"{}\"", query);
@@ -415,19 +418,19 @@ fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32) -> anyhow::Re
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let sym = ariadne_graph::db::query::find_symbol_by_name(&db, symbol)?
+    let sym = ariadne::db::query::find_symbol_by_name(&db, symbol)?
         .ok_or_else(|| anyhow::anyhow!("Symbol not found: {}", symbol))?;
 
-    let graph = ariadne_graph::db::query::build_call_graph(&db)?;
+    let graph = ariadne::db::query::build_call_graph(&db, None)?;
     let result = if cross_service {
-        ariadne_graph::graph::blast_radius::analyze_blast_radius_cross_service(
+        ariadne::graph::blast_radius::analyze_blast_radius_cross_service(
             &graph,
             &db,
             sym.id as u64,
             Some(depth),
         )
     } else {
-        ariadne_graph::graph::blast_radius::analyze_blast_radius(
+        ariadne::graph::blast_radius::analyze_blast_radius(
             &graph,
             sym.id as u64,
             Some(depth),
@@ -502,23 +505,27 @@ fn cmd_call_chain(symbol: &str, cross_service: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let sym = ariadne_graph::db::query::find_symbol_by_name(&db, symbol)?
+    let sym = ariadne::db::query::find_symbol_by_name(&db, symbol)?
         .ok_or_else(|| anyhow::anyhow!("Symbol not found: {}", symbol))?;
 
-    let graph = ariadne_graph::db::query::build_call_graph(&db)?;
+    let graph = ariadne::db::query::build_call_graph(&db, None)?;
     let mermaid =
-        ariadne_graph::graph::call_chain::extract_call_chain(&graph, sym.id, cross_service);
+        ariadne::graph::call_chain::extract_call_chain(&graph, sym.id, cross_service);
 
     println!("{}", mermaid);
 
     Ok(())
 }
 
-fn cmd_dead_code(json: bool) -> anyhow::Result<()> {
+fn cmd_dead_code(json: bool, threshold: u32) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let dead = ariadne_graph::db::query::get_dead_symbols(&db)?;
+    let mut dead = ariadne::db::query::get_dead_symbols(&db)?;
+
+    // Dead code detected via reachability BFS has implicit 100% confidence.
+    // Threshold filters by confidence (0-100); values above 100 suppress all output.
+    dead.retain(|_| threshold <= 100);
 
     if dead.is_empty() {
         if json {
@@ -538,7 +545,7 @@ fn cmd_dead_code(json: bool) -> anyhow::Result<()> {
             style(dead.len()).yellow().bold()
         );
         for sym in &dead {
-            let file_path = ariadne_graph::db::query::file_path_by_id(&db, sym.file_id)
+            let file_path = ariadne::db::query::file_path_by_id(&db, sym.file_id)
                 .unwrap_or_else(|_| "unknown".to_string());
             println!(
                 "  {} {} {}:{}",
@@ -557,13 +564,13 @@ fn cmd_stats() -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let file_count = ariadne_graph::db::query::count_files(&db)?;
-    let sym_count = ariadne_graph::db::query::count_symbols(&db)?;
-    let call_count = ariadne_graph::db::query::count_calls(&db)?;
-    let resolved = ariadne_graph::db::query::count_resolved_calls(&db)?;
-    let dead_count = ariadne_graph::db::query::count_dead(&db)?;
-    let rate = ariadne_graph::db::query::resolution_rate(&db)?;
-    let languages = ariadne_graph::db::query::get_languages(&db)?;
+    let file_count = ariadne::db::query::count_files(&db)?;
+    let sym_count = ariadne::db::query::count_symbols(&db)?;
+    let call_count = ariadne::db::query::count_calls(&db)?;
+    let resolved = ariadne::db::query::count_resolved_calls(&db)?;
+    let dead_count = ariadne::db::query::count_dead(&db)?;
+    let rate = ariadne::db::query::resolution_rate(&db)?;
+    let languages = ariadne::db::query::get_languages(&db)?;
 
     println!(
         "\n{}\n",
@@ -682,7 +689,7 @@ fn cmd_boundaries(json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let analysis = ariadne_graph::analysis::boundaries::analyze_boundaries(&db)?;
+    let analysis = ariadne::analysis::boundaries::analyze_boundaries(&db)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&analysis)?);
@@ -735,12 +742,10 @@ fn cmd_boundaries(json: bool) -> anyhow::Result<()> {
                 style(&cb.to_module).bold(),
                 style(cb.call_count).yellow(),
             );
-            let display_symbols: Vec<&str> = cb.symbols.iter().take(5).map(|s| s.as_str()).collect();
+            let display_symbols: Vec<&str> =
+                cb.symbols.iter().take(5).map(|s| s.as_str()).collect();
             if !display_symbols.is_empty() {
-                println!(
-                    "      symbols: {}",
-                    style(display_symbols.join(", ")).dim()
-                );
+                println!("      symbols: {}", style(display_symbols.join(", ")).dim());
             }
         }
     }
@@ -778,7 +783,7 @@ fn cmd_affected_tests(diff_ref: &str, json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let _db = require_db(&root)?;
 
-    let result = ariadne_graph::analysis::affected_tests::find_affected_tests(&_db, diff_ref)?;
+    let result = ariadne::analysis::affected_tests::find_affected_tests(&_db, diff_ref)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&result)?);
@@ -804,10 +809,7 @@ fn cmd_affected_tests(diff_ref: &str, json: bool) -> anyhow::Result<()> {
         }
 
         if !result.test_files.is_empty() {
-            println!(
-                "\n  Test files: {}",
-                result.test_files.join(", ")
-            );
+            println!("\n  Test files: {}", result.test_files.join(", "));
         }
     }
 
@@ -817,14 +819,14 @@ fn cmd_affected_tests(diff_ref: &str, json: bool) -> anyhow::Result<()> {
 fn cmd_check_rules(json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
-    let config = ariadne_graph::config::repo::load(&root)?;
+    let config = ariadne::config::repo::load(&root)?;
 
     if config.rules.is_empty() {
         if json {
             println!(
                 "{}",
                 serde_json::to_string_pretty(
-                    &ariadne_graph::analysis::arch_rules::RuleCheckResult {
+                    &ariadne::analysis::arch_rules::RuleCheckResult {
                         violations: Vec::new(),
                         rules_passed: 0,
                         rules_failed: 0,
@@ -838,42 +840,40 @@ fn cmd_check_rules(json: bool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let result = ariadne_graph::analysis::arch_rules::check_rules(&db, &config.rules)?;
+    let result = ariadne::analysis::arch_rules::check_rules(&db, &config.rules)?;
 
     if json {
         println!("{}", serde_json::to_string_pretty(&result)?);
+    } else if result.violations.is_empty() {
+        println!(
+            "{} All {} architectural rules passed",
+            style("✓").green().bold(),
+            result.rules_passed
+        );
     } else {
-        if result.violations.is_empty() {
-            println!(
-                "{} All {} architectural rules passed",
-                style("✓").green().bold(),
-                result.rules_passed
-            );
-        } else {
-            println!(
-                "\n{} {} rule violations found ({} rules passed, {} failed):\n",
-                style("✗").red().bold(),
-                result.violations.len(),
-                result.rules_passed,
-                result.rules_failed,
-            );
+        println!(
+            "\n{} {} rule violations found ({} rules passed, {} failed):\n",
+            style("✗").red().bold(),
+            result.violations.len(),
+            result.rules_passed,
+            result.rules_failed,
+        );
 
-            for v in &result.violations {
-                let sev = if v.severity == "error" {
-                    style(&v.severity).red()
-                } else {
-                    style(&v.severity).yellow()
-                };
-                println!(
-                    "  {} [{}] {} -> {}",
-                    sev,
-                    style(&v.rule_name).bold(),
-                    &v.from_file,
-                    &v.to_file,
-                );
-                if let Some(line) = v.line {
-                    println!("       at line {}", line);
-                }
+        for v in &result.violations {
+            let sev = if v.severity == "error" {
+                style(&v.severity).red()
+            } else {
+                style(&v.severity).yellow()
+            };
+            println!(
+                "  {} [{}] {} -> {}",
+                sev,
+                style(&v.rule_name).bold(),
+                &v.from_file,
+                &v.to_file,
+            );
+            if let Some(line) = v.line {
+                println!("       at line {}", line);
             }
         }
     }
@@ -950,12 +950,12 @@ fn cmd_topology(json: bool) -> anyhow::Result<()> {
         println!("graph LR");
         for svc in &services {
             // Sanitize name for Mermaid
-            let safe = svc.replace('-', "_").replace(' ', "_");
+            let safe = svc.replace(['-', ' '], "_");
             println!("    {}[{}]", safe, svc);
         }
         for edge in &edges {
-            let from = edge.from.replace('-', "_").replace(' ', "_");
-            let to = edge.to.replace('-', "_").replace(' ', "_");
+            let from = edge.from.replace(['-', ' '], "_");
+            let to = edge.to.replace(['-', ' '], "_");
             println!(
                 "    {} -->|{} ({})| {}",
                 from, edge.protocol, edge.call_count, to
@@ -973,15 +973,15 @@ async fn cmd_dash(port: u16) -> anyhow::Result<()> {
         anyhow::bail!("No index found. Run `ariadne index` first.");
     }
 
-    let config = ariadne_graph::dashboard::DashboardConfig { port };
-    ariadne_graph::dashboard::serve(config, &db_path).await
+    let config = ariadne::dashboard::DashboardConfig { port };
+    ariadne::dashboard::serve(config, &db_path).await
 }
 
 fn cmd_export_scip(output: &std::path::Path) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    ariadne_graph::analysis::scip_export::export_scip(&db, output, &root)?;
+    ariadne::analysis::scip_export::export_scip(&db, output, &root)?;
 
     println!(
         "{} Exported SCIP index to {}",
@@ -995,7 +995,7 @@ fn cmd_export_scip(output: &std::path::Path) -> anyhow::Result<()> {
 fn cmd_plugin(action: PluginAction) -> anyhow::Result<()> {
     match action {
         PluginAction::List => {
-            let mut registry = ariadne_graph::plugins::registry::PluginRegistry::new();
+            let mut registry = ariadne::plugins::registry::PluginRegistry::new();
             registry.discover()?;
             let plugins = registry.list();
             if plugins.is_empty() {
@@ -1022,7 +1022,7 @@ fn cmd_plugin(action: PluginAction) -> anyhow::Result<()> {
             Ok(())
         }
         PluginAction::Install { path } => {
-            let installed = ariadne_graph::plugins::install_plugin(&path)?;
+            let installed = ariadne::plugins::install_plugin(&path)?;
             println!(
                 "{} Installed plugin to {}",
                 style("✓").green().bold(),
@@ -1032,7 +1032,7 @@ fn cmd_plugin(action: PluginAction) -> anyhow::Result<()> {
         }
         PluginAction::Init { name } => {
             let output = std::env::current_dir()?.join(format!("ariadne-{}", name));
-            ariadne_graph::plugins::init_plugin(&name, &output)?;
+            ariadne::plugins::init_plugin(&name, &output)?;
             println!(
                 "{} Scaffolded plugin at {}",
                 style("✓").green().bold(),
@@ -1041,12 +1041,8 @@ fn cmd_plugin(action: PluginAction) -> anyhow::Result<()> {
             Ok(())
         }
         PluginAction::Remove { name } => {
-            ariadne_graph::plugins::remove_plugin(&name)?;
-            println!(
-                "{} Removed plugin: {}",
-                style("✓").green().bold(),
-                name
-            );
+            ariadne::plugins::remove_plugin(&name)?;
+            println!("{} Removed plugin: {}", style("✓").green().bold(), name);
             Ok(())
         }
     }
@@ -1059,5 +1055,5 @@ fn cmd_watch(debounce: u64) -> anyhow::Result<()> {
     if !db_path.exists() {
         anyhow::bail!("No index found. Run `ariadne index` first.");
     }
-    ariadne_graph::watch::watch_and_reindex(&root, &db_path, debounce)
+    ariadne::watch::watch_and_reindex(&root, &db_path, debounce)
 }
