@@ -54,24 +54,58 @@ pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyho
     loop {
         let events = watcher.poll_events(debounce);
         if !events.is_empty() {
-            let changed_files: Vec<_> = events.iter().flat_map(|e| e.paths.iter()).collect();
+            // Separate events by kind: creates/modifies vs removals
+            let mut modified_paths = Vec::new();
+            let mut deleted_paths = Vec::new();
 
-            let indexable: Vec<&Path> = changed_files
-                .iter()
-                .filter(|p| {
-                    p.extension()
+            for event in &events {
+                for path in &event.paths {
+                    let is_indexable = path
+                        .extension()
                         .and_then(|e| e.to_str())
                         .map(|ext| crate::parse::types::Language::from_extension(ext).is_some())
-                        .unwrap_or(false)
-                })
-                .map(|p| p.as_path())
-                .collect();
+                        .unwrap_or(false);
 
-            if !indexable.is_empty() {
-                tracing::info!(count = indexable.len(), "Re-indexing changed files");
-                if let Err(e) = incremental::reindex_files(&db, root, &indexable) {
+                    if !is_indexable {
+                        continue;
+                    }
+
+                    match event.kind {
+                        EventKind::Remove(_) => deleted_paths.push(path.as_path()),
+                        EventKind::Create(_) | EventKind::Modify(_) => {
+                            modified_paths.push(path.as_path())
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            let has_changes = !modified_paths.is_empty() || !deleted_paths.is_empty();
+
+            if !deleted_paths.is_empty() {
+                tracing::info!(count = deleted_paths.len(), "Cleaning up deleted files");
+                if let Err(e) = incremental::handle_deleted_files(&db, &deleted_paths) {
+                    tracing::error!(error = %e, "Delete cleanup error");
+                }
+            }
+
+            if !modified_paths.is_empty() {
+                tracing::info!(count = modified_paths.len(), "Re-indexing changed files");
+                if let Err(e) = incremental::reindex_files(&db, root, &modified_paths) {
                     tracing::error!(error = %e, "Re-index error");
                 }
+            }
+
+            // Re-run resolution phases and bump generation so MCP cache refreshes
+            if has_changes {
+                if let Err(e) = incremental::run_post_reindex_resolution(&db) {
+                    tracing::error!(error = %e, "Post-reindex resolution error");
+                }
+                if let Err(e) = incremental::bump_generation(&db) {
+                    tracing::error!(error = %e, "Generation bump error");
+                }
+                let rate = crate::db::query::resolution_rate(&db).unwrap_or(0.0);
+                tracing::info!(resolution_rate = format!("{:.0}%", rate * 100.0), "Incremental reindex complete");
             }
         }
     }

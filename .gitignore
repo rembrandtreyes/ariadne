@@ -1,5 +1,14 @@
 # Build artifacts
 /target
+debug/
+*.d
+*.o
+*.so
+*.dylib
+
+# Rust
+Cargo.lock
+*.rs.bk
 
 # Editor files
 *.swp
@@ -7,13 +16,30 @@
 *~
 .idea/
 .vscode/
+*.sublime-project
+*.sublime-workspace
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+*~
+.directory
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # Environment
 .env
-.env.local
+.env.*
+!.env.example
 
 # Ariadne local data
 .ariadne/
@@ -21,6 +47,10 @@
 **/.ariadne.db
 **/.ariadne.db-shm
 **/.ariadne.db-wal
+
+# Logs
+*.log
+logs/
 
 # Private planning and session artifacts (personal, not for OSS repo)
 Plans/

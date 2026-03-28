@@ -53,18 +53,12 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
             "/graph-renderer.js",
             axum::routing::get(graph_renderer_js_handler),
         )
-        .route("/v1", axum::routing::get(variant1_handler))
-        .route("/v2", axum::routing::get(variant2_handler))
-        .route("/v3", axum::routing::get(variant3_handler))
         .fallback(axum::routing::get(index_handler))
         .layer(cors)
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     println!("Dashboard running at http://{}", addr);
-    println!("  Variant 1 (Command Center): http://{}/v1", addr);
-    println!("  Variant 2 (Navigator):      http://{}/v2", addr);
-    println!("  Variant 3 (Audit Report):   http://{}/v3", addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -92,20 +86,5 @@ async fn graph_renderer_js_handler() -> (
     )
 }
 
-async fn variant1_handler() -> axum::response::Html<&'static str> {
-    axum::response::Html(VARIANT_1_HTML)
-}
-
-async fn variant2_handler() -> axum::response::Html<&'static str> {
-    axum::response::Html(VARIANT_2_HTML)
-}
-
-async fn variant3_handler() -> axum::response::Html<&'static str> {
-    axum::response::Html(VARIANT_3_HTML)
-}
-
 const INDEX_HTML: &str = include_str!("static/index.html");
 const GRAPH_RENDERER_JS: &str = include_str!("static/graph-renderer.js");
-const VARIANT_1_HTML: &str = include_str!("static/variant-1-command-center.html");
-const VARIANT_2_HTML: &str = include_str!("static/variant-2-navigator.html");
-const VARIANT_3_HTML: &str = include_str!("static/variant-3-audit-report.html");

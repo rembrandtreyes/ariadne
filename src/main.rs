@@ -51,6 +51,10 @@ enum Commands {
     Search {
         /// The query string to search for
         query: String,
+
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Compute the blast radius of changing a symbol
@@ -65,6 +69,10 @@ enum Commands {
         /// Maximum traversal depth
         #[arg(long, default_value = "10")]
         depth: u32,
+
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Trace the call chain to or from a symbol
@@ -75,6 +83,10 @@ enum Commands {
         /// Include cross-service call chains
         #[arg(long)]
         cross_service: bool,
+
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// Detect dead (unreachable) code in the codebase
@@ -89,7 +101,11 @@ enum Commands {
     },
 
     /// Display statistics about the indexed codebase
-    Stats,
+    Stats {
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Start the MCP server for AI agent integration
     Serve {
@@ -202,18 +218,20 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Index { path, full } => cmd_index(&path, full),
-        Commands::Search { query } => cmd_search(&query),
+        Commands::Search { query, json } => cmd_search(&query, json),
         Commands::BlastRadius {
             symbol,
             cross_service,
             depth,
-        } => cmd_blast_radius(&symbol, cross_service, depth),
+            json,
+        } => cmd_blast_radius(&symbol, cross_service, depth, json),
         Commands::CallChain {
             symbol,
             cross_service,
-        } => cmd_call_chain(&symbol, cross_service),
+            json,
+        } => cmd_call_chain(&symbol, cross_service, json),
         Commands::DeadCode { json, threshold } => cmd_dead_code(json, threshold),
-        Commands::Stats => cmd_stats(),
+        Commands::Stats { json } => cmd_stats(json),
         // SECURITY: The --http flag is intentionally unused. Wiring up HTTP/SSE transport
         // would expose all 10 MCP tools over the network without authentication.
         // Only stdio transport (OS process isolation) is safe for the current threat model.
@@ -380,7 +398,7 @@ fn cmd_index_workspace(
     Ok(())
 }
 
-fn cmd_search(query: &str) -> anyhow::Result<()> {
+fn cmd_search(query: &str, json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
@@ -391,6 +409,11 @@ fn cmd_search(query: &str) -> anyhow::Result<()> {
     };
 
     let results = ariadne::search::search(&db, query, &options)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&results)?);
+        return Ok(());
+    }
 
     if results.is_empty() {
         println!("No symbols found matching \"{}\"", query);
@@ -414,7 +437,7 @@ fn cmd_search(query: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32) -> anyhow::Result<()> {
+fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32, json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
@@ -437,6 +460,11 @@ fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32) -> anyhow::Re
             false,
         )
     };
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&result)?);
+        return Ok(());
+    }
 
     if result.total_affected == 0 {
         println!("No dependents found for \"{}\"", symbol);
@@ -501,7 +529,7 @@ fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32) -> anyhow::Re
     Ok(())
 }
 
-fn cmd_call_chain(symbol: &str, cross_service: bool) -> anyhow::Result<()> {
+fn cmd_call_chain(symbol: &str, cross_service: bool, json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
@@ -512,7 +540,11 @@ fn cmd_call_chain(symbol: &str, cross_service: bool) -> anyhow::Result<()> {
     let mermaid =
         ariadne::graph::call_chain::extract_call_chain(&graph, sym.id, cross_service);
 
-    println!("{}", mermaid);
+    if json {
+        println!("{}", serde_json::json!({ "mermaid": mermaid }));
+    } else {
+        println!("{}", mermaid);
+    }
 
     Ok(())
 }
@@ -560,7 +592,7 @@ fn cmd_dead_code(json: bool, threshold: u32) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_stats() -> anyhow::Result<()> {
+fn cmd_stats(json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
@@ -571,6 +603,19 @@ fn cmd_stats() -> anyhow::Result<()> {
     let dead_count = ariadne::db::query::count_dead(&db)?;
     let rate = ariadne::db::query::resolution_rate(&db)?;
     let languages = ariadne::db::query::get_languages(&db)?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+            "files": file_count,
+            "symbols": sym_count,
+            "calls": call_count,
+            "resolved": resolved,
+            "dead_functions": dead_count,
+            "resolution_rate": rate,
+            "languages": languages,
+        }))?);
+        return Ok(());
+    }
 
     println!(
         "\n{}\n",

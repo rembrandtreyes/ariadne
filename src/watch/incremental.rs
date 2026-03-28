@@ -14,6 +14,49 @@ pub fn reindex_files(db: &Database, root: &Path, changed_files: &[&Path]) -> any
     Ok(())
 }
 
+/// Handle file deletions by removing all data for deleted files from the DB.
+pub fn handle_deleted_files(db: &Database, deleted_paths: &[&Path]) -> anyhow::Result<()> {
+    for path in deleted_paths {
+        let abs_path = path.to_string_lossy().to_string();
+        let file_id: Option<i64> = db
+            .conn()
+            .query_row(
+                "SELECT id FROM files WHERE absolute_path = ?1",
+                rusqlite::params![abs_path],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(fid) = file_id {
+            crate::db::write::delete_file_data(db, fid)?;
+            tracing::info!(path = %path.display(), "Cleaned up deleted file data");
+        }
+    }
+    Ok(())
+}
+
+/// Re-run downstream resolution phases after incremental reindex.
+/// This ensures calls are resolved, heritage is built, and dead code is re-detected.
+pub fn run_post_reindex_resolution(db: &Database) -> anyhow::Result<()> {
+    crate::pipeline::import_resolution::resolve_imports(db)?;
+    crate::pipeline::call_resolution::resolve_calls(db)?;
+    crate::pipeline::heritage::build_heritage(db)?;
+    crate::pipeline::dead_code::detect_dead_code(db)?;
+    Ok(())
+}
+
+/// Bump the pipeline generation counter so MCP cache knows to rebuild.
+pub fn bump_generation(db: &Database) -> anyhow::Result<()> {
+    let current: u64 = db
+        .get_metadata("pipeline_generation")
+        .ok()
+        .flatten()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    db.set_metadata("pipeline_generation", &(current + 1).to_string())?;
+    Ok(())
+}
+
 fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Result<()> {
     let source = std::fs::read_to_string(path)?;
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");

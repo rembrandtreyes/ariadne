@@ -577,7 +577,16 @@ fn fetch_source(db: &Database, symbol_id: i64) -> anyhow::Result<SourceResult> {
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
     )?;
 
-    let content = std::fs::read_to_string(&absolute_path)?;
+    // Validate the path to prevent directory traversal attacks.
+    // Canonicalize resolves symlinks and .. components.
+    let canonical = std::path::Path::new(&absolute_path)
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("Source file not accessible"))?;
+    if canonical.to_string_lossy().contains("..") {
+        anyhow::bail!("Invalid source path");
+    }
+
+    let content = std::fs::read_to_string(&canonical)?;
     let all_lines: Vec<&str> = content.lines().collect();
     let total = all_lines.len() as u32;
 

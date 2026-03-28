@@ -116,10 +116,12 @@ fn get_string_param(params: &CallToolRequestParam, key: &str) -> String {
 
 pub struct AriadneService {
     db: Arc<Mutex<Database>>,
-    /// Cached call graph — built once on first blast_radius/get_call_chain call,
-    /// then reused for all subsequent requests. Eliminates the O(symbols+calls)
-    /// SQLite scan on every MCP tool invocation.
+    /// Cached call graph — rebuilt when pipeline_generation changes.
+    /// Eliminates the O(symbols+calls) SQLite scan on every MCP tool invocation.
     graph_cache: Arc<Mutex<Option<crate::graph::CallGraph>>>,
+    /// The pipeline generation when the cache was last built.
+    /// Compared against the DB's `pipeline_generation` metadata to detect staleness.
+    cached_generation: Arc<Mutex<u64>>,
 }
 
 impl Clone for AriadneService {
@@ -127,6 +129,7 @@ impl Clone for AriadneService {
         Self {
             db: Arc::clone(&self.db),
             graph_cache: Arc::clone(&self.graph_cache),
+            cached_generation: Arc::clone(&self.cached_generation),
         }
     }
 }
@@ -136,6 +139,7 @@ impl AriadneService {
         Self {
             db: Arc::new(Mutex::new(db)),
             graph_cache: Arc::new(Mutex::new(None)),
+            cached_generation: Arc::new(Mutex::new(0)),
         }
     }
 
@@ -150,8 +154,9 @@ impl AriadneService {
         Ok(f(&db))
     }
 
-    /// Run `f` with a reference to the call graph, building and caching it on
-    /// first use. Lock order is always cache → db to prevent deadlocks.
+    /// Run `f` with a reference to the call graph, rebuilding it when the
+    /// pipeline generation changes (e.g. after watch-mode reindex).
+    /// Lock order is always cache → db to prevent deadlocks.
     fn with_cached_graph<F, T>(&self, f: F) -> anyhow::Result<T>
     where
         F: FnOnce(&crate::graph::CallGraph) -> anyhow::Result<T>,
@@ -161,7 +166,25 @@ impl AriadneService {
             .lock()
             .map_err(|e| anyhow::anyhow!("Graph cache lock error: {e}"))?;
 
-        if cache.is_none() {
+        // Check if the pipeline has been re-indexed since we last built the cache
+        let db_generation = {
+            let db = self
+                .db
+                .lock()
+                .map_err(|e| anyhow::anyhow!("Database lock error: {e}"))?;
+            db.get_metadata("pipeline_generation")
+                .ok()
+                .flatten()
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(0)
+        };
+
+        let mut gen = self
+            .cached_generation
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Generation lock error: {e}"))?;
+
+        if cache.is_none() || db_generation != *gen {
             let graph = {
                 let db = self
                     .db
@@ -170,9 +193,13 @@ impl AriadneService {
                 query::build_call_graph(&db, Some(10000))?
             };
             *cache = Some(graph);
+            *gen = db_generation;
         }
 
-        f(cache.as_ref().unwrap())
+        let graph = cache
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Graph cache is unexpectedly empty"))?;
+        f(graph)
     }
 
     fn dispatch(&self, name: &str, params: &CallToolRequestParam) -> CallToolResult {
