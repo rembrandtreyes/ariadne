@@ -105,7 +105,10 @@ pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyho
                     tracing::error!(error = %e, "Generation bump error");
                 }
                 let rate = crate::db::query::resolution_rate(&db).unwrap_or(0.0);
-                tracing::info!(resolution_rate = format!("{:.0}%", rate * 100.0), "Incremental reindex complete");
+                tracing::info!(
+                    resolution_rate = format!("{:.0}%", rate * 100.0),
+                    "Incremental reindex complete"
+                );
             }
         }
     }

@@ -35,15 +35,13 @@ pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<Affe
         )?;
         let file_ids: Vec<i64> = stmt
             .query_map(params![file_path], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         for file_id in file_ids {
             let mut sym_stmt = conn.prepare("SELECT id FROM symbols WHERE file_id = ?1")?;
             let sym_ids: Vec<i64> = sym_stmt
                 .query_map(params![file_id], |row| row.get(0))?
-                .filter_map(|r| r.ok())
-                .collect();
+                .collect::<Result<Vec<_>, _>>()?;
             changed_symbol_ids.extend(sym_ids);
         }
     }
@@ -55,8 +53,7 @@ pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<Affe
     )?;
     let calls: Vec<(i64, i64)> = call_stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     for (caller, callee) in &calls {
         callers_of.entry(*callee).or_default().push(*caller);
@@ -82,8 +79,7 @@ pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<Affe
     )?;
     let all_tests: Vec<(i64, String, String)> = test_stmt
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut test_functions = Vec::new();
     let mut test_file_set = HashSet::new();

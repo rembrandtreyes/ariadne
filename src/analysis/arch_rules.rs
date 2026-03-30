@@ -73,8 +73,7 @@ fn check_single_rule(
                 },
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(violations)
 }

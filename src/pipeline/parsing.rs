@@ -28,8 +28,23 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
     // Insert results sequentially (SQLite is single-writer)
     let mut errors = Vec::<String>::new();
 
-    for (path, result) in results {
+    for (path, mut result) in results {
         let abs_path = path.to_string_lossy().to_string();
+
+        // Detect integration test files (tests/test_*.rs) and mark all their
+        // functions as test symbols so dead code analysis seeds them.
+        let is_test_file = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .is_some_and(|name| name.starts_with("test_") && name.ends_with(".rs"))
+            && abs_path.contains("/tests/");
+        if is_test_file {
+            for sym in &mut result.symbols {
+                if !sym.decorators.contains(&"test".to_string()) {
+                    sym.decorators.push("test".to_string());
+                }
+            }
+        }
 
         // Look up file_id by absolute_path
         let file_id: Option<i64> = db

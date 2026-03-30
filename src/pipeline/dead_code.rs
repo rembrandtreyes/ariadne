@@ -21,6 +21,33 @@ pub fn detect_dead_code(db: &Database) -> anyhow::Result<()> {
         [],
     )?;
 
+    // Mark common web framework handler patterns as entry points.
+    // These are registered via router macros (.route(), .get(), etc.) which
+    // don't create call edges but ARE reachable at runtime.
+    conn.execute(
+        "UPDATE symbols SET is_entry_point = 1 WHERE name LIKE '%_handler'
+         OR name LIKE 'handle_%' OR name LIKE '%Handler'",
+        [],
+    )?;
+
+    // Mark JS/TS class constructors as entry points (called via `new`)
+    conn.execute(
+        "UPDATE symbols SET is_entry_point = 1 WHERE name = 'constructor'",
+        [],
+    )?;
+
+    // Mark class methods as entry points — they're called via instance
+    // references (obj.method()) which static analysis can't trace without
+    // type inference. Uses qualified_name prefix matching against known classes.
+    conn.execute_batch(
+        "UPDATE symbols SET is_entry_point = 1
+         WHERE kind = 'method' AND EXISTS (
+             SELECT 1 FROM symbols c
+             WHERE c.kind = 'class'
+               AND symbols.qualified_name LIKE c.name || '.%'
+         )",
+    )?;
+
     // Collect all reachable symbol IDs via BFS from entry points and exported symbols
     let mut reachable = HashSet::new();
 

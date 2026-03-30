@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::Json;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -13,8 +15,37 @@ use crate::db::Database;
 /// We open a fresh read connection per request since rusqlite::Connection is !Send.
 pub type DbState = Arc<PathBuf>;
 
-fn open_db(state: &DbState) -> Option<Database> {
-    Database::open(state.as_ref()).ok()
+/// API error with sanitized message — never leaks file paths or internals.
+#[derive(Debug, Serialize)]
+pub struct ApiError {
+    pub code: &'static str,
+    pub message: &'static str,
+}
+
+impl ApiError {
+    fn query_failed(message: &'static str) -> Self {
+        Self {
+            code: "query_failed",
+            message,
+        }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self.code {
+            "db_unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, Json(self)).into_response()
+    }
+}
+
+fn open_db(state: &DbState) -> Result<Database, ApiError> {
+    Database::open(state.as_ref()).map_err(|_| ApiError {
+        code: "db_unavailable",
+        message: "Database is unavailable. Ensure ariadne index has been run.",
+    })
 }
 
 #[derive(Serialize)]
@@ -70,7 +101,6 @@ pub struct NeighborhoodQuery {
 pub struct Insights {
     pub circular_deps: Vec<Vec<String>>,
     pub most_connected: Vec<InsightNode>,
-    pub highest_betweenness: Vec<InsightNode>,
     pub dead_code_count: u64,
     pub god_files: Vec<InsightNode>,
     pub dead_code: Vec<DeadCodeEntry>,
@@ -95,65 +125,50 @@ pub struct DeadCodeEntry {
     pub line_start: u32,
 }
 
-pub async fn graph_data(State(db_path): State<DbState>) -> Json<GraphData> {
-    let data = open_db(&db_path).and_then(|db| build_graph_data(&db).ok());
-    Json(data.unwrap_or(GraphData {
-        nodes: Vec::new(),
-        edges: Vec::new(),
-    }))
+pub async fn graph_data(State(db_path): State<DbState>) -> Result<Json<GraphData>, ApiError> {
+    let db = open_db(&db_path)?;
+    let data =
+        build_graph_data(&db).map_err(|_| ApiError::query_failed("Failed to build graph data."))?;
+    Ok(Json(data))
 }
 
-pub async fn stats(State(db_path): State<DbState>) -> Json<Stats> {
-    let s = open_db(&db_path).and_then(|db| build_stats(&db).ok());
-    Json(s.unwrap_or(Stats {
-        files: 0,
-        symbols: 0,
-        calls: 0,
-        resolution_rate: 0.0,
-        dead_functions: 0,
-        languages: Vec::new(),
-    }))
+pub async fn stats(State(db_path): State<DbState>) -> Result<Json<Stats>, ApiError> {
+    let db = open_db(&db_path)?;
+    let s = build_stats(&db).map_err(|_| ApiError::query_failed("Failed to load stats."))?;
+    Ok(Json(s))
 }
 
 pub async fn search_symbols(
     State(db_path): State<DbState>,
     Query(query): Query<SearchQuery>,
-) -> Json<Vec<GraphNode>> {
+) -> Result<Json<Vec<GraphNode>>, ApiError> {
     let q = query.q.unwrap_or_default();
     if q.is_empty() {
-        return Json(Vec::new());
+        return Ok(Json(Vec::new()));
     }
     if q.len() > 500 {
-        return Json(vec![]);
+        return Ok(Json(vec![]));
     }
-    let results = open_db(&db_path)
-        .and_then(|db| do_search(&db, &q).ok())
-        .unwrap_or_default();
-    Json(results)
+    let db = open_db(&db_path)?;
+    let results = do_search(&db, &q).map_err(|_| ApiError::query_failed("Search query failed."))?;
+    Ok(Json(results))
 }
 
 pub async fn neighborhood(
     State(db_path): State<DbState>,
     Query(query): Query<NeighborhoodQuery>,
-) -> Json<GraphData> {
-    let data = open_db(&db_path)
-        .and_then(|db| build_neighborhood(&db, &query.id.to_string(), query.depth).ok());
-    Json(data.unwrap_or(GraphData {
-        nodes: Vec::new(),
-        edges: Vec::new(),
-    }))
+) -> Result<Json<GraphData>, ApiError> {
+    let db = open_db(&db_path)?;
+    let data = build_neighborhood(&db, &query.id.to_string(), query.depth)
+        .map_err(|_| ApiError::query_failed("Failed to build neighborhood graph."))?;
+    Ok(Json(data))
 }
 
-pub async fn insights(State(db_path): State<DbState>) -> Json<Insights> {
-    let data = open_db(&db_path).and_then(|db| build_insights(&db).ok());
-    Json(data.unwrap_or(Insights {
-        circular_deps: Vec::new(),
-        most_connected: Vec::new(),
-        highest_betweenness: Vec::new(),
-        dead_code_count: 0,
-        god_files: Vec::new(),
-        dead_code: Vec::new(),
-    }))
+pub async fn insights(State(db_path): State<DbState>) -> Result<Json<Insights>, ApiError> {
+    let db = open_db(&db_path)?;
+    let data =
+        build_insights(&db).map_err(|_| ApiError::query_failed("Failed to build insights."))?;
+    Ok(Json(data))
 }
 
 fn build_graph_data(db: &Database) -> anyhow::Result<GraphData> {
@@ -190,8 +205,7 @@ fn build_graph_data(db: &Database) -> anyhow::Result<GraphData> {
                 signature: row.get(7).unwrap_or_default(),
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let node_ids: HashSet<String> = nodes.iter().map(|n| n.id.clone()).collect();
 
@@ -212,7 +226,8 @@ fn build_graph_data(db: &Database) -> anyhow::Result<GraphData> {
                 confidence: row.get(2)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .collect::<Result<Vec<_>, rusqlite::Error>>()?
+        .into_iter()
         .filter(|e| node_ids.contains(&e.source) && node_ids.contains(&e.target))
         .collect();
 
@@ -263,8 +278,7 @@ fn build_neighborhood(
         )?;
         let outgoing: Vec<String> = out_stmt
             .query_map(params![current_id_num], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Get incoming neighbors (callee <- caller)
         let mut in_stmt = conn.prepare_cached(
@@ -273,8 +287,7 @@ fn build_neighborhood(
         )?;
         let incoming: Vec<String> = in_stmt
             .query_map(params![current_id_num], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         for neighbor_id in outgoing.into_iter().chain(incoming.into_iter()) {
             if visited.insert(neighbor_id.clone()) {
@@ -338,8 +351,7 @@ fn build_neighborhood(
                 signature: row.get(7).unwrap_or_default(),
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     let node_ids: HashSet<String> = nodes.iter().map(|n| n.id.clone()).collect();
 
@@ -377,7 +389,8 @@ fn build_neighborhood(
                 confidence: row.get(2)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .collect::<Result<Vec<_>, rusqlite::Error>>()?
+        .into_iter()
         .filter(|e| node_ids.contains(&e.source) && node_ids.contains(&e.target))
         .collect();
 
@@ -420,29 +433,17 @@ fn build_insights(db: &Database) -> anyhow::Result<Insights> {
                 connections: row.get(4)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
-
-    // highest_betweenness: approximate with degree centrality (same as most_connected)
-    let highest_betweenness = most_connected
-        .iter()
-        .map(|n| InsightNode {
-            id: n.id.clone(),
-            name: n.name.clone(),
-            kind: n.kind.clone(),
-            file: n.file.clone(),
-            connections: n.connections,
-        })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // god_files: symbols with 50+ connections
     let mut gf_stmt = conn.prepare(
-        "SELECT s.id, s.name, s.kind, f.path,
-                (SELECT COUNT(*) FROM calls c WHERE c.caller_symbol_id = s.id) +
-                (SELECT COUNT(*) FROM calls c WHERE c.callee_symbol_id = s.id) AS total
-         FROM symbols s
-         JOIN files f ON s.file_id = f.id
-         HAVING total >= 50
+        "SELECT * FROM (
+             SELECT s.id, s.name, s.kind, f.path,
+                    (SELECT COUNT(*) FROM calls c WHERE c.caller_symbol_id = s.id) +
+                    (SELECT COUNT(*) FROM calls c WHERE c.callee_symbol_id = s.id) AS total
+             FROM symbols s
+             JOIN files f ON s.file_id = f.id
+         ) WHERE total >= 50
          ORDER BY total DESC",
     )?;
     let god_files: Vec<InsightNode> = gf_stmt
@@ -456,17 +457,9 @@ fn build_insights(db: &Database) -> anyhow::Result<Insights> {
                 connections: row.get(4)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
-    // dead_code_count
-    let dead_code_count: u64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM symbols WHERE is_dead = 1",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .unwrap_or(0) as u64;
+    let dead_code_count = crate::db::query::count_dead(db)?;
 
     // circular_deps: find pairs where A calls B and B calls A (simplest cycle detection)
     // Then also look for longer cycles up to limit of 10
@@ -488,8 +481,7 @@ fn build_insights(db: &Database) -> anyhow::Result<Insights> {
             let b: String = row.get(1)?;
             Ok(vec![a, b])
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // dead code list: join with files to get path, limit to 200 entries
     let mut dead_stmt = conn.prepare(
@@ -511,13 +503,11 @@ fn build_insights(db: &Database) -> anyhow::Result<Insights> {
                 line_start: row.get(5)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Insights {
         circular_deps,
         most_connected,
-        highest_betweenness,
         dead_code_count,
         god_files,
         dead_code,
@@ -559,22 +549,36 @@ pub struct SourceQuery {
 pub async fn source(
     State(db_path): State<DbState>,
     Query(query): Query<SourceQuery>,
-) -> Json<Option<SourceResult>> {
-    let result = open_db(&db_path).and_then(|db| fetch_source(&db, query.id).ok());
-    Json(result)
+) -> Result<Json<SourceResult>, ApiError> {
+    let db = open_db(&db_path)?;
+    let result = fetch_source(&db, query.id)
+        .map_err(|_| ApiError::query_failed("Failed to fetch source code."))?;
+    Ok(Json(result))
 }
 
 fn fetch_source(db: &Database, symbol_id: i64) -> anyhow::Result<SourceResult> {
     let conn = db.conn();
 
     let (absolute_path, line_start, line_end, language, file_path): (
-        String, u32, u32, String, String,
+        String,
+        u32,
+        u32,
+        String,
+        String,
     ) = conn.query_row(
         "SELECT f.absolute_path, s.line_start, s.line_end, f.language, f.path
          FROM symbols s JOIN files f ON s.file_id = f.id
          WHERE s.id = ?1",
         params![symbol_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        },
     )?;
 
     // Validate the path to prevent directory traversal attacks.
@@ -642,8 +646,7 @@ fn do_search(db: &Database, query: &str) -> anyhow::Result<Vec<GraphNode>> {
                 signature: row.get(7).unwrap_or_default(),
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
 }

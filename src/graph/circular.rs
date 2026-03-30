@@ -1,7 +1,8 @@
 use super::CallGraph;
 use petgraph::algo::kosaraju_scc;
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct CircularDependency {
     pub symbols: Vec<String>,
     pub cycle_length: usize,

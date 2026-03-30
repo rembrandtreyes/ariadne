@@ -58,8 +58,7 @@ impl RustParser {
                 }
                 "function_item" => {
                     let attrs = std::mem::take(&mut pending_attrs);
-                    let is_test =
-                        in_test_module || Self::is_test_attribute(&attrs);
+                    let is_test = in_test_module || Self::is_test_attribute(&attrs);
 
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = name_node
@@ -100,6 +99,15 @@ impl RustParser {
                             decorators,
                             parent_name: parent_name.map(String::from),
                         });
+                        // Recurse into the function body to extract calls
+                        Self::extract_symbols(
+                            child,
+                            source,
+                            result,
+                            Some(&name),
+                            is_test,
+                            in_trait_impl,
+                        );
                     }
                 }
                 "mod_item" => {
@@ -195,7 +203,14 @@ impl RustParser {
                             decorators: Vec::new(),
                             parent_name: parent_name.map(String::from),
                         });
-                        Self::extract_symbols(child, source, result, Some(&qualified), in_test_module, false);
+                        Self::extract_symbols(
+                            child,
+                            source,
+                            result,
+                            Some(&qualified),
+                            in_test_module,
+                            false,
+                        );
                     }
                 }
                 "impl_item" => {
@@ -209,9 +224,23 @@ impl RustParser {
                     // present for trait implementations, not plain `impl Type {}`.
                     let is_trait_impl = child.child_by_field_name("trait").is_some();
                     if !type_name.is_empty() {
-                        Self::extract_symbols(child, source, result, Some(&type_name), in_test_module, is_trait_impl);
+                        Self::extract_symbols(
+                            child,
+                            source,
+                            result,
+                            Some(&type_name),
+                            in_test_module,
+                            is_trait_impl,
+                        );
                     } else {
-                        Self::extract_symbols(child, source, result, parent_name, in_test_module, in_trait_impl);
+                        Self::extract_symbols(
+                            child,
+                            source,
+                            result,
+                            parent_name,
+                            in_test_module,
+                            in_trait_impl,
+                        );
                     }
                 }
                 "use_declaration" => {
@@ -225,20 +254,65 @@ impl RustParser {
                     let is_external = !module.starts_with("crate::")
                         && !module.starts_with("super::")
                         && !module.starts_with("self::");
-                    result.imports.push(ParsedImport {
-                        imported_name: module.split("::").last().unwrap_or_default().to_string(),
-                        module_path: module,
-                        line: child.start_position().row as u32 + 1,
-                        is_external,
-                    });
+                    let line = child.start_position().row as u32 + 1;
+
+                    // Handle grouped imports: `use foo::{A, B, C}`
+                    if let Some(brace_start) = module.find('{') {
+                        let base_path = module[..brace_start].trim_end_matches("::").to_string();
+                        let inner = module[brace_start + 1..]
+                            .trim_end_matches('}')
+                            .to_string();
+                        for name in inner.split(',') {
+                            let name = name.trim().to_string();
+                            if !name.is_empty() {
+                                result.imports.push(ParsedImport {
+                                    imported_name: name.clone(),
+                                    module_path: format!("{}::{}", base_path, name),
+                                    line,
+                                    is_external,
+                                });
+                            }
+                        }
+                    } else {
+                        let imported_name =
+                            module.split("::").last().unwrap_or_default().to_string();
+                        result.imports.push(ParsedImport {
+                            imported_name,
+                            module_path: module,
+                            line,
+                            is_external,
+                        });
+                    }
                 }
                 "call_expression" => {
                     pending_attrs.clear();
                     if let Some(func_node) = child.child_by_field_name("function") {
-                        let callee = func_node
+                        let raw_callee = func_node
                             .utf8_text(source.as_bytes())
                             .unwrap_or_default()
                             .to_string();
+                        // Normalize method calls: self.foo() -> foo, Self::foo() -> foo
+                        let callee = if let Some(method) = raw_callee.strip_prefix("self.") {
+                            method.to_string()
+                        } else if let Some(method) = raw_callee.strip_prefix("Self::") {
+                            method.to_string()
+                        } else if raw_callee.contains('.') {
+                            // For other dotted calls (e.g., obj.method()), extract the method name
+                            raw_callee
+                                .rsplit('.')
+                                .next()
+                                .unwrap_or(&raw_callee)
+                                .to_string()
+                        } else if raw_callee.contains("::") {
+                            // For path calls (e.g., Struct::new), extract the function name
+                            raw_callee
+                                .rsplit("::")
+                                .next()
+                                .unwrap_or(&raw_callee)
+                                .to_string()
+                        } else {
+                            raw_callee
+                        };
                         let caller = parent_name.unwrap_or("<module>").to_string();
                         result.calls.push(ParsedCall {
                             caller_name: caller,
@@ -246,6 +320,15 @@ impl RustParser {
                             line: child.start_position().row as u32 + 1,
                         });
                     }
+                    // Recurse into arguments to catch nested calls
+                    Self::extract_symbols(
+                        child,
+                        source,
+                        result,
+                        parent_name,
+                        in_test_module,
+                        in_trait_impl,
+                    );
                 }
                 "const_item" => {
                     pending_attrs.clear();
@@ -319,14 +402,88 @@ impl RustParser {
                         if !macro_name.is_empty() {
                             let caller = parent_name.unwrap_or("<module>").to_string();
                             result.calls.push(ParsedCall {
-                                caller_name: caller,
+                                caller_name: caller.clone(),
                                 callee_name: format!("{}!", macro_name),
                                 line: child.start_position().row as u32 + 1,
                             });
+
+                            // Tree-sitter represents macro bodies as opaque token_tree
+                            // nodes without parsed expressions. Scan the token tree text
+                            // for function call patterns (identifier followed by `(`).
+                            let token_tree = {
+                                let mut found = child.child_by_field_name("arguments");
+                                if found.is_none() {
+                                    // token_tree may not be a named field; find it by index
+                                    for i in 0..child.child_count() {
+                                        if let Some(c) = child.child(i) {
+                                            if c.kind() == "token_tree" {
+                                                found = Some(c);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                found
+                            };
+                            if let Some(token_tree) = token_tree {
+                                let tt_text = token_tree
+                                    .utf8_text(source.as_bytes())
+                                    .unwrap_or_default();
+                                // Match identifiers followed by ( that aren't keywords
+                                let tt_line = token_tree.start_position().row as u32 + 1;
+                                let mut chars = tt_text.char_indices().peekable();
+                                while let Some((i, ch)) = chars.next() {
+                                    if ch.is_ascii_alphabetic() || ch == '_' {
+                                        let start = i;
+                                        let mut end = i + 1;
+                                        while let Some(&(j, c)) = chars.peek() {
+                                            if c.is_ascii_alphanumeric() || c == '_' {
+                                                end = j + 1;
+                                                chars.next();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        // Check if followed by `(`
+                                        // Skip whitespace first
+                                        while let Some(&(_, c)) = chars.peek() {
+                                            if c.is_ascii_whitespace() {
+                                                chars.next();
+                                            } else {
+                                                break;
+                                            }
+                                        }
+                                        if let Some(&(_, '(')) = chars.peek() {
+                                            let ident = &tt_text[start..end];
+                                            // Skip Rust keywords and common type constructors
+                                            if !matches!(
+                                                ident,
+                                                "if" | "else" | "match" | "for" | "while"
+                                                    | "loop" | "let" | "mut" | "ref"
+                                                    | "return" | "break" | "continue"
+                                                    | "as" | "in" | "fn" | "pub" | "use"
+                                            ) {
+                                                result.calls.push(ParsedCall {
+                                                    caller_name: caller.clone(),
+                                                    callee_name: ident.to_string(),
+                                                    line: tt_line,
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     // Still recurse into macro invocations for nested content
-                    Self::extract_symbols(child, source, result, parent_name, in_test_module, in_trait_impl);
+                    Self::extract_symbols(
+                        child,
+                        source,
+                        result,
+                        parent_name,
+                        in_test_module,
+                        in_trait_impl,
+                    );
                 }
                 "type_item" => {
                     pending_attrs.clear();
@@ -354,7 +511,14 @@ impl RustParser {
                 }
                 _ => {
                     pending_attrs.clear();
-                    Self::extract_symbols(child, source, result, parent_name, in_test_module, in_trait_impl);
+                    Self::extract_symbols(
+                        child,
+                        source,
+                        result,
+                        parent_name,
+                        in_test_module,
+                        in_trait_impl,
+                    );
                 }
             }
         }

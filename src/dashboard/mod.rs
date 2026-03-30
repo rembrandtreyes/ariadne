@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
+use axum::extract::State;
 use tower_http::cors::CorsLayer;
 
 /// Configuration for the web dashboard server.
@@ -26,12 +27,10 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
 
     let addr = SocketAddr::from(([127, 0, 0, 1], config.port));
 
-    let origin_127 = format!("http://127.0.0.1:{}", config.port)
-        .parse::<axum::http::HeaderValue>()
-        .expect("valid origin");
-    let origin_localhost = format!("http://localhost:{}", config.port)
-        .parse::<axum::http::HeaderValue>()
-        .expect("valid origin");
+    let origin_127 =
+        format!("http://127.0.0.1:{}", config.port).parse::<axum::http::HeaderValue>()?;
+    let origin_localhost =
+        format!("http://localhost:{}", config.port).parse::<axum::http::HeaderValue>()?;
 
     let cors = CorsLayer::new()
         .allow_origin([origin_127, origin_localhost])
@@ -63,11 +62,23 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
     Ok(())
 }
 
-async fn health_handler() -> axum::Json<serde_json::Value> {
-    axum::Json(serde_json::json!({
-        "status": "ok",
-        "version": env!("CARGO_PKG_VERSION")
-    }))
+async fn health_handler(
+    State(db_path): State<api::DbState>,
+) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+    let db_ok = crate::db::Database::open(db_path.as_ref()).is_ok();
+    let status = if db_ok {
+        axum::http::StatusCode::OK
+    } else {
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    };
+    (
+        status,
+        axum::Json(serde_json::json!({
+            "status": if db_ok { "ok" } else { "error" },
+            "version": env!("CARGO_PKG_VERSION"),
+            "db": if db_ok { "connected" } else { "unavailable" },
+        })),
+    )
 }
 
 async fn index_handler() -> axum::response::Html<&'static str> {

@@ -149,7 +149,11 @@ impl WasmPluginHost {
             .unwrap_or("unknown")
             .to_string();
 
-        info!("Loaded component plugin '{}' from {}", plugin_name, path.display());
+        info!(
+            "Loaded component plugin '{}' from {}",
+            plugin_name,
+            path.display()
+        );
 
         Ok(LoadedPlugin {
             engine: self.engine.clone(),

@@ -1,6 +1,7 @@
 pub mod capabilities;
 pub mod convert;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -293,9 +294,32 @@ impl LanguageServer for AriadneLsp {
                     row.get::<_, bool>(5)?,
                 ))
             }) {
-                Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
-                Err(_) => return Ok(Some(Vec::new())),
+                Ok(mapped) => mapped
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .unwrap_or_default(),
+                Err(_) => Vec::new(),
             };
+
+        // Batch query: fetch caller counts for all symbols in one query instead of N+1
+        let caller_counts: HashMap<i64, i64> = if !symbols.is_empty() {
+            let placeholders: Vec<String> = symbols.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let sql = format!(
+                "SELECT callee_symbol_id, COUNT(*) FROM calls WHERE callee_symbol_id IN ({}) GROUP BY callee_symbol_id",
+                placeholders.join(", ")
+            );
+            match conn.prepare(&sql) {
+                Ok(mut count_stmt) => {
+                    let ids: Vec<&dyn rusqlite::types::ToSql> = symbols.iter().map(|(id, ..)| id as &dyn rusqlite::types::ToSql).collect();
+                    match count_stmt.query_map(ids.as_slice(), |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))) {
+                        Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
+                        Err(_) => HashMap::new(),
+                    }
+                }
+                Err(_) => HashMap::new(),
+            }
+        } else {
+            HashMap::new()
+        };
 
         let mut lenses = Vec::new();
 
@@ -312,14 +336,7 @@ impl LanguageServer for AriadneLsp {
                 },
             };
 
-            // Count callers
-            let caller_count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM calls WHERE callee_symbol_id = ?1",
-                    params![sym_id],
-                    |row| row.get(0),
-                )
-                .unwrap_or(0);
+            let caller_count = caller_counts.get(&sym_id).copied().unwrap_or(0);
 
             if caller_count > 0 {
                 let title = if caller_count == 1 {
@@ -600,7 +617,9 @@ impl LanguageServer for AriadneLsp {
             let _qualified_name: String = row.get(4)?;
             Ok((name, kind, line_start, line_end))
         }) {
-            Ok(mapped) => mapped.filter_map(|r| r.ok()).collect(),
+            Ok(mapped) => mapped
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .unwrap_or_default(),
             Err(_) => Vec::new(),
         };
 

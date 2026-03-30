@@ -142,7 +142,7 @@ pub fn analyze_blast_radius_cross_service(
                 .query_map(rusqlite::params![svc_id], |row| {
                     Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
                 })
-                .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+                .and_then(|rows| rows.collect::<Result<Vec<_>, _>>())
             {
                 for (dep_id, dep_name) in deps {
                     if visited_services.insert(dep_id) {

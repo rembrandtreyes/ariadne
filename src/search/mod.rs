@@ -114,8 +114,7 @@ fn fts_search(
                 snippet: None,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
 }
@@ -150,8 +149,7 @@ fn like_search(
                 snippet: None,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
 }
@@ -163,14 +161,25 @@ fn fuzzy_search(
     limit: usize,
 ) -> anyhow::Result<Vec<SearchResult>> {
     let conn = db.conn();
+    // Fetch a bounded number of candidates, then compute Levenshtein distance in Rust.
+    // Use a short prefix filter (first 2 chars) to narrow candidates while still allowing
+    // fuzzy matches where the full query isn't a substring of the symbol name.
+    let prefix: String = query.chars().take(2).collect();
+    let prefix_pattern = if prefix.chars().count() >= 2 {
+        format!("{}%", crate::db::escape_like(&prefix))
+    } else {
+        "%".to_string()
+    };
+    let fetch_limit = (limit * 10).min(5000) as i64;
     let mut stmt = conn.prepare(
         "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start
          FROM symbols s JOIN files f ON s.file_id = f.id
-         LIMIT 200",
+         WHERE s.name LIKE ?1 ESCAPE '\\'
+         LIMIT ?2",
     )?;
 
     let mut results: Vec<SearchResult> = stmt
-        .query_map([], |row| {
+        .query_map(rusqlite::params![prefix_pattern, fetch_limit], |row| {
             let name: String = row.get(1)?;
             let distance = strsim::levenshtein(query, &name);
             let max_len = query.len().max(name.len());
@@ -191,8 +200,7 @@ fn fuzzy_search(
                 snippet: None,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     results.sort_by(|a, b| {
         b.score

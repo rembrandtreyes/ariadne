@@ -94,8 +94,8 @@ mod tests {
         let tables: Vec<String> = stmt
             .query_map([], |row| row.get(0))
             .expect("should query")
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         assert!(tables.contains(&"files".to_string()));
         assert!(tables.contains(&"symbols".to_string()));
         assert!(tables.contains(&"calls".to_string()));

@@ -58,8 +58,7 @@ pub fn analyze_boundaries(db: &Database) -> anyhow::Result<BoundaryAnalysis> {
                 modularity: row.get(5)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if raw_communities.is_empty() {
         return Ok(BoundaryAnalysis {
@@ -89,8 +88,7 @@ pub fn analyze_boundaries(db: &Database) -> anyhow::Result<BoundaryAnalysis> {
     for comm in &raw_communities {
         let top_files: Vec<String> = file_stmt
             .query_map(params![comm.id], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // A boundary violation: external edges exceed internal edges
         if comm.external_edges > comm.internal_edges {
@@ -149,8 +147,7 @@ pub fn analyze_boundaries(db: &Database) -> anyhow::Result<BoundaryAnalysis> {
                 symbols,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(BoundaryAnalysis {
         modules,

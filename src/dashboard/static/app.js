@@ -1,7 +1,32 @@
+// Fetch with error handling — returns {_error: true, ...} on failure
+async function safeFetch(url) {
+    try {
+        const r = await fetch(url);
+        if (!r.ok) {
+            const err = await r.json().catch(function() { return {}; });
+            return { _error: true, code: err.code || 'unknown', message: err.message || 'Request failed' };
+        }
+        return await r.json();
+    } catch (e) {
+        return { _error: true, code: 'network', message: 'Cannot connect to server' };
+    }
+}
+
 // Fetch graph data and render force-directed layout
 async function init() {
-    const graphData = await fetch('/api/graph').then(r => r.json());
-    const stats = await fetch('/api/stats').then(r => r.json());
+    const graphData = await safeFetch('/api/graph');
+    const stats = await safeFetch('/api/stats');
+
+    if (graphData._error || stats._error) {
+        var msg = (graphData._error && graphData.message) || (stats._error && stats.message) || 'Unknown error';
+        document.getElementById('stats').textContent = 'Error: ' + msg;
+        var svg = d3.select('#graph').attr('width', window.innerWidth).attr('height', window.innerHeight - 60);
+        svg.append('text')
+            .attr('x', window.innerWidth / 2).attr('y', (window.innerHeight - 60) / 2)
+            .attr('text-anchor', 'middle').attr('fill', '#f85149')
+            .text('Dashboard error: ' + msg);
+        return;
+    }
 
     document.getElementById('stats').textContent =
         stats.files + ' files \u00b7 ' + stats.symbols + ' symbols \u00b7 ' +

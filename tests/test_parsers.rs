@@ -92,6 +92,20 @@ fn test_rust_parser() {
     // Rust structs are mapped to SymbolKind::Class
     let has_struct = result.symbols.iter().any(|s| s.kind == SymbolKind::Class);
     assert!(has_struct, "should find structs (mapped to Class)");
+    // Function-to-function calls should be detected
+    assert!(!result.calls.is_empty(), "should find calls inside function bodies");
+    // welcome() calls greet()
+    let calls_greet = result
+        .calls
+        .iter()
+        .any(|c| c.callee_name == "greet" && c.caller_name == "welcome");
+    assert!(calls_greet, "welcome should call greet");
+    // greet_user() calls get_user via self
+    let calls_get_user = result
+        .calls
+        .iter()
+        .any(|c| c.callee_name == "get_user" && c.caller_name == "greet_user");
+    assert!(calls_get_user, "greet_user should call get_user");
 }
 
 // ---------------------------------------------------------------------------

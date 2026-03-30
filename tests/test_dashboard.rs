@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use ariadne::dashboard::api::{graph_data, search_symbols, stats, DbState, SearchQuery};
 use axum::extract::{Query, State};
+use axum::response::IntoResponse;
 
 /// Helper: create a temp DB, index the Python fixture, return (TempDir, DbState).
 /// TempDir must be kept alive for the duration of the test.
@@ -21,7 +22,7 @@ fn setup_indexed_db() -> (tempfile::TempDir, DbState) {
 async fn test_dashboard_stats_handler() {
     let (_dir, state) = setup_indexed_db();
 
-    let result = stats(State(state)).await;
+    let result = stats(State(state)).await.expect("stats should succeed");
     let s = result.0;
 
     assert!(s.files > 0, "expected files > 0, got {}", s.files);
@@ -40,7 +41,9 @@ async fn test_dashboard_search_handler() {
     let query = SearchQuery {
         q: Some("greet".to_string()),
     };
-    let result = search_symbols(State(state), Query(query)).await;
+    let result = search_symbols(State(state), Query(query))
+        .await
+        .expect("search should succeed");
     let results = result.0;
 
     assert!(
@@ -58,13 +61,17 @@ async fn test_dashboard_search_empty_query() {
     let (_dir, state) = setup_indexed_db();
 
     let query = SearchQuery { q: None };
-    let result = search_symbols(State(state.clone()), Query(query)).await;
+    let result = search_symbols(State(state.clone()), Query(query))
+        .await
+        .expect("search none should succeed");
     assert!(result.0.is_empty(), "expected empty results for None query");
 
     let query_empty = SearchQuery {
         q: Some(String::new()),
     };
-    let result2 = search_symbols(State(state), Query(query_empty)).await;
+    let result2 = search_symbols(State(state), Query(query_empty))
+        .await
+        .expect("search empty should succeed");
     assert!(
         result2.0.is_empty(),
         "expected empty results for empty string query"
@@ -75,7 +82,9 @@ async fn test_dashboard_search_empty_query() {
 async fn test_dashboard_graph_data() {
     let (_dir, state) = setup_indexed_db();
 
-    let result = graph_data(State(state)).await;
+    let result = graph_data(State(state))
+        .await
+        .expect("graph_data should succeed");
     let data = result.0;
 
     assert!(!data.nodes.is_empty(), "expected graph nodes, got empty");
@@ -85,6 +94,37 @@ async fn test_dashboard_graph_data() {
         data.nodes.len() >= 2,
         "expected at least 2 nodes, got {}",
         data.nodes.len()
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_error_on_invalid_db() {
+    // Point to a directory (not a file) — Database::open will fail
+    let state: DbState = Arc::new(std::path::PathBuf::from("/dev/null/impossible.db"));
+
+    // All handlers should return Err (not silently return empty data)
+    let graph_result = graph_data(State(state.clone())).await;
+    assert!(
+        graph_result.is_err(),
+        "graph_data should error on invalid DB path"
+    );
+
+    let stats_result = stats(State(state.clone())).await;
+    assert!(
+        stats_result.is_err(),
+        "stats should error on invalid DB path"
+    );
+
+    // Verify the error has the right code
+    let err = match graph_result {
+        Err(e) => e,
+        Ok(_) => panic!("expected error"),
+    };
+    let response = err.into_response();
+    assert_eq!(
+        response.status(),
+        axum::http::StatusCode::SERVICE_UNAVAILABLE,
+        "invalid DB should return 503"
     );
 }
 

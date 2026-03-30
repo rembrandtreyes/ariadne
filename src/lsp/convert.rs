@@ -3,8 +3,10 @@ use tower_lsp::lsp_types::*;
 /// Convert an Ariadne symbol location to an LSP Location.
 pub fn to_lsp_location(file_path: &str, line: u32, col_start: u32, col_end: u32) -> Location {
     Location {
-        uri: Url::from_file_path(file_path)
-            .unwrap_or_else(|_| Url::parse(&format!("file://{}", file_path)).expect("valid URL")),
+        uri: Url::from_file_path(file_path).unwrap_or_else(|_| {
+            Url::parse(&format!("file://{}", file_path))
+                .unwrap_or_else(|_| Url::parse("file:///unknown").unwrap())
+        }),
         range: Range {
             start: Position {
                 line: line.saturating_sub(1),

@@ -192,16 +192,94 @@ fn resolve_module_path(
     None
 }
 
+/// Resolve a Rust module path (e.g. `crate::db::query`) to a file ID.
+///
+/// Handles `crate::`, `super::`, and `self::` prefixes by mapping them
+/// to the conventional Rust file layout: `src/foo/bar.rs` or `src/foo/bar/mod.rs`.
+fn resolve_rust_module_path(
+    module_path: &str,
+    importing_file_path: &str,
+    file_paths: &HashMap<String, i64>,
+) -> Option<i64> {
+    let segments: Vec<&str> = module_path.split("::").collect();
+    if segments.is_empty() {
+        return None;
+    }
+
+    let (start_dir, seg_start) = match segments[0] {
+        "crate" => {
+            // crate:: resolves from the project src/ directory
+            (PathBuf::from("src"), 1)
+        }
+        "super" => {
+            // super:: means the parent module. For src/db/query.rs, the parent
+            // module is src/db/ (i.e., the directory containing this file).
+            // For remaining segments, resolve relative to that directory.
+            let parent = Path::new(importing_file_path).parent()?;
+            (parent.to_path_buf(), 1)
+        }
+        "self" => {
+            // self:: resolves from the importing file's directory
+            let parent = Path::new(importing_file_path).parent()?;
+            (parent.to_path_buf(), 1)
+        }
+        _ => {
+            // No recognized prefix — likely an external crate
+            return None;
+        }
+    };
+
+    // Filter out glob `*` from segments — it means "import everything from the module file"
+    let remaining: Vec<&str> = segments[seg_start..]
+        .iter()
+        .filter(|s| **s != "*")
+        .copied()
+        .collect();
+
+    // Try progressively shorter paths: all segments, then all-but-last, etc.
+    // For `crate::db::query::get_file_symbols`, tries `src/db/query/get_file_symbols.rs`,
+    // then `src/db/query.rs`, then `src/db.rs` — first match wins.
+    for take in (1..=remaining.len()).rev() {
+        let path_segments = &remaining[..take];
+        let mut candidate = start_dir.clone();
+        for seg in path_segments {
+            candidate.push(seg);
+        }
+
+        let rs_path = candidate.with_extension("rs");
+        if let Some(&id) = file_paths.get(rs_path.to_string_lossy().as_ref()) {
+            return Some(id);
+        }
+
+        let mod_path = candidate.join("mod.rs");
+        if let Some(&id) = file_paths.get(mod_path.to_string_lossy().as_ref()) {
+            return Some(id);
+        }
+    }
+
+    // Fallback: no path segments matched a file. The imported name is likely
+    // a symbol in the parent module itself (e.g., `use super::Database` where
+    // Database is a struct in mod.rs, or `use super::*` for a glob re-export).
+    let mod_path = start_dir.join("mod.rs");
+    if let Some(&id) = file_paths.get(mod_path.to_string_lossy().as_ref()) {
+        return Some(id);
+    }
+    let dir_rs = start_dir.with_extension("rs");
+    if let Some(&id) = file_paths.get(dir_rs.to_string_lossy().as_ref()) {
+        return Some(id);
+    }
+
+    None
+}
+
 /// Phase 4: Resolve import statements to their target files and symbols.
 ///
 /// For each unresolved internal import, this function:
 /// 1. Loads tsconfig.json path aliases for alias expansion
 /// 2. Pre-loads all file paths into a HashMap for O(1) lookup
-/// 3. Resolves each import using TypeScript module resolution rules:
-///    - Relative path resolution against the importing file
-///    - Extension resolution (.ts, .tsx, .js, .jsx)
-///    - Index file resolution (foo/index.ts, etc.)
-///    - Path alias expansion (@/foo -> src/foo)
+/// 3. Resolves each import using language-appropriate module resolution:
+///    - Rust: `crate::`, `super::`, `self::` module path mapping
+///    - JS/TS: relative paths, extensions, index files, path aliases
 /// 4. After resolving the file, matches the imported symbol name
 pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
     let conn = db.conn();
@@ -216,7 +294,26 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
         let rows = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(1)?, row.get::<_, i64>(0)?))
         })?;
-        rows.filter_map(|r| r.ok()).collect()
+        let mut map = HashMap::new();
+        for row in rows {
+            let (path, id) = row?;
+            map.insert(path, id);
+        }
+        map
+    };
+
+    // Pre-load file languages for dispatch
+    let file_languages: HashMap<i64, String> = {
+        let mut stmt = conn.prepare("SELECT id, language FROM files")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+        let mut map = HashMap::new();
+        for row in rows {
+            let (id, lang) = row?;
+            map.insert(id, lang);
+        }
+        map
     };
 
     // Get all unresolved internal imports, including the importing file's path
@@ -242,10 +339,14 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
     let mut resolved_count: usize = 0;
     let mut symbol_count: usize = 0;
 
-    for (import_id, module_path, imported_name, _file_id, importing_file_path) in &imports {
-        // Try to resolve the module path to a file ID
-        let resolved_file =
-            resolve_module_path(module_path, importing_file_path, &aliases, &file_paths);
+    for (import_id, module_path, imported_name, file_id, importing_file_path) in &imports {
+        // Dispatch to language-appropriate resolution
+        let lang = file_languages.get(file_id).map(|s| s.as_str()).unwrap_or("");
+        let resolved_file = if lang == "rust" {
+            resolve_rust_module_path(module_path, importing_file_path, &file_paths)
+        } else {
+            resolve_module_path(module_path, importing_file_path, &aliases, &file_paths)
+        };
 
         if let Some(fid) = resolved_file {
             conn.execute(

@@ -41,7 +41,7 @@ fn no_param_tool(name: &'static str, desc: &'static str) -> Tool {
     Tool::new(name, desc, Arc::new(serde_json::Map::new()))
 }
 
-/// Return the 10 Phase 1 Ariadne MCP tools.
+/// Return the 12 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -99,6 +99,14 @@ fn all_tools() -> Vec<Tool> {
         no_param_tool(
             "get_complexity",
             "Get codebase statistics: file count, symbol count, call count, resolution rate, dead functions, languages",
+        ),
+        no_param_tool(
+            "detect_cycles",
+            "Detect circular dependencies in the call graph using Kosaraju SCC. Returns cycles with involved symbol names and cycle length.",
+        ),
+        no_param_tool(
+            "get_boundaries",
+            "Analyze module boundaries: symbol counts, internal vs external calls, cross-boundary call details, and approximate modularity scores.",
         ),
     ]
 }
@@ -214,6 +222,8 @@ impl AriadneService {
             "find_dead_code" => self.tool_find_dead_code(),
             "get_file_summary" => self.tool_get_file_summary(params),
             "get_complexity" => self.tool_get_complexity(),
+            "detect_cycles" => self.tool_detect_cycles(),
+            "get_boundaries" => self.tool_get_boundaries(),
             _ => CallToolResult::error(vec![Content::text(format!("Unknown tool: {}", name))]),
         }
     }
@@ -347,7 +357,9 @@ impl AriadneService {
             }
         };
         match self.with_cached_graph(|graph| {
-            Ok(crate::graph::call_chain::extract_call_chain(graph, sym.id, false))
+            Ok(crate::graph::call_chain::extract_call_chain(
+                graph, sym.id, false,
+            ))
         }) {
             Ok(mermaid) => CallToolResult::success(vec![Content::text(mermaid)]),
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
@@ -461,6 +473,33 @@ impl AriadneService {
             Ok(Err(e)) => {
                 CallToolResult::error(vec![Content::text(format!("Complexity query failed: {e}"))])
             }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_detect_cycles(&self) -> CallToolResult {
+        match self.with_cached_graph(|graph| {
+            Ok(crate::graph::circular::detect_circular_dependencies(graph))
+        }) {
+            Ok(cycles) => {
+                let json = serde_json::to_string_pretty(&cycles).unwrap_or_else(|_| "[]".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Err(e) => {
+                CallToolResult::error(vec![Content::text(format!("Cycle detection failed: {e}"))])
+            }
+        }
+    }
+
+    fn tool_get_boundaries(&self) -> CallToolResult {
+        match self.with_db(crate::analysis::boundaries::analyze_boundaries) {
+            Ok(Ok(analysis)) => {
+                let json = serde_json::to_string_pretty(&analysis).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
+                "Boundary analysis failed: {e}"
+            ))]),
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
     }

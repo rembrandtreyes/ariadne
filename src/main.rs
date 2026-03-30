@@ -94,10 +94,6 @@ enum Commands {
         /// Output results as JSON
         #[arg(long)]
         json: bool,
-
-        /// Minimum confidence threshold (0-100) to report
-        #[arg(long, default_value = "80")]
-        threshold: u32,
     },
 
     /// Display statistics about the indexed codebase
@@ -173,6 +169,16 @@ enum Commands {
         action: PluginAction,
     },
 
+    /// Explain why a symbol matters: callers, callees, blast radius, status
+    Why {
+        /// The symbol name (e.g., "login_user" or "auth:login_user")
+        symbol: String,
+
+        /// Output results as JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Start the LSP server for IDE integration
     #[cfg(feature = "lsp")]
     Lsp,
@@ -230,17 +236,23 @@ async fn main() -> anyhow::Result<()> {
             cross_service,
             json,
         } => cmd_call_chain(&symbol, cross_service, json),
-        Commands::DeadCode { json, threshold } => cmd_dead_code(json, threshold),
+        Commands::DeadCode { json } => cmd_dead_code(json),
         Commands::Stats { json } => cmd_stats(json),
-        // SECURITY: The --http flag is intentionally unused. Wiring up HTTP/SSE transport
-        // would expose all 10 MCP tools over the network without authentication.
-        // Only stdio transport (OS process isolation) is safe for the current threat model.
-        Commands::Serve { http: _ } => ariadne::mcp::serve_stdio().await,
+        Commands::Serve { http } => {
+            if http.is_some() {
+                eprintln!(
+                    "Warning: --http is not supported (no authentication layer). \
+                     Using stdio transport only."
+                );
+            }
+            ariadne::mcp::serve_stdio().await
+        }
         Commands::Communities { json } => cmd_communities(json),
         Commands::Boundaries { json } => cmd_boundaries(json),
         Commands::AffectedTests { diff, json } => cmd_affected_tests(&diff, json),
         Commands::CheckRules { json } => cmd_check_rules(json),
         Commands::Topology { json } => cmd_topology(json),
+        Commands::Why { symbol, json } => cmd_why(&symbol, json),
         Commands::Dash { port } => cmd_dash(port).await,
         Commands::ExportScip { output } => cmd_export_scip(&output),
         Commands::Plugin { action } => cmd_plugin(action),
@@ -437,7 +449,12 @@ fn cmd_search(query: &str, json: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32, json: bool) -> anyhow::Result<()> {
+fn cmd_blast_radius(
+    symbol: &str,
+    cross_service: bool,
+    depth: u32,
+    json: bool,
+) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
@@ -529,6 +546,176 @@ fn cmd_blast_radius(symbol: &str, cross_service: bool, depth: u32, json: bool) -
     Ok(())
 }
 
+fn cmd_why(symbol: &str, json: bool) -> anyhow::Result<()> {
+    let root = std::env::current_dir()?;
+    let db = require_db(&root)?;
+
+    // Find the symbol
+    let sym = ariadne::db::query::find_symbol_by_name(&db, symbol)?
+        .ok_or_else(|| anyhow::anyhow!("Symbol not found: {}", symbol))?;
+
+    let file_path =
+        ariadne::db::query::file_path_by_id(&db, sym.file_id).unwrap_or_else(|_| "unknown".into());
+
+    // Gather context
+    let callers = ariadne::db::query::get_dependents(&db, sym.id).unwrap_or_default();
+    let callees = ariadne::db::query::get_dependencies(&db, sym.id).unwrap_or_default();
+
+    // Blast radius
+    let graph = ariadne::db::query::build_call_graph(&db, None)?;
+    let blast =
+        ariadne::graph::blast_radius::analyze_blast_radius(&graph, sym.id as u64, Some(10), false);
+
+    if json {
+        let output = serde_json::json!({
+            "symbol": {
+                "name": sym.name,
+                "qualified_name": sym.qualified_name,
+                "kind": sym.kind,
+                "file": file_path,
+                "line_start": sym.line_start,
+                "line_end": sym.line_end,
+                "is_dead": sym.is_dead,
+                "is_test": sym.is_test,
+            },
+            "callers": callers.iter().map(|c| serde_json::json!({
+                "name": c.name, "qualified_name": c.qualified_name, "kind": c.kind,
+            })).collect::<Vec<_>>(),
+            "callees": callees.iter().map(|c| serde_json::json!({
+                "name": c.name, "qualified_name": c.qualified_name, "kind": c.kind,
+            })).collect::<Vec<_>>(),
+            "blast_radius": {
+                "total_affected": blast.total_affected,
+                "direct": blast.direct_dependents.len(),
+                "transitive": blast.transitive_dependents.len(),
+                "affected_files": blast.affected_files,
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
+
+    // Human-readable narrative output
+    let dead_marker = if sym.is_dead {
+        format!(" {}", style("DEAD CODE").red().bold())
+    } else {
+        String::new()
+    };
+    let test_marker = if sym.is_test {
+        format!(" {}", style("[test]").dim())
+    } else {
+        String::new()
+    };
+
+    println!(
+        "\n{} {} {}{}{}\n   {} {}:{}-{}\n",
+        style("⚡").bold(),
+        style(&sym.qualified_name).cyan().bold(),
+        style(&sym.kind).dim(),
+        dead_marker,
+        test_marker,
+        style("→").dim(),
+        style(&file_path).dim(),
+        sym.line_start,
+        sym.line_end,
+    );
+
+    // Callers
+    if callers.is_empty() {
+        println!(
+            "  {} No callers (entry point or unused)",
+            style("↑").green()
+        );
+    } else {
+        println!(
+            "  {} {} {}:\n",
+            style("↑").green(),
+            style(callers.len()).green().bold(),
+            if callers.len() == 1 {
+                "caller"
+            } else {
+                "callers"
+            }
+        );
+        for c in &callers {
+            let caller_file =
+                ariadne::db::query::file_path_by_id(&db, c.file_id).unwrap_or_else(|_| "?".into());
+            println!(
+                "    {} {} ({}:{})",
+                style("·").dim(),
+                style(&c.name).bold(),
+                style(&caller_file).dim(),
+                c.line_start,
+            );
+        }
+    }
+
+    println!();
+
+    // Callees
+    if callees.is_empty() {
+        println!("  {} No callees (leaf function)", style("↓").blue());
+    } else {
+        println!(
+            "  {} {} {}:\n",
+            style("↓").blue(),
+            style(callees.len()).blue().bold(),
+            if callees.len() == 1 {
+                "callee"
+            } else {
+                "callees"
+            }
+        );
+        for c in &callees {
+            let callee_file =
+                ariadne::db::query::file_path_by_id(&db, c.file_id).unwrap_or_else(|_| "?".into());
+            println!(
+                "    {} {} ({}:{})",
+                style("·").dim(),
+                style(&c.name).bold(),
+                style(&callee_file).dim(),
+                c.line_start,
+            );
+        }
+    }
+
+    println!();
+
+    // Blast radius summary
+    if blast.total_affected == 0 {
+        println!(
+            "  {} Blast radius: {} — changes here affect nothing else",
+            style("◉").dim(),
+            style("0").green(),
+        );
+    } else {
+        println!(
+            "  {} Blast radius: {} symbols across {} files",
+            style("◉").yellow(),
+            style(blast.total_affected).yellow().bold(),
+            style(blast.affected_files.len()).yellow(),
+        );
+        if !blast.direct_dependents.is_empty() {
+            println!(
+                "    {} {} direct (will break)",
+                style("■").red(),
+                blast.direct_dependents.len(),
+            );
+        }
+        if !blast.transitive_dependents.is_empty() {
+            println!(
+                "    {} {} transitive (may break)",
+                style("■").yellow(),
+                blast.transitive_dependents.len(),
+            );
+        }
+    }
+
+    println!();
+
+    Ok(())
+}
+
 fn cmd_call_chain(symbol: &str, cross_service: bool, json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
@@ -537,8 +724,7 @@ fn cmd_call_chain(symbol: &str, cross_service: bool, json: bool) -> anyhow::Resu
         .ok_or_else(|| anyhow::anyhow!("Symbol not found: {}", symbol))?;
 
     let graph = ariadne::db::query::build_call_graph(&db, None)?;
-    let mermaid =
-        ariadne::graph::call_chain::extract_call_chain(&graph, sym.id, cross_service);
+    let mermaid = ariadne::graph::call_chain::extract_call_chain(&graph, sym.id, cross_service);
 
     if json {
         println!("{}", serde_json::json!({ "mermaid": mermaid }));
@@ -549,15 +735,11 @@ fn cmd_call_chain(symbol: &str, cross_service: bool, json: bool) -> anyhow::Resu
     Ok(())
 }
 
-fn cmd_dead_code(json: bool, threshold: u32) -> anyhow::Result<()> {
+fn cmd_dead_code(json: bool) -> anyhow::Result<()> {
     let root = std::env::current_dir()?;
     let db = require_db(&root)?;
 
-    let mut dead = ariadne::db::query::get_dead_symbols(&db)?;
-
-    // Dead code detected via reachability BFS has implicit 100% confidence.
-    // Threshold filters by confidence (0-100); values above 100 suppress all output.
-    dead.retain(|_| threshold <= 100);
+    let dead = ariadne::db::query::get_dead_symbols(&db)?;
 
     if dead.is_empty() {
         if json {
@@ -605,15 +787,18 @@ fn cmd_stats(json: bool) -> anyhow::Result<()> {
     let languages = ariadne::db::query::get_languages(&db)?;
 
     if json {
-        println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-            "files": file_count,
-            "symbols": sym_count,
-            "calls": call_count,
-            "resolved": resolved,
-            "dead_functions": dead_count,
-            "resolution_rate": rate,
-            "languages": languages,
-        }))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "files": file_count,
+                "symbols": sym_count,
+                "calls": call_count,
+                "resolved": resolved,
+                "dead_functions": dead_count,
+                "resolution_rate": rate,
+                "languages": languages,
+            }))?
+        );
         return Ok(());
     }
 
@@ -677,8 +862,7 @@ fn cmd_communities(json: bool) -> anyhow::Result<()> {
                 members: Vec::new(),
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Populate members for each community
     for comm in &mut communities {
@@ -687,8 +871,7 @@ fn cmd_communities(json: bool) -> anyhow::Result<()> {
         )?;
         comm.members = mem_stmt
             .query_map(rusqlite::params![comm.id], |row| row.get(0))?
-            .filter_map(|r| r.ok())
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
     }
 
     if communities.is_empty() {
@@ -870,14 +1053,12 @@ fn cmd_check_rules(json: bool) -> anyhow::Result<()> {
         if json {
             println!(
                 "{}",
-                serde_json::to_string_pretty(
-                    &ariadne::analysis::arch_rules::RuleCheckResult {
-                        violations: Vec::new(),
-                        rules_passed: 0,
-                        rules_failed: 0,
-                        has_errors: false,
-                    }
-                )?
+                serde_json::to_string_pretty(&ariadne::analysis::arch_rules::RuleCheckResult {
+                    violations: Vec::new(),
+                    rules_passed: 0,
+                    rules_failed: 0,
+                    has_errors: false,
+                })?
             );
         } else {
             println!("No architectural rules defined in ariadne.toml");
@@ -963,15 +1144,13 @@ fn cmd_topology(json: bool) -> anyhow::Result<()> {
                 confidence: row.get(4)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Also get all services for the diagram
     let mut svc_stmt = conn.prepare("SELECT name FROM services ORDER BY name")?;
     let services: Vec<String> = svc_stmt
         .query_map([], |row| row.get(0))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     if services.is_empty() {
         println!("No services found. Run `ariadne index` first.");
