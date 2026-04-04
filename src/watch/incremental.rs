@@ -37,11 +37,14 @@ pub fn handle_deleted_files(db: &Database, deleted_paths: &[&Path]) -> anyhow::R
 
 /// Re-run downstream resolution phases after incremental reindex.
 /// This ensures calls are resolved, heritage is built, and dead code is re-detected.
-pub fn run_post_reindex_resolution(db: &Database) -> anyhow::Result<()> {
+pub fn run_post_reindex_resolution(
+    db: &Database,
+    config: &crate::config::RepoConfig,
+) -> anyhow::Result<()> {
     crate::pipeline::import_resolution::resolve_imports(db)?;
     crate::pipeline::call_resolution::resolve_calls(db)?;
     crate::pipeline::heritage::build_heritage(db)?;
-    crate::pipeline::dead_code::detect_dead_code(db)?;
+    crate::pipeline::dead_code::detect_dead_code(db, config)?;
     Ok(())
 }
 

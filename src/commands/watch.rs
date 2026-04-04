@@ -6,5 +6,6 @@ pub fn cmd_watch(debounce: u64) -> anyhow::Result<()> {
     if !db_path.exists() {
         anyhow::bail!("No index found. Run `ariadne index` first.");
     }
-    crate::watch::watch_and_reindex(&root, &db_path, debounce)
+    let config = crate::config::repo::load(&root)?;
+    crate::watch::watch_and_reindex(&root, &db_path, debounce, &config)
 }

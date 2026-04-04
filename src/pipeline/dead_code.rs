@@ -1,19 +1,22 @@
+use crate::config::RepoConfig;
 use crate::db::Database;
+use anyhow::Context;
 use rusqlite::params;
 use std::collections::HashSet;
 
 /// Phase 7: Multi-pass reachability analysis to detect dead code.
 ///
 /// Marks symbols as dead if they are:
-/// 1. Not entry points
+/// 1. Not entry points (hardcoded names + user-configured entry_points)
 /// 2. Not called by any other symbol
 /// 3. Not exported
 /// 4. Not tests
-pub fn detect_dead_code(db: &Database) -> anyhow::Result<()> {
+pub fn detect_dead_code(db: &Database, config: &RepoConfig) -> anyhow::Result<()> {
     let conn = db.conn();
 
     // Reset all dead flags
-    conn.execute("UPDATE symbols SET is_dead = 0", [])?;
+    conn.execute("UPDATE symbols SET is_dead = 0", [])
+        .context("Failed to reset dead flags")?;
 
     // Mark entry points (main functions, handlers, etc.)
     conn.execute(
@@ -47,6 +50,17 @@ pub fn detect_dead_code(db: &Database) -> anyhow::Result<()> {
                AND symbols.qualified_name LIKE c.name || '.%'
          )",
     )?;
+
+    // Mark user-configured entry points from ariadne.toml
+    if let Some(entry_points) = &config.entry_points {
+        let mut stmt = conn.prepare(
+            "UPDATE symbols SET is_entry_point = 1 WHERE name = ?1 OR qualified_name = ?1",
+        ).context("Failed to prepare entry_points statement")?;
+        for ep in entry_points {
+            stmt.execute(params![ep])
+                .with_context(|| format!("Failed to mark entry point '{ep}'"))?;
+        }
+    }
 
     // Collect all reachable symbol IDs via BFS from entry points and exported symbols
     let mut reachable = HashSet::new();

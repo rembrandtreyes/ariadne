@@ -239,7 +239,8 @@ async fn main() -> anyhow::Result<()> {
                 if !db_path.exists() {
                     anyhow::bail!("No index found. Run `ariadne index` first.");
                 }
-                ariadne::watch::watch_and_serve(root, db_path, debounce).await
+                let config = ariadne::config::repo::load(&root)?;
+                ariadne::watch::watch_and_serve(root, db_path, debounce, config).await
             } else {
                 commands::watch::cmd_watch(debounce)
             }

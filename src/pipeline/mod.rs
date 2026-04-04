@@ -34,7 +34,7 @@ pub fn run_full_pipeline(
 
     // Wrap all pipeline phases in a single transaction for performance and atomicity
     db.conn().execute_batch("BEGIN")?;
-    let result = run_pipeline_phases(db, root, &discovered);
+    let result = run_pipeline_phases(db, root, &discovered, config);
     match &result {
         Ok(_) => {
             db.conn().execute_batch("COMMIT")?;
@@ -67,6 +67,7 @@ fn run_pipeline_phases(
     db: &Database,
     root: &Path,
     discovered: &discovery::DiscoveryResult,
+    config: &RepoConfig,
 ) -> anyhow::Result<Vec<PhaseTiming>> {
     let mut timings = Vec::with_capacity(13);
 
@@ -87,7 +88,7 @@ fn run_pipeline_phases(
     timed!("import_resolution", import_resolution::resolve_imports(db))?;
     timed!("call_resolution", call_resolution::resolve_calls(db))?;
     timed!("heritage", heritage::build_heritage(db))?;
-    timed!("dead_code", dead_code::detect_dead_code(db))?;
+    timed!("dead_code", dead_code::detect_dead_code(db, config))?;
     timed!("flow", flow::trace_flows(db))?;
     timed!("coupling", coupling::analyze_coupling(db, root))?;
     timed!("search_index", search_index::build_search_index(db))?;

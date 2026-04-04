@@ -181,6 +181,8 @@ CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
 CREATE INDEX IF NOT EXISTS idx_imports_resolved ON imports(resolved_symbol_id);
 CREATE INDEX IF NOT EXISTS idx_calls_caller ON calls(caller_symbol_id);
 CREATE INDEX IF NOT EXISTS idx_calls_callee ON calls(callee_symbol_id);
+CREATE INDEX IF NOT EXISTS idx_calls_resolution ON calls(resolution);
+CREATE INDEX IF NOT EXISTS idx_calls_file ON calls(file_id);
 CREATE INDEX IF NOT EXISTS idx_heritage_child ON heritage(child_symbol_id);
 CREATE INDEX IF NOT EXISTS idx_heritage_parent ON heritage(parent_symbol_id);
 CREATE INDEX IF NOT EXISTS idx_coupling_a ON coupling(file_a_id);

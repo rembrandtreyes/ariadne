@@ -44,7 +44,12 @@ impl FileWatcher {
 }
 
 /// Watch for file changes and re-index them in the database.
-pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyhow::Result<()> {
+pub fn watch_and_reindex(
+    root: &Path,
+    db_path: &Path,
+    debounce_ms: u64,
+    config: &crate::config::RepoConfig,
+) -> anyhow::Result<()> {
     let db = crate::db::Database::open(db_path)?;
     let watcher = FileWatcher::new(root)?;
     let debounce = Duration::from_millis(debounce_ms);
@@ -98,7 +103,7 @@ pub fn watch_and_reindex(root: &Path, db_path: &Path, debounce_ms: u64) -> anyho
 
             // Re-run resolution phases and bump generation so MCP cache refreshes
             if has_changes {
-                if let Err(e) = incremental::run_post_reindex_resolution(&db) {
+                if let Err(e) = incremental::run_post_reindex_resolution(&db, config) {
                     tracing::error!(error = %e, "Post-reindex resolution error");
                 }
                 if let Err(e) = incremental::bump_generation(&db) {
@@ -119,12 +124,13 @@ pub async fn watch_and_serve(
     root: std::path::PathBuf,
     db_path: std::path::PathBuf,
     debounce_ms: u64,
+    config: crate::config::RepoConfig,
 ) -> anyhow::Result<()> {
     tracing::info!("Starting watch mode with MCP server");
 
     // Spawn the file watcher in a background thread
     std::thread::spawn(move || {
-        if let Err(e) = watch_and_reindex(&root, &db_path, debounce_ms) {
+        if let Err(e) = watch_and_reindex(&root, &db_path, debounce_ms, &config) {
             tracing::error!(error = %e, "Watch error");
         }
     });

@@ -552,12 +552,16 @@ impl LanguageServer for AriadneLsp {
             );
         }
 
-        // Also flag if the DB already marks it dead
+        // Surface dead code analysis results from the pipeline
         if sym.is_dead {
             if caller_count > 0 || sym.is_exported {
-                // Already warned above, but if DB says dead, note it
+                markdown.push_str(
+                    "\n\n⚠️ **Analysis: marked dead** — has callers or is exported, index may be stale",
+                );
             } else {
-                // The warning above already covers this case
+                markdown.push_str(
+                    "\n\n🔴 **Confirmed dead code** — no callers, not exported, flagged by analysis",
+                );
             }
         }
 
