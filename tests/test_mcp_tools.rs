@@ -56,7 +56,7 @@ async fn test_list_tools_returns_ten() {
         .list_tools(None, ctx)
         .await
         .expect("list_tools should succeed");
-    assert_eq!(result.tools.len(), 12, "Ariadne exposes 12 MCP tools");
+    assert_eq!(result.tools.len(), 15, "Ariadne exposes 15 MCP tools");
 }
 
 #[tokio::test]
@@ -162,4 +162,136 @@ async fn test_find_dead_code_empty_db() {
         result.is_error != Some(true),
         "find_dead_code should not error on empty DB"
     );
+}
+
+#[tokio::test]
+async fn test_diff_impact_empty_db() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "changed_files".to_string(),
+        serde_json::json!("src/main.rs,src/lib.rs"),
+    );
+
+    let req = tool_request("diff_impact", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "diff_impact should not error on empty DB"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+    assert!(
+        parsed.get("changed_files").is_some(),
+        "should have changed_files key"
+    );
+    assert!(
+        parsed.get("affected_tests").is_some(),
+        "should have affected_tests key"
+    );
+    assert!(
+        parsed.get("review_focus").is_some(),
+        "should have review_focus key"
+    );
+}
+
+#[tokio::test]
+async fn test_diff_impact_missing_param() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let req = tool_request("diff_impact", None);
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "diff_impact without changed_files should error"
+    );
+}
+
+#[tokio::test]
+async fn test_affected_tests_empty_db() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "changed_files".to_string(),
+        serde_json::json!("src/main.rs"),
+    );
+
+    let req = tool_request("affected_tests", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "affected_tests should not error on empty DB"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+    assert!(
+        parsed.get("affected_tests").is_some(),
+        "should have affected_tests key"
+    );
+    assert_eq!(
+        parsed.get("count").and_then(|v| v.as_u64()),
+        Some(0),
+        "empty DB should have zero affected tests"
+    );
+}
+
+#[tokio::test]
+async fn test_why_symbol_not_found() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "symbol".to_string(),
+        serde_json::json!("nonexistent_symbol_xyz"),
+    );
+
+    let req = tool_request("why_symbol", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "why_symbol for nonexistent symbol should error"
+    );
+}
+
+#[tokio::test]
+async fn test_tool_names_include_new_tools() {
+    let service = make_service();
+    let ctx = test_context();
+    let result = service
+        .list_tools(None, ctx)
+        .await
+        .expect("list_tools should succeed");
+
+    let names: Vec<String> = result.tools.iter().map(|t| t.name.to_string()).collect();
+    assert!(names.contains(&"diff_impact".to_string()), "should have diff_impact");
+    assert!(names.contains(&"affected_tests".to_string()), "should have affected_tests");
+    assert!(names.contains(&"why_symbol".to_string()), "should have why_symbol");
 }

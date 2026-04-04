@@ -85,6 +85,15 @@ impl CallGraph {
             .collect()
     }
 
+    /// Get all callee node indexes (outgoing neighbors) for a given node index.
+    pub fn callees_of(&self, node_idx: usize) -> Vec<usize> {
+        let idx = NodeIndex::new(node_idx);
+        self.graph
+            .neighbors_directed(idx, petgraph::Direction::Outgoing)
+            .map(|n| n.index())
+            .collect()
+    }
+
     /// Get a reference to the symbol node at the given raw index.
     pub fn get_symbol(&self, node_idx: usize) -> Option<&SymbolNode> {
         self.graph.node_weight(NodeIndex::new(node_idx))

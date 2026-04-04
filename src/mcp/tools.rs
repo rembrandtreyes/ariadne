@@ -41,7 +41,24 @@ fn no_param_tool(name: &'static str, desc: &'static str) -> Tool {
     Tool::new(name, desc, Arc::new(serde_json::Map::new()))
 }
 
-/// Return the 12 Ariadne MCP tools.
+/// Build a tool accepting a comma-separated list of file paths.
+fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
+    Tool::new(
+        name,
+        desc,
+        make_schema(
+            serde_json::json!({
+                "changed_files": {
+                    "type": "string",
+                    "description": "Comma-separated list of changed file paths (relative to project root)"
+                }
+            }),
+            vec!["changed_files"],
+        ),
+    )
+}
+
+/// Return the 15 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -107,6 +124,20 @@ fn all_tools() -> Vec<Tool> {
         no_param_tool(
             "get_boundaries",
             "Analyze module boundaries: symbol counts, internal vs external calls, cross-boundary call details, and approximate modularity scores.",
+        ),
+        files_param_tool(
+            "diff_impact",
+            "Unified change-impact analysis: given changed files, returns affected symbols, blast radius summary, affected tests, and review focus in one call.",
+        ),
+        files_param_tool(
+            "affected_tests",
+            "Find test functions that transitively depend on symbols in the changed files.",
+        ),
+        string_param_tool(
+            "why_symbol",
+            "Explain a symbol's role: metadata, callers, callees, blast radius, and coupled files.",
+            "symbol",
+            "Symbol name or qualified name",
         ),
     ]
 }
@@ -224,6 +255,9 @@ impl AriadneService {
             "get_complexity" => self.tool_get_complexity(),
             "detect_cycles" => self.tool_detect_cycles(),
             "get_boundaries" => self.tool_get_boundaries(),
+            "diff_impact" => self.tool_diff_impact(params),
+            "affected_tests" => self.tool_affected_tests(params),
+            "why_symbol" => self.tool_why_symbol(params),
             _ => CallToolResult::error(vec![Content::text(format!("Unknown tool: {}", name))]),
         }
     }
@@ -502,6 +536,263 @@ impl AriadneService {
             ))]),
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
+    }
+
+    /// Parse comma-separated changed_files parameter into a Vec of trimmed paths.
+    fn parse_changed_files(params: &CallToolRequestParam) -> Vec<String> {
+        get_string_param(params, "changed_files")
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    }
+
+    /// Resolve file paths to their symbol IDs from the database.
+    fn resolve_file_symbols(&self, paths: &[String]) -> Result<Vec<i64>, String> {
+        let mut symbol_ids = Vec::new();
+        for path in paths {
+            match self.with_db(|db| {
+                let file = query::find_file_by_path(db, path)?;
+                if let Some(f) = file {
+                    let syms = query::get_file_symbols(db, f.id)?;
+                    Ok::<Vec<i64>, anyhow::Error>(syms.iter().map(|s| s.id).collect())
+                } else {
+                    Ok(vec![])
+                }
+            }) {
+                Ok(Ok(ids)) => symbol_ids.extend(ids),
+                Ok(Err(e)) => return Err(format!("Error resolving {path}: {e}")),
+                Err(e) => return Err(format!("{e}")),
+            }
+        }
+        Ok(symbol_ids)
+    }
+
+    fn tool_diff_impact(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let paths = Self::parse_changed_files(params);
+        if paths.is_empty() {
+            return CallToolResult::error(vec![Content::text(
+                "changed_files parameter is required (comma-separated file paths)",
+            )]);
+        }
+
+        let symbol_ids = match self.resolve_file_symbols(&paths) {
+            Ok(ids) => ids,
+            Err(e) => return CallToolResult::error(vec![Content::text(e)]),
+        };
+
+        // Compute blast radius and find affected tests using the cached graph
+        match self.with_cached_graph(|graph| {
+            let mut affected_symbols = Vec::new();
+            let mut affected_tests = Vec::new();
+            let mut all_affected_files: std::collections::HashMap<String, usize> =
+                std::collections::HashMap::new();
+
+            for &sym_id in &symbol_ids {
+                if let Some(node_idx) = graph.find_node(sym_id as u64) {
+                    // BFS to find all upstream callers (blast radius)
+                    let mut visited = std::collections::HashSet::new();
+                    let mut queue = std::collections::VecDeque::new();
+                    queue.push_back((node_idx, 0usize));
+
+                    while let Some((idx, depth)) = queue.pop_front() {
+                        if depth > 5 || !visited.insert(idx) {
+                            continue;
+                        }
+                        if let Some(sym) = graph.get_symbol(idx) {
+                            if idx != node_idx {
+                                if sym.is_test {
+                                    affected_tests.push(serde_json::json!({
+                                        "name": sym.name,
+                                        "qualified_name": sym.qualified_name,
+                                        "file": sym.file_path,
+                                    }));
+                                } else {
+                                    affected_symbols.push(serde_json::json!({
+                                        "name": sym.name,
+                                        "qualified_name": sym.qualified_name,
+                                        "kind": sym.kind,
+                                        "file": sym.file_path,
+                                        "depth": depth,
+                                    }));
+                                }
+                                *all_affected_files.entry(sym.file_path.clone()).or_insert(0) += 1;
+                            }
+                        }
+                        for caller_idx in graph.callers_of(idx) {
+                            if !visited.contains(&caller_idx) {
+                                queue.push_back((caller_idx, depth + 1));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Deduplicate tests by name
+            affected_tests.sort_by(|a, b| {
+                a.get("name")
+                    .and_then(|v| v.as_str())
+                    .cmp(&b.get("name").and_then(|v| v.as_str()))
+            });
+            affected_tests.dedup_by(|a, b| {
+                a.get("name").and_then(|v| v.as_str())
+                    == b.get("name").and_then(|v| v.as_str())
+            });
+
+            // Build review focus: files ranked by how many affected symbols they contain
+            let mut review_focus: Vec<_> = all_affected_files.into_iter().collect();
+            review_focus.sort_by(|a, b| b.1.cmp(&a.1));
+            let review_focus: Vec<_> = review_focus
+                .into_iter()
+                .take(20)
+                .map(|(path, count)| serde_json::json!({"file": path, "affected_symbol_count": count}))
+                .collect();
+
+            Ok(serde_json::json!({
+                "changed_files": paths,
+                "directly_changed_symbols": symbol_ids.len(),
+                "affected_symbols": affected_symbols.len(),
+                "affected_symbol_details": &affected_symbols[..affected_symbols.len().min(50)],
+                "affected_tests": affected_tests,
+                "affected_test_count": affected_tests.len(),
+                "review_focus": review_focus,
+                "truncated": affected_symbols.len() > 50,
+            }))
+        }) {
+            Ok(result) => {
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("Diff impact failed: {e}"))]),
+        }
+    }
+
+    fn tool_affected_tests(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let paths = Self::parse_changed_files(params);
+        if paths.is_empty() {
+            return CallToolResult::error(vec![Content::text(
+                "changed_files parameter is required (comma-separated file paths)",
+            )]);
+        }
+
+        let symbol_ids = match self.resolve_file_symbols(&paths) {
+            Ok(ids) => ids,
+            Err(e) => return CallToolResult::error(vec![Content::text(e)]),
+        };
+
+        match self.with_cached_graph(|graph| {
+            let mut tests = Vec::new();
+            let mut visited_global = std::collections::HashSet::new();
+
+            for &sym_id in &symbol_ids {
+                if let Some(node_idx) = graph.find_node(sym_id as u64) {
+                    let mut visited = std::collections::HashSet::new();
+                    let mut queue = std::collections::VecDeque::new();
+                    queue.push_back(node_idx);
+
+                    while let Some(idx) = queue.pop_front() {
+                        if !visited.insert(idx) {
+                            continue;
+                        }
+                        if let Some(sym) = graph.get_symbol(idx) {
+                            if sym.is_test && visited_global.insert(sym.name.clone()) {
+                                tests.push(serde_json::json!({
+                                    "name": sym.name,
+                                    "qualified_name": sym.qualified_name,
+                                    "file": sym.file_path,
+                                }));
+                            }
+                        }
+                        for caller_idx in graph.callers_of(idx) {
+                            if !visited.contains(&caller_idx) {
+                                queue.push_back(caller_idx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(serde_json::json!({
+                "changed_files": paths,
+                "affected_tests": tests,
+                "count": tests.len(),
+            }))
+        }) {
+            Ok(result) => {
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Err(e) => {
+                CallToolResult::error(vec![Content::text(format!("Affected tests failed: {e}"))])
+            }
+        }
+    }
+
+    fn tool_why_symbol(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
+            Ok(Ok(Some(s))) => s,
+            Ok(Ok(None)) => {
+                return CallToolResult::error(vec![Content::text(format!(
+                    "Symbol not found: {symbol_name}"
+                ))])
+            }
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
+        };
+
+        // Get callers, callees, and file path from DB
+        let (file_path, callers, callees, couplings) = match self.with_db(|db| {
+            let fp = query::file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
+            let callers = query::get_dependents(db, sym.id).unwrap_or_default();
+            let callees = query::get_dependencies(db, sym.id).unwrap_or_default();
+            let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
+            (fp, callers, callees, couplings)
+        }) {
+            Ok(result) => result,
+            Err(e) => return CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        };
+
+        // Get blast radius from cached graph
+        let blast_radius = self
+            .with_cached_graph(|graph| {
+                Ok(crate::graph::blast_radius::analyze_blast_radius(
+                    graph,
+                    sym.id as u64,
+                    Some(5),
+                    false,
+                ))
+            })
+            .ok();
+
+        let result = serde_json::json!({
+            "symbol": {
+                "name": sym.name,
+                "qualified_name": sym.qualified_name,
+                "kind": sym.kind,
+                "file": file_path,
+                "line_start": sym.line_start,
+                "line_end": sym.line_end,
+                "is_dead": sym.is_dead,
+                "is_test": sym.is_test,
+            },
+            "callers": callers.iter().map(|d| serde_json::json!({
+                "name": d.name, "qualified_name": d.qualified_name, "kind": d.kind,
+            })).collect::<Vec<_>>(),
+            "callees": callees.iter().map(|d| serde_json::json!({
+                "name": d.name, "qualified_name": d.qualified_name, "kind": d.kind,
+            })).collect::<Vec<_>>(),
+            "caller_count": callers.len(),
+            "callee_count": callees.len(),
+            "blast_radius": blast_radius,
+            "coupled_files": couplings.iter().map(|c| serde_json::json!({
+                "path": c.coupled_path, "strength": c.strength, "co_changes": c.co_changes,
+            })).collect::<Vec<_>>(),
+        });
+
+        let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+        CallToolResult::success(vec![Content::text(json)])
     }
 }
 
