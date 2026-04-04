@@ -58,7 +58,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 15 Ariadne MCP tools.
+/// Return the 20 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -138,6 +138,30 @@ fn all_tools() -> Vec<Tool> {
             "Explain a symbol's role: metadata, callers, callees, blast radius, and coupled files.",
             "symbol",
             "Symbol name or qualified name",
+        ),
+        string_param_tool(
+            "get_heritage",
+            "Get inheritance hierarchy for a symbol: parent classes/interfaces and child subclasses.",
+            "symbol",
+            "Symbol name or qualified name",
+        ),
+        string_param_tool(
+            "get_execution_flows",
+            "Trace execution flows passing through a symbol — ordered call paths from entry points.",
+            "symbol",
+            "Symbol name or qualified name",
+        ),
+        no_param_tool(
+            "get_coupling",
+            "Get the top coupled file pairs by git co-change strength, revealing implicit dependencies.",
+        ),
+        no_param_tool(
+            "get_communities",
+            "List detected module communities with symbol counts and modularity scores.",
+        ),
+        no_param_tool(
+            "get_api_endpoints",
+            "List all detected API endpoints with HTTP method, path, handler symbol, and file location.",
         ),
     ]
 }
@@ -258,6 +282,11 @@ impl AriadneService {
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),
             "why_symbol" => self.tool_why_symbol(params),
+            "get_heritage" => self.tool_get_heritage(params),
+            "get_execution_flows" => self.tool_get_execution_flows(params),
+            "get_coupling" => self.tool_get_coupling(),
+            "get_communities" => self.tool_get_communities(),
+            "get_api_endpoints" => self.tool_get_api_endpoints(),
             _ => CallToolResult::error(vec![Content::text(format!("Unknown tool: {}", name))]),
         }
     }
@@ -793,6 +822,201 @@ impl AriadneService {
 
         let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
         CallToolResult::success(vec![Content::text(json)])
+    }
+
+    fn tool_get_heritage(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
+            Ok(Ok(Some(s))) => s,
+            Ok(Ok(None)) => {
+                return CallToolResult::error(vec![Content::text(format!(
+                    "Symbol not found: {symbol_name}"
+                ))])
+            }
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
+        };
+        match self.with_db(|db| query::get_heritage(db, sym.id)) {
+            Ok(Ok(rows)) => {
+                let parents: Vec<_> = rows
+                    .iter()
+                    .filter(|r| r.child_symbol_id == sym.id)
+                    .map(|r| {
+                        serde_json::json!({
+                            "parent_name": r.parent_name,
+                            "parent_qualified_name": r.parent_qualified_name,
+                            "kind": r.kind,
+                            "resolved": r.parent_symbol_id.is_some(),
+                        })
+                    })
+                    .collect();
+                let children: Vec<_> = rows
+                    .iter()
+                    .filter(|r| r.parent_symbol_id == Some(sym.id))
+                    .map(|r| {
+                        serde_json::json!({
+                            "child_name": r.child_name,
+                            "kind": r.kind,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "symbol": sym.name,
+                    "qualified_name": sym.qualified_name,
+                    "parents": parents,
+                    "children": children,
+                    "parent_count": parents.len(),
+                    "child_count": children.len(),
+                });
+                let json =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Heritage query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_execution_flows(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
+            Ok(Ok(Some(s))) => s,
+            Ok(Ok(None)) => {
+                return CallToolResult::error(vec![Content::text(format!(
+                    "Symbol not found: {symbol_name}"
+                ))])
+            }
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
+        };
+        match self.with_db(|db| query::get_execution_flows(db, sym.id)) {
+            Ok(Ok(steps)) => {
+                // Group steps by flow name
+                let mut flows: std::collections::HashMap<String, Vec<serde_json::Value>> =
+                    std::collections::HashMap::new();
+                for step in &steps {
+                    flows
+                        .entry(step.flow_name.clone())
+                        .or_default()
+                        .push(serde_json::json!({
+                            "step": step.step_order,
+                            "depth": step.depth,
+                            "symbol": step.symbol_name,
+                            "qualified_name": step.qualified_name,
+                            "file": step.file_path,
+                            "kind": step.kind,
+                        }));
+                }
+                let result = serde_json::json!({
+                    "symbol": sym.name,
+                    "flows": flows,
+                    "flow_count": flows.len(),
+                    "total_steps": steps.len(),
+                });
+                let json =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Flow query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_coupling(&self) -> CallToolResult {
+        match self.with_db(|db| query::get_top_couplings(db, 50)) {
+            Ok(Ok(rows)) => {
+                let pairs: Vec<_> = rows
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "files": r.coupled_path,
+                            "co_changes": r.co_changes,
+                            "strength": r.strength,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "coupled_pairs": pairs,
+                    "count": pairs.len(),
+                });
+                let json =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Coupling query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_communities(&self) -> CallToolResult {
+        match self.with_db(query::get_communities) {
+            Ok(Ok(rows)) => {
+                let communities: Vec<_> = rows
+                    .iter()
+                    .map(|c| {
+                        serde_json::json!({
+                            "id": c.id,
+                            "name": c.name,
+                            "symbol_count": c.symbol_count,
+                            "internal_edges": c.internal_edges,
+                            "external_edges": c.external_edges,
+                            "modularity": c.modularity,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "communities": communities,
+                    "count": communities.len(),
+                });
+                let json =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
+                "Community query failed: {e}"
+            ))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_api_endpoints(&self) -> CallToolResult {
+        match self.with_db(query::get_api_endpoints) {
+            Ok(Ok(rows)) => {
+                let endpoints: Vec<_> = rows
+                    .iter()
+                    .map(|e| {
+                        serde_json::json!({
+                            "method": e.method,
+                            "path": e.path_pattern,
+                            "protocol": e.protocol,
+                            "handler": e.handler_name,
+                            "handler_qualified_name": e.handler_qualified_name,
+                            "file": e.file_path,
+                            "line": e.line,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "endpoints": endpoints,
+                    "count": endpoints.len(),
+                });
+                let json =
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
+                "API endpoints query failed: {e}"
+            ))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
     }
 }
 

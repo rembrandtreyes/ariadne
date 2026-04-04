@@ -56,7 +56,7 @@ async fn test_list_tools_returns_ten() {
         .list_tools(None, ctx)
         .await
         .expect("list_tools should succeed");
-    assert_eq!(result.tools.len(), 15, "Ariadne exposes 15 MCP tools");
+    assert_eq!(result.tools.len(), 20, "Ariadne exposes 20 MCP tools");
 }
 
 #[tokio::test]
@@ -294,4 +294,148 @@ async fn test_tool_names_include_new_tools() {
     assert!(names.contains(&"diff_impact".to_string()), "should have diff_impact");
     assert!(names.contains(&"affected_tests".to_string()), "should have affected_tests");
     assert!(names.contains(&"why_symbol".to_string()), "should have why_symbol");
+    assert!(names.contains(&"get_heritage".to_string()), "should have get_heritage");
+    assert!(names.contains(&"get_execution_flows".to_string()), "should have get_execution_flows");
+    assert!(names.contains(&"get_coupling".to_string()), "should have get_coupling");
+    assert!(names.contains(&"get_communities".to_string()), "should have get_communities");
+    assert!(names.contains(&"get_api_endpoints".to_string()), "should have get_api_endpoints");
+}
+
+#[tokio::test]
+async fn test_get_heritage_symbol_not_found() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "symbol".to_string(),
+        serde_json::json!("nonexistent_class_xyz"),
+    );
+
+    let req = tool_request("get_heritage", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "get_heritage for nonexistent symbol should error"
+    );
+}
+
+#[tokio::test]
+async fn test_get_execution_flows_symbol_not_found() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let mut args = serde_json::Map::new();
+    args.insert(
+        "symbol".to_string(),
+        serde_json::json!("nonexistent_func_xyz"),
+    );
+
+    let req = tool_request("get_execution_flows", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "get_execution_flows for nonexistent symbol should error"
+    );
+}
+
+#[tokio::test]
+async fn test_get_coupling_empty_db() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let req = tool_request("get_coupling", None);
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "get_coupling should not error on empty DB"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+    assert!(
+        parsed.get("coupled_pairs").is_some(),
+        "should have 'coupled_pairs' key"
+    );
+    assert_eq!(
+        parsed.get("count").and_then(|v| v.as_u64()),
+        Some(0),
+        "empty DB should have zero couplings"
+    );
+}
+
+#[tokio::test]
+async fn test_get_communities_empty_db() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let req = tool_request("get_communities", None);
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "get_communities should not error on empty DB"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+    assert!(
+        parsed.get("communities").is_some(),
+        "should have 'communities' key"
+    );
+    assert_eq!(
+        parsed.get("count").and_then(|v| v.as_u64()),
+        Some(0),
+        "empty DB should have zero communities"
+    );
+}
+
+#[tokio::test]
+async fn test_get_api_endpoints_empty_db() {
+    let service = make_service();
+    let ctx = test_context();
+
+    let req = tool_request("get_api_endpoints", None);
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "get_api_endpoints should not error on empty DB"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+    assert!(
+        parsed.get("endpoints").is_some(),
+        "should have 'endpoints' key"
+    );
+    assert_eq!(
+        parsed.get("count").and_then(|v| v.as_u64()),
+        Some(0),
+        "empty DB should have zero endpoints"
+    );
 }
