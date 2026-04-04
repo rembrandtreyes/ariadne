@@ -17,6 +17,7 @@
 //! - [`search`] — Full-text and fuzzy symbol search
 
 pub mod analysis;
+pub mod commands;
 pub mod config;
 pub mod dashboard;
 pub mod db;

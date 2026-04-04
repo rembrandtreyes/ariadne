@@ -41,27 +41,6 @@ pub struct Community {
     pub cohesion: f64,
 }
 
-/// Result of an architectural rule check.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct RuleCheckReport {
-    pub violations: Vec<RuleViolation>,
-    pub rules_checked: usize,
-    pub passed: usize,
-    pub failed: usize,
-}
-
-/// A single architectural rule violation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RuleViolation {
-    pub rule_name: String,
-    pub from_symbol: String,
-    pub to_symbol: String,
-    pub file: String,
-    pub line: u32,
-    pub severity: String,
-    pub message: String,
-}
-
 /// Analyze the graph for dead code (symbols with no incoming edges
 /// that are not entry points).
 pub fn find_dead_code(
@@ -163,38 +142,5 @@ pub fn detect_communities(graph: &DependencyGraph) -> CommunityReport {
     CommunityReport {
         communities,
         modularity_score: 0.0,
-    }
-}
-
-/// Check architectural rules against the dependency graph.
-pub fn check_rules(
-    _graph: &DependencyGraph,
-    _rules: &[crate::config::ArchRule],
-) -> RuleCheckReport {
-    RuleCheckReport::default()
-}
-
-/// Find all tests affected by changes to the given symbols.
-pub fn find_affected_tests(_graph: &DependencyGraph, _changed_symbols: &[String]) -> Vec<String> {
-    Vec::new()
-}
-
-/// Compute codebase statistics from the graph.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct CodebaseStats {
-    pub total_files: usize,
-    pub total_symbols: usize,
-    pub total_edges: usize,
-    pub languages: HashMap<String, usize>,
-    pub symbol_kinds: HashMap<String, usize>,
-    pub edge_kinds: HashMap<String, usize>,
-}
-
-pub fn compute_stats(graph: &DependencyGraph) -> CodebaseStats {
-    let inner = graph.inner();
-    CodebaseStats {
-        total_symbols: inner.node_count(),
-        total_edges: inner.edge_count(),
-        ..Default::default()
     }
 }
