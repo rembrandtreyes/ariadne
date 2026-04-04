@@ -239,6 +239,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
     let conn = db.conn();
     let unresolved = crate::db::RESOLUTION_UNRESOLVED;
 
+    let mut pass_start = std::time::Instant::now();
+
     // ------------------------------------------------------------------
     // Pass 0: Import-guided resolution (confidence 0.98)
     // ------------------------------------------------------------------
@@ -262,6 +264,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                  AND i.resolved_file_id IS NOT NULL
            )",
     )?;
+    tracing::info!("call_resolution pass_0_import: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 1: Exact match on name within same file (confidence 0.95)
@@ -280,6 +284,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                  AND s.file_id = calls.file_id
            )",
     )?;
+    tracing::info!("call_resolution pass_1_same_file: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 2: Dotted expression resolution (confidence 0.85-0.88)
@@ -361,6 +367,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
+    tracing::info!("call_resolution pass_2_dotted: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 3: Exact match on name within same service (confidence 0.75)
@@ -384,6 +392,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                      AND f.service_id = cf.service_id
                )",
     ))?;
+    tracing::info!("call_resolution pass_3_same_service: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 4: Global exact match (confidence 0.50)
@@ -401,6 +411,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                    WHERE s.name = calls.callee_name
                )",
     ))?;
+    tracing::info!("call_resolution pass_4_global: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 5: External import categorization (confidence 0.90)
@@ -455,6 +467,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
+    tracing::info!("call_resolution pass_5_external: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 6: Built-in categorization (confidence 1.00)
@@ -480,6 +494,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
+    tracing::info!("call_resolution pass_6_builtin: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 7: Method call categorization (confidence 0.30)
@@ -493,6 +509,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
              WHERE callee_symbol_id IS NULL AND resolution = '{unresolved}'
                AND callee_name LIKE '%.%'",
     ))?;
+    tracing::info!("call_resolution pass_7_method_call: {}ms", pass_start.elapsed().as_millis());
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 8: React state setter pattern (confidence 0.40)
@@ -542,6 +560,7 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
+    tracing::info!("call_resolution pass_8_local_patterns: {}ms", pass_start.elapsed().as_millis());
 
     // ------------------------------------------------------------------
     // Report resolution statistics

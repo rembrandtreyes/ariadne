@@ -35,15 +35,15 @@ pub fn run_full_pipeline(
     // Wrap all pipeline phases in a single transaction for performance and atomicity
     db.conn().execute_batch("BEGIN")?;
     let result = run_pipeline_phases(db, root, &discovered);
-    match result {
-        Ok(()) => {
+    match &result {
+        Ok(_) => {
             db.conn().execute_batch("COMMIT")?;
         }
-        Err(e) => {
+        Err(_) => {
             let _ = db.conn().execute_batch("ROLLBACK");
-            return Err(e);
         }
     }
+    let phase_durations = result?;
 
     let sym_count = crate::db::query::count_symbols(db).unwrap_or(0);
     let call_count = crate::db::query::count_calls(db).unwrap_or(0);
@@ -58,29 +58,52 @@ pub fn run_full_pipeline(
         dead_functions: dead_count as usize,
         resolution_rate: rate,
         duration_ms: start.elapsed().as_millis() as u64,
+        phase_durations,
     })
 }
 
-/// Run all pipeline phases. Separated to allow transactional wrapping.
+/// Run all pipeline phases with per-phase timing. Separated to allow transactional wrapping.
 fn run_pipeline_phases(
     db: &Database,
     root: &Path,
     discovered: &discovery::DiscoveryResult,
-) -> anyhow::Result<()> {
-    structure::create_structure(db, discovered, root)?;
-    parsing::parse_all(db, discovered)?;
-    import_resolution::resolve_imports(db)?;
-    call_resolution::resolve_calls(db)?;
-    heritage::build_heritage(db)?;
-    dead_code::detect_dead_code(db)?;
-    flow::trace_flows(db)?;
-    coupling::analyze_coupling(db, root)?;
-    search_index::build_search_index(db)?;
-    api_resolution::resolve_api_boundaries(db)?;
-    service_topology::build_topology(db)?;
-    community::detect_communities(db)?;
-    schema_resolution::resolve_schemas(db, root)?;
-    Ok(())
+) -> anyhow::Result<Vec<PhaseTiming>> {
+    let mut timings = Vec::with_capacity(13);
+
+    macro_rules! timed {
+        ($name:expr, $body:expr) => {{
+            let t = Instant::now();
+            let result = $body;
+            timings.push(PhaseTiming {
+                name: $name,
+                duration_ms: t.elapsed().as_millis() as u64,
+            });
+            result
+        }};
+    }
+
+    timed!("structure", structure::create_structure(db, discovered, root))?;
+    timed!("parsing", parsing::parse_all(db, discovered))?;
+    timed!("import_resolution", import_resolution::resolve_imports(db))?;
+    timed!("call_resolution", call_resolution::resolve_calls(db))?;
+    timed!("heritage", heritage::build_heritage(db))?;
+    timed!("dead_code", dead_code::detect_dead_code(db))?;
+    timed!("flow", flow::trace_flows(db))?;
+    timed!("coupling", coupling::analyze_coupling(db, root))?;
+    timed!("search_index", search_index::build_search_index(db))?;
+    timed!("api_resolution", api_resolution::resolve_api_boundaries(db))?;
+    timed!("service_topology", service_topology::build_topology(db))?;
+    timed!("community", community::detect_communities(db))?;
+    timed!("schema_resolution", schema_resolution::resolve_schemas(db, root))?;
+
+    Ok(timings)
+}
+
+/// Timing for a single pipeline phase.
+#[derive(Debug, Clone)]
+pub struct PhaseTiming {
+    pub name: &'static str,
+    pub duration_ms: u64,
 }
 
 /// Represents the result of running the full indexing pipeline.
@@ -92,4 +115,5 @@ pub struct PipelineStats {
     pub dead_functions: usize,
     pub resolution_rate: f64,
     pub duration_ms: u64,
+    pub phase_durations: Vec<PhaseTiming>,
 }
