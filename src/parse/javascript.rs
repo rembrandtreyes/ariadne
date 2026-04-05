@@ -155,6 +155,12 @@ impl JavaScriptParser {
                     Self::extract_export(child, source, result, parent_name);
                 }
 
+                // ── CommonJS: module.exports = { ... } ──────────────────
+                "expression_statement" => {
+                    Self::extract_commonjs_exports(child, source, result);
+                    Self::extract_symbols(child, source, result, parent_name);
+                }
+
                 // ── Default: recurse ────────────────────────────────────
                 _ => {
                     Self::extract_symbols(child, source, result, parent_name);
@@ -421,6 +427,62 @@ impl JavaScriptParser {
             }
         }
         Self::extract_symbols(jsx_node, source, result, parent_name);
+    }
+
+    /// Detect CommonJS `module.exports = { name1, name2 }` and mark symbols as exported.
+    fn extract_commonjs_exports(
+        expr_node: tree_sitter::Node,
+        source: &str,
+        result: &mut ParseResult,
+    ) {
+        // Look for assignment_expression where left is module.exports
+        let mut cursor = expr_node.walk();
+        for child in expr_node.children(&mut cursor) {
+            if child.kind() == "assignment_expression" {
+                let left = match child.child_by_field_name("left") {
+                    Some(l) => l,
+                    None => continue,
+                };
+                let left_text = left.utf8_text(source.as_bytes()).unwrap_or_default();
+                if left_text != "module.exports" {
+                    continue;
+                }
+                let right = match child.child_by_field_name("right") {
+                    Some(r) => r,
+                    None => continue,
+                };
+                if right.kind() == "object" {
+                    // module.exports = { name1, name2, key: value }
+                    let mut obj_cursor = right.walk();
+                    for prop in right.children(&mut obj_cursor) {
+                        let export_name = match prop.kind() {
+                            // Shorthand: module.exports = { getUsers }
+                            "shorthand_property_identifier"
+                            | "shorthand_property_identifier_pattern" => prop
+                                .utf8_text(source.as_bytes())
+                                .unwrap_or_default()
+                                .to_string(),
+                            // Key-value: module.exports = { getUsers: getUsers }
+                            "pair" => {
+                                if let Some(key) = prop.child_by_field_name("key") {
+                                    key.utf8_text(source.as_bytes())
+                                        .unwrap_or_default()
+                                        .to_string()
+                                } else {
+                                    continue;
+                                }
+                            }
+                            _ => continue,
+                        };
+                        for sym in result.symbols.iter_mut() {
+                            if sym.name == export_name {
+                                sym.is_exported = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Handle export statements.

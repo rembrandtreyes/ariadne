@@ -127,6 +127,7 @@ fn test_resolve_calls_resolution_field_set() {
         "dotted_same_file",
         "dotted_import_guided",
         "dotted_same_service",
+        "import_file_affinity",
         "same_service",
         "global",
         "external",

@@ -53,9 +53,9 @@ pub fn detect_dead_code(db: &Database, config: &RepoConfig) -> anyhow::Result<()
 
     // Mark user-configured entry points from ariadne.toml
     if let Some(entry_points) = &config.entry_points {
-        let mut stmt = conn.prepare(
-            "UPDATE symbols SET is_entry_point = 1 WHERE name = ?1 OR qualified_name = ?1",
-        ).context("Failed to prepare entry_points statement")?;
+        let mut stmt = conn
+            .prepare("UPDATE symbols SET is_entry_point = 1 WHERE name = ?1 OR qualified_name = ?1")
+            .context("Failed to prepare entry_points statement")?;
         for ep in entry_points {
             stmt.execute(params![ep])
                 .with_context(|| format!("Failed to mark entry point '{ep}'"))?;

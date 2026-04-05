@@ -14,6 +14,7 @@ pub struct DiscoveredFile {
 pub struct DiscoveryResult {
     pub files: Vec<DiscoveredFile>,
     pub languages: Vec<Language>,
+    pub frameworks: Vec<String>,
 }
 
 const EXCLUDED_DIRS: &[&str] = &[
@@ -76,8 +77,17 @@ pub fn discover(root: &Path, config: &RepoConfig) -> anyhow::Result<DiscoveryRes
         }
     }
 
+    // Detect frameworks from config file markers + package manifests
+    let mut frameworks = crate::config::autodetect::detect(root).frameworks;
+    for f in super::framework_entry_points::detect_frameworks_from_manifest(root) {
+        if !frameworks.contains(&f) {
+            frameworks.push(f);
+        }
+    }
+
     Ok(DiscoveryResult {
         files,
         languages: languages.into_iter().collect(),
+        frameworks,
     })
 }

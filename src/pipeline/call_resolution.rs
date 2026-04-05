@@ -227,14 +227,16 @@ fn is_builtin(name: &str) -> bool {
 /// Phase 5: Resolve call sites to their target symbols.
 ///
 /// Multi-pass approach:
-///   Pass 0 - Import-guided resolution       (confidence 0.98)
-///   Pass 1 - Same-file exact match           (confidence 0.95)
-///   Pass 2 - Dotted expression resolution    (confidence 0.85-0.88)
-///   Pass 3 - Same-service exact match        (confidence 0.75)
-///   Pass 4 - Global exact match              (confidence 0.50)
-///   Pass 5 - External import categorization  (confidence 0.90)
-///   Pass 6 - Built-in categorization         (confidence 1.00)
-///   Pass 7 - Local method call categorization (confidence 0.30)
+///   Pass 0 - Import-guided resolution        (confidence 0.98)
+///   Pass 1 - Same-file exact match            (confidence 0.95)
+///   Pass 2 - Dotted expression resolution     (confidence 0.85-0.88)
+///   Pass 3 - Import-file affinity             (confidence 0.80)
+///   Pass 4 - Same-service exact match         (confidence 0.75)
+///   Pass 5 - Global exact match               (confidence 0.50)
+///   Pass 6 - External import categorization   (confidence 0.90)
+///   Pass 7 - Built-in categorization          (confidence 1.00)
+///   Pass 8 - Local method call categorization (confidence 0.30)
+///   Pass 9 - React/callback pattern categorization (confidence 0.40)
 pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
     let conn = db.conn();
     let unresolved = crate::db::RESOLUTION_UNRESOLVED;
@@ -264,7 +266,10 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                  AND i.resolved_file_id IS NOT NULL
            )",
     )?;
-    tracing::info!("call_resolution pass_0_import: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_0_import: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
@@ -284,7 +289,10 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                  AND s.file_id = calls.file_id
            )",
     )?;
-    tracing::info!("call_resolution pass_1_same_file: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_1_same_file: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
@@ -367,11 +375,53 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
-    tracing::info!("call_resolution pass_2_dotted: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_2_dotted: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 3: Exact match on name within same service (confidence 0.75)
+    // Pass 3: Import-file affinity (confidence 0.80)
+    //
+    // If the calling file imports ANY symbol from file X, and file X
+    // contains a symbol matching the callee_name, resolve to that
+    // symbol. This catches the common pattern where a file imports one
+    // thing from a module and calls other exports from the same module.
+    // ------------------------------------------------------------------
+    conn.execute_batch(&format!(
+        "UPDATE calls SET callee_symbol_id = (
+                SELECT s.id FROM symbols s
+                WHERE s.name = calls.callee_name
+                  AND s.file_id IN (
+                      SELECT DISTINCT i.resolved_file_id FROM imports i
+                      WHERE i.file_id = calls.file_id
+                        AND i.resolved_file_id IS NOT NULL
+                  )
+                ORDER BY s.is_exported DESC
+                LIMIT 1
+             ), confidence = 0.80, resolution = 'import_file_affinity'
+             WHERE callee_symbol_id IS NULL
+               AND resolution = '{unresolved}'
+               AND EXISTS (
+                   SELECT 1 FROM symbols s
+                   WHERE s.name = calls.callee_name
+                     AND s.file_id IN (
+                         SELECT DISTINCT i.resolved_file_id FROM imports i
+                         WHERE i.file_id = calls.file_id
+                           AND i.resolved_file_id IS NOT NULL
+                     )
+               )",
+    ))?;
+    tracing::info!(
+        "call_resolution pass_3_import_file_affinity: {}ms",
+        pass_start.elapsed().as_millis()
+    );
+    pass_start = std::time::Instant::now();
+
+    // ------------------------------------------------------------------
+    // Pass 4: Exact match on name within same service (confidence 0.75)
+    // Prefers exported symbols when multiple candidates match.
     // ------------------------------------------------------------------
     conn.execute_batch(&format!(
         "UPDATE calls SET callee_symbol_id = (
@@ -380,6 +430,7 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                 JOIN files cf ON calls.file_id = cf.id
                 WHERE s.name = calls.callee_name
                   AND f.service_id = cf.service_id
+                ORDER BY s.is_exported DESC
                 LIMIT 1
              ), confidence = 0.75, resolution = 'same_service'
              WHERE callee_symbol_id IS NULL
@@ -392,16 +443,21 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                      AND f.service_id = cf.service_id
                )",
     ))?;
-    tracing::info!("call_resolution pass_3_same_service: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_4_same_service: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 4: Global exact match (confidence 0.50)
+    // Pass 5: Global exact match (confidence 0.50)
+    // Prefers exported symbols when multiple candidates match.
     // ------------------------------------------------------------------
     conn.execute_batch(&format!(
         "UPDATE calls SET callee_symbol_id = (
                 SELECT s.id FROM symbols s
                 WHERE s.name = calls.callee_name
+                ORDER BY s.is_exported DESC
                 LIMIT 1
              ), confidence = 0.5, resolution = 'global'
              WHERE callee_symbol_id IS NULL
@@ -411,11 +467,14 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                    WHERE s.name = calls.callee_name
                )",
     ))?;
-    tracing::info!("call_resolution pass_4_global: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_5_global: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 5: External import categorization (confidence 0.90)
+    // Pass 6: External import categorization (confidence 0.90)
     //
     // Mark calls that match an external import as 'external' — the call
     // is to a known external package, just not to a local symbol.
@@ -467,11 +526,14 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
-    tracing::info!("call_resolution pass_5_external: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_6_external: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 6: Built-in categorization (confidence 1.00)
+    // Pass 7: Built-in categorization (confidence 1.00)
     //
     // Mark remaining calls to known JS/Node built-ins.
     // ------------------------------------------------------------------
@@ -494,11 +556,14 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
-    tracing::info!("call_resolution pass_6_builtin: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_7_builtin: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 7: Method call categorization (confidence 0.30)
+    // Pass 8: Method call categorization (confidence 0.30)
     //
     // Mark ALL remaining dotted calls as method_call. Any dotted call
     // that survived passes 0-6 is a method call on a variable/object
@@ -509,11 +574,14 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
              WHERE callee_symbol_id IS NULL AND resolution = '{unresolved}'
                AND callee_name LIKE '%.%'",
     ))?;
-    tracing::info!("call_resolution pass_7_method_call: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_8_method_call: {}ms",
+        pass_start.elapsed().as_millis()
+    );
     pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
-    // Pass 8: React state setter pattern (confidence 0.40)
+    // Pass 9: React state setter pattern (confidence 0.40)
     //
     // Mark set[A-Z]* patterns as 'local' — these are React useState
     // destructured setters that will never match a declared symbol.
@@ -560,7 +628,10 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
         }
     }
-    tracing::info!("call_resolution pass_8_local_patterns: {}ms", pass_start.elapsed().as_millis());
+    tracing::info!(
+        "call_resolution pass_9_local_patterns: {}ms",
+        pass_start.elapsed().as_millis()
+    );
 
     // ------------------------------------------------------------------
     // Report resolution statistics

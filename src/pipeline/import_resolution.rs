@@ -341,7 +341,10 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
 
     for (import_id, module_path, imported_name, file_id, importing_file_path) in &imports {
         // Dispatch to language-appropriate resolution
-        let lang = file_languages.get(file_id).map(|s| s.as_str()).unwrap_or("");
+        let lang = file_languages
+            .get(file_id)
+            .map(|s| s.as_str())
+            .unwrap_or("");
         let resolved_file = if lang == "rust" {
             resolve_rust_module_path(module_path, importing_file_path, &file_paths)
         } else {

@@ -5,6 +5,7 @@ pub mod coupling;
 pub mod dead_code;
 pub mod discovery;
 pub mod flow;
+pub mod framework_entry_points;
 pub mod heritage;
 pub mod import_resolution;
 pub mod parsing;
@@ -83,11 +84,18 @@ fn run_pipeline_phases(
         }};
     }
 
-    timed!("structure", structure::create_structure(db, discovered, root))?;
+    timed!(
+        "structure",
+        structure::create_structure(db, discovered, root)
+    )?;
     timed!("parsing", parsing::parse_all(db, discovered))?;
     timed!("import_resolution", import_resolution::resolve_imports(db))?;
     timed!("call_resolution", call_resolution::resolve_calls(db))?;
     timed!("heritage", heritage::build_heritage(db))?;
+    timed!(
+        "framework_entry_points",
+        framework_entry_points::apply_framework_rules(db, &discovered.frameworks, root)
+    )?;
     timed!("dead_code", dead_code::detect_dead_code(db, config))?;
     timed!("flow", flow::trace_flows(db))?;
     timed!("coupling", coupling::analyze_coupling(db, root))?;
@@ -95,7 +103,10 @@ fn run_pipeline_phases(
     timed!("api_resolution", api_resolution::resolve_api_boundaries(db))?;
     timed!("service_topology", service_topology::build_topology(db))?;
     timed!("community", community::detect_communities(db))?;
-    timed!("schema_resolution", schema_resolution::resolve_schemas(db, root))?;
+    timed!(
+        "schema_resolution",
+        schema_resolution::resolve_schemas(db, root)
+    )?;
 
     Ok(timings)
 }
