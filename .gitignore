@@ -41,6 +41,9 @@ Desktop.ini
 .env.*
 !.env.example
 
+# ProductForge knowledge
+.forge/
+
 # Ariadne local data
 .ariadne/
 .ariadne.db
