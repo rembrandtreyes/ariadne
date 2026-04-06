@@ -159,7 +159,10 @@ fn test_dead_code_custom_entry_points_respected() {
     run_full_pipeline(&db, fixture, &custom_config).unwrap();
 
     let dead_after = get_dead_symbols(&db).unwrap();
-    let still_dead: Vec<_> = dead_after.iter().filter(|s| s.name == target_name).collect();
+    let still_dead: Vec<_> = dead_after
+        .iter()
+        .filter(|s| s.name == target_name)
+        .collect();
     assert!(
         still_dead.is_empty(),
         "symbol '{}' was listed in entry_points but is still marked dead",

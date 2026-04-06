@@ -4,10 +4,7 @@ use rusqlite::params;
 
 /// Create a test DB and insert symbols with resolved call edges.
 /// Returns (db, symbol_ids) where symbol_ids maps indices to DB IDs.
-fn setup_community_db(
-    symbol_count: usize,
-    edges: &[(usize, usize)],
-) -> (Database, Vec<i64>) {
+fn setup_community_db(symbol_count: usize, edges: &[(usize, usize)]) -> (Database, Vec<i64>) {
     let db = Database::open_in_memory().expect("in-memory db");
     let svc = write::insert_service(&db, "test-svc", "/tmp/test", "monolith", "python")
         .expect("insert service");

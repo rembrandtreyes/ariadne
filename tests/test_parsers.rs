@@ -93,7 +93,10 @@ fn test_rust_parser() {
     let has_struct = result.symbols.iter().any(|s| s.kind == SymbolKind::Class);
     assert!(has_struct, "should find structs (mapped to Class)");
     // Function-to-function calls should be detected
-    assert!(!result.calls.is_empty(), "should find calls inside function bodies");
+    assert!(
+        !result.calls.is_empty(),
+        "should find calls inside function bodies"
+    );
     // welcome() calls greet()
     let calls_greet = result
         .calls

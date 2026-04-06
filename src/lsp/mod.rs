@@ -302,15 +302,24 @@ impl LanguageServer for AriadneLsp {
 
         // Batch query: fetch caller counts for all symbols in one query instead of N+1
         let caller_counts: HashMap<i64, i64> = if !symbols.is_empty() {
-            let placeholders: Vec<String> = symbols.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+            let placeholders: Vec<String> = symbols
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("?{}", i + 1))
+                .collect();
             let sql = format!(
                 "SELECT callee_symbol_id, COUNT(*) FROM calls WHERE callee_symbol_id IN ({}) GROUP BY callee_symbol_id",
                 placeholders.join(", ")
             );
             match conn.prepare(&sql) {
                 Ok(mut count_stmt) => {
-                    let ids: Vec<&dyn rusqlite::types::ToSql> = symbols.iter().map(|(id, ..)| id as &dyn rusqlite::types::ToSql).collect();
-                    match count_stmt.query_map(ids.as_slice(), |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))) {
+                    let ids: Vec<&dyn rusqlite::types::ToSql> = symbols
+                        .iter()
+                        .map(|(id, ..)| id as &dyn rusqlite::types::ToSql)
+                        .collect();
+                    match count_stmt.query_map(ids.as_slice(), |row| {
+                        Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+                    }) {
                         Ok(rows) => rows.filter_map(|r| r.ok()).collect(),
                         Err(_) => HashMap::new(),
                     }

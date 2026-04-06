@@ -6,8 +6,14 @@ use rusqlite::params;
 fn setup_api_db() -> (Database, i64, i64) {
     let db = Database::open_in_memory().expect("in-memory db");
 
-    let svc_a = write::insert_service(&db, "frontend", "/tmp/frontend", "microservice", "typescript")
-        .expect("insert service A");
+    let svc_a = write::insert_service(
+        &db,
+        "frontend",
+        "/tmp/frontend",
+        "microservice",
+        "typescript",
+    )
+    .expect("insert service A");
     let svc_b = write::insert_service(&db, "backend", "/tmp/backend", "microservice", "python")
         .expect("insert service B");
 
@@ -42,9 +48,8 @@ fn test_resolve_matching_endpoint() {
         .expect("insert endpoint");
 
     // Service A calls GET /api/users
-    let call_id =
-        write::insert_api_call(&db, svc_a, "GET", "/api/users", None, None, None, false)
-            .expect("insert api call");
+    let call_id = write::insert_api_call(&db, svc_a, "GET", "/api/users", None, None, None, false)
+        .expect("insert api call");
 
     resolve_api_boundaries(&db).expect("resolve");
 
@@ -77,9 +82,8 @@ fn test_resolve_no_match_method_mismatch() {
         .expect("insert endpoint");
 
     // Service A calls POST /api/users (method mismatch)
-    let call_id =
-        write::insert_api_call(&db, svc_a, "POST", "/api/users", None, None, None, false)
-            .expect("insert api call");
+    let call_id = write::insert_api_call(&db, svc_a, "POST", "/api/users", None, None, None, false)
+        .expect("insert api call");
 
     resolve_api_boundaries(&db).expect("resolve");
 
@@ -92,10 +96,7 @@ fn test_resolve_no_match_method_mismatch() {
         )
         .expect("query");
 
-    assert!(
-        resolved_ep.is_none(),
-        "POST should not match GET endpoint"
-    );
+    assert!(resolved_ep.is_none(), "POST should not match GET endpoint");
 }
 
 #[test]
@@ -117,9 +118,8 @@ fn test_resolve_skips_already_resolved() {
     let call_id = conn.last_insert_rowid();
 
     // Add a second endpoint that could also match
-    let ep2_id =
-        write::insert_api_endpoint(&db, svc_b, "GET", "/api/users/v2", None, None, None)
-            .expect("insert endpoint 2");
+    let ep2_id = write::insert_api_endpoint(&db, svc_b, "GET", "/api/users/v2", None, None, None)
+        .expect("insert endpoint 2");
 
     resolve_api_boundaries(&db).expect("resolve");
 
@@ -174,5 +174,8 @@ fn test_resolve_multiple_calls() {
 
     assert!(check(c1), "GET /api/users should resolve");
     assert!(check(c2), "POST /api/orders should resolve");
-    assert!(!check(c3), "DELETE /api/items should NOT resolve (no matching endpoint)");
+    assert!(
+        !check(c3),
+        "DELETE /api/items should NOT resolve (no matching endpoint)"
+    );
 }

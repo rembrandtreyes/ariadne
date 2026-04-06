@@ -259,9 +259,7 @@ impl RustParser {
                     // Handle grouped imports: `use foo::{A, B, C}`
                     if let Some(brace_start) = module.find('{') {
                         let base_path = module[..brace_start].trim_end_matches("::").to_string();
-                        let inner = module[brace_start + 1..]
-                            .trim_end_matches('}')
-                            .to_string();
+                        let inner = module[brace_start + 1..].trim_end_matches('}').to_string();
                         for name in inner.split(',') {
                             let name = name.trim().to_string();
                             if !name.is_empty() {
@@ -426,9 +424,8 @@ impl RustParser {
                                 found
                             };
                             if let Some(token_tree) = token_tree {
-                                let tt_text = token_tree
-                                    .utf8_text(source.as_bytes())
-                                    .unwrap_or_default();
+                                let tt_text =
+                                    token_tree.utf8_text(source.as_bytes()).unwrap_or_default();
                                 // Match identifiers followed by ( that aren't keywords
                                 let tt_line = token_tree.start_position().row as u32 + 1;
                                 let mut chars = tt_text.char_indices().peekable();
@@ -458,10 +455,22 @@ impl RustParser {
                                             // Skip Rust keywords and common type constructors
                                             if !matches!(
                                                 ident,
-                                                "if" | "else" | "match" | "for" | "while"
-                                                    | "loop" | "let" | "mut" | "ref"
-                                                    | "return" | "break" | "continue"
-                                                    | "as" | "in" | "fn" | "pub" | "use"
+                                                "if" | "else"
+                                                    | "match"
+                                                    | "for"
+                                                    | "while"
+                                                    | "loop"
+                                                    | "let"
+                                                    | "mut"
+                                                    | "ref"
+                                                    | "return"
+                                                    | "break"
+                                                    | "continue"
+                                                    | "as"
+                                                    | "in"
+                                                    | "fn"
+                                                    | "pub"
+                                                    | "use"
                                             ) {
                                                 result.calls.push(ParsedCall {
                                                     caller_name: caller.clone(),

@@ -71,9 +71,17 @@ pub fn cmd_index(path: &Path, full: bool) -> anyhow::Result<()> {
         for phase in &stats.phase_durations {
             let pct = (phase.duration_ms as f64 / stats.duration_ms as f64) * 100.0;
             let bar = if pct >= 30.0 {
-                style(format!("{:<20} {:>5}ms  ({pct:>4.0}%)", phase.name, phase.duration_ms)).yellow()
+                style(format!(
+                    "{:<20} {:>5}ms  ({pct:>4.0}%)",
+                    phase.name, phase.duration_ms
+                ))
+                .yellow()
             } else {
-                style(format!("{:<20} {:>5}ms  ({pct:>4.0}%)", phase.name, phase.duration_ms)).dim()
+                style(format!(
+                    "{:<20} {:>5}ms  ({pct:>4.0}%)",
+                    phase.name, phase.duration_ms
+                ))
+                .dim()
             };
             println!("  {bar}");
         }

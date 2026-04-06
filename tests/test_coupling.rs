@@ -5,11 +5,24 @@ fn setup_coupling_db() -> (Database, i64, i64, i64) {
     let db = Database::open_in_memory().expect("in-memory db");
     let svc = write::insert_service(&db, "test-svc", "/tmp/test", "monolith", "python")
         .expect("insert service");
-    let f1 = write::insert_file(&db, svc, "src/auth.py", "/tmp/test/src/auth.py", "python", 0.0)
-        .expect("insert file a");
-    let f2 =
-        write::insert_file(&db, svc, "src/users.py", "/tmp/test/src/users.py", "python", 0.0)
-            .expect("insert file b");
+    let f1 = write::insert_file(
+        &db,
+        svc,
+        "src/auth.py",
+        "/tmp/test/src/auth.py",
+        "python",
+        0.0,
+    )
+    .expect("insert file a");
+    let f2 = write::insert_file(
+        &db,
+        svc,
+        "src/users.py",
+        "/tmp/test/src/users.py",
+        "python",
+        0.0,
+    )
+    .expect("insert file b");
     let f3 = write::insert_file(&db, svc, "src/db.py", "/tmp/test/src/db.py", "python", 0.0)
         .expect("insert file c");
     (db, f1, f2, f3)

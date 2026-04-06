@@ -598,6 +598,109 @@ pub struct ApiEndpointRow {
     pub line: Option<u32>,
 }
 
+/// A file-level dependency with the symbols that create the connection.
+#[derive(Debug, Clone, Serialize)]
+pub struct FileDependency {
+    pub file_id: i64,
+    pub path: String,
+    pub language: String,
+    pub connections: Vec<SymbolConnection>,
+}
+
+/// A pair of symbols that creates a dependency edge between two files.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolConnection {
+    pub from_symbol: String,
+    pub to_symbol: String,
+}
+
+/// Get files that `file_id` depends on (files containing symbols called by symbols in this file).
+///
+/// Returns each dependent file with the connecting symbol pairs.
+/// Only includes resolved calls (callee_symbol_id IS NOT NULL).
+pub fn get_file_dependencies(db: &Database, file_id: i64) -> anyhow::Result<Vec<FileDependency>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT DISTINCT f.id, f.path, f.language, caller_s.name, callee_s.name
+         FROM calls c
+         JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
+         JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
+         JOIN files f ON callee_s.file_id = f.id
+         WHERE caller_s.file_id = ?1
+           AND callee_s.file_id != ?1
+           AND c.callee_symbol_id IS NOT NULL
+         ORDER BY f.path, caller_s.name",
+    )?;
+
+    let rows: Vec<(i64, String, String, String, String)> = stmt
+        .query_map(params![file_id], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    group_file_connections(rows)
+}
+
+/// Get files that depend on `file_id` (files containing symbols that call symbols in this file).
+///
+/// Returns each dependent file with the connecting symbol pairs.
+/// Only includes resolved calls (callee_symbol_id IS NOT NULL).
+pub fn get_file_dependents(db: &Database, file_id: i64) -> anyhow::Result<Vec<FileDependency>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT DISTINCT f.id, f.path, f.language, caller_s.name, callee_s.name
+         FROM calls c
+         JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
+         JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
+         JOIN files f ON caller_s.file_id = f.id
+         WHERE callee_s.file_id = ?1
+           AND caller_s.file_id != ?1
+           AND c.callee_symbol_id IS NOT NULL
+         ORDER BY f.path, caller_s.name",
+    )?;
+
+    let rows: Vec<(i64, String, String, String, String)> = stmt
+        .query_map(params![file_id], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    group_file_connections(rows)
+}
+
+/// Group raw (file_id, path, language, from_sym, to_sym) rows into FileDependency structs.
+fn group_file_connections(
+    rows: Vec<(i64, String, String, String, String)>,
+) -> anyhow::Result<Vec<FileDependency>> {
+    use std::collections::BTreeMap;
+
+    let mut grouped: BTreeMap<i64, FileDependency> = BTreeMap::new();
+    for (fid, path, lang, from_sym, to_sym) in rows {
+        let entry = grouped.entry(fid).or_insert_with(|| FileDependency {
+            file_id: fid,
+            path,
+            language: lang,
+            connections: Vec::new(),
+        });
+        entry.connections.push(SymbolConnection {
+            from_symbol: from_sym,
+            to_symbol: to_sym,
+        });
+    }
+
+    Ok(grouped.into_values().collect())
+}
+
 /// Get all API endpoints with handler information.
 pub fn get_api_endpoints(db: &Database) -> anyhow::Result<Vec<ApiEndpointRow>> {
     let mut stmt = db.conn().prepare(

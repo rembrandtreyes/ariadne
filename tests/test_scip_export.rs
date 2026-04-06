@@ -31,7 +31,18 @@ fn setup_multi_file_db() -> Database {
 
     // Symbols in file 1
     let _s1 = write::insert_symbol(
-        &db, f1, "login", "auth.login", "function", 1, 10, true, false, "def login()", "[]", None,
+        &db,
+        f1,
+        "login",
+        "auth.login",
+        "function",
+        1,
+        10,
+        true,
+        false,
+        "def login()",
+        "[]",
+        None,
     )
     .expect("insert symbol 1");
 
@@ -121,7 +132,11 @@ fn test_scip_export_multi_file() {
     assert_eq!(js_doc.language, "javascript");
 
     // Python file: 2 symbol definitions + 1 call reference
-    assert_eq!(py_doc.symbols.len(), 2, "python file has 2 symbol definitions");
+    assert_eq!(
+        py_doc.symbols.len(),
+        2,
+        "python file has 2 symbol definitions"
+    );
     assert_eq!(
         py_doc.occurrences.len(),
         3,

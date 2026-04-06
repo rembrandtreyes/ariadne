@@ -58,7 +58,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 20 Ariadne MCP tools.
+/// Return the 22 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -163,6 +163,42 @@ fn all_tools() -> Vec<Tool> {
             "get_api_endpoints",
             "List all detected API endpoints with HTTP method, path, handler symbol, and file location.",
         ),
+        Tool::new(
+            "get_file_dependencies",
+            "Get files that a given file depends on (via resolved call edges). Returns each dependency file with the connecting symbol pairs.",
+            make_schema(
+                serde_json::json!({
+                    "file_path": {
+                        "type": "string",
+                        "description": "Relative file path"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Transitive depth (1 = direct only, 2+ = follow transitive deps). Default: 1",
+                        "default": 1
+                    }
+                }),
+                vec!["file_path"],
+            ),
+        ),
+        Tool::new(
+            "get_file_dependents",
+            "Get files that depend on a given file (via resolved call edges). Returns each dependent file with the connecting symbol pairs.",
+            make_schema(
+                serde_json::json!({
+                    "file_path": {
+                        "type": "string",
+                        "description": "Relative file path"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Transitive depth (1 = direct only, 2+ = follow transitive deps). Default: 1",
+                        "default": 1
+                    }
+                }),
+                vec!["file_path"],
+            ),
+        ),
     ]
 }
 
@@ -175,6 +211,56 @@ fn get_string_param(params: &CallToolRequestParam, key: &str) -> String {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string()
+}
+
+/// Extract an optional integer parameter from the tool call arguments.
+fn get_int_param(params: &CallToolRequestParam, key: &str) -> Option<i64> {
+    params
+        .arguments
+        .as_ref()
+        .and_then(|args| args.get(key))
+        .and_then(|v| v.as_i64())
+}
+
+/// Collect file dependencies transitively up to `max_depth` levels.
+/// When `forward` is true, follows dependencies (what this file calls).
+/// When `forward` is false, follows dependents (what calls this file).
+fn collect_transitive_file_deps(
+    db: &crate::db::Database,
+    start_file_id: i64,
+    max_depth: usize,
+    forward: bool,
+) -> anyhow::Result<Vec<query::FileDependency>> {
+    use std::collections::{HashSet, VecDeque};
+
+    let mut visited = HashSet::new();
+    visited.insert(start_file_id);
+
+    let mut queue = VecDeque::new();
+    queue.push_back((start_file_id, 0usize));
+
+    let mut all_deps = Vec::new();
+
+    while let Some((file_id, depth)) = queue.pop_front() {
+        if depth >= max_depth {
+            continue;
+        }
+
+        let deps = if forward {
+            query::get_file_dependencies(db, file_id)?
+        } else {
+            query::get_file_dependents(db, file_id)?
+        };
+
+        for dep in deps {
+            if visited.insert(dep.file_id) {
+                queue.push_back((dep.file_id, depth + 1));
+                all_deps.push(dep);
+            }
+        }
+    }
+
+    Ok(all_deps)
 }
 
 pub struct AriadneService {
@@ -287,6 +373,8 @@ impl AriadneService {
             "get_coupling" => self.tool_get_coupling(),
             "get_communities" => self.tool_get_communities(),
             "get_api_endpoints" => self.tool_get_api_endpoints(),
+            "get_file_dependencies" => self.tool_get_file_dependencies(params),
+            "get_file_dependents" => self.tool_get_file_dependents(params),
             _ => CallToolResult::error(vec![Content::text(format!("Unknown tool: {}", name))]),
         }
     }
@@ -869,8 +957,7 @@ impl AriadneService {
                     "parent_count": parents.len(),
                     "child_count": children.len(),
                 });
-                let json =
-                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
             Ok(Err(e)) => {
@@ -917,8 +1004,7 @@ impl AriadneService {
                     "flow_count": flows.len(),
                     "total_steps": steps.len(),
                 });
-                let json =
-                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
             Ok(Err(e)) => {
@@ -945,8 +1031,7 @@ impl AriadneService {
                     "coupled_pairs": pairs,
                     "count": pairs.len(),
                 });
-                let json =
-                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
             Ok(Err(e)) => {
@@ -976,13 +1061,12 @@ impl AriadneService {
                     "communities": communities,
                     "count": communities.len(),
                 });
-                let json =
-                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
-            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
-                "Community query failed: {e}"
-            ))]),
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Community query failed: {e}"))])
+            }
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
     }
@@ -1008,13 +1092,94 @@ impl AriadneService {
                     "endpoints": endpoints,
                     "count": endpoints.len(),
                 });
-                let json =
-                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
             Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
                 "API endpoints query failed: {e}"
             ))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_file_dependencies(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let file_path = get_string_param(params, "file_path");
+        let depth = get_int_param(params, "depth").unwrap_or(1).clamp(1, 5) as usize;
+
+        match self.with_db(|db| {
+            let file = query::find_file_by_path(db, &file_path)?
+                .ok_or_else(|| anyhow::anyhow!("File not found: {file_path}"))?;
+            collect_transitive_file_deps(db, file.id, depth, true)
+        }) {
+            Ok(Ok(deps)) => {
+                let files: Vec<_> = deps
+                    .iter()
+                    .map(|d| {
+                        serde_json::json!({
+                            "file": d.path,
+                            "language": d.language,
+                            "connections": d.connections.iter().map(|c| {
+                                serde_json::json!({
+                                    "from": c.from_symbol,
+                                    "to": c.to_symbol,
+                                })
+                            }).collect::<Vec<_>>(),
+                            "connection_count": d.connections.len(),
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "file": file_path,
+                    "direction": "dependencies",
+                    "depth": depth,
+                    "dependencies": files,
+                    "count": files.len(),
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    fn tool_get_file_dependents(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let file_path = get_string_param(params, "file_path");
+        let depth = get_int_param(params, "depth").unwrap_or(1).clamp(1, 5) as usize;
+
+        match self.with_db(|db| {
+            let file = query::find_file_by_path(db, &file_path)?
+                .ok_or_else(|| anyhow::anyhow!("File not found: {file_path}"))?;
+            collect_transitive_file_deps(db, file.id, depth, false)
+        }) {
+            Ok(Ok(deps)) => {
+                let files: Vec<_> = deps
+                    .iter()
+                    .map(|d| {
+                        serde_json::json!({
+                            "file": d.path,
+                            "language": d.language,
+                            "connections": d.connections.iter().map(|c| {
+                                serde_json::json!({
+                                    "from": c.from_symbol,
+                                    "to": c.to_symbol,
+                                })
+                            }).collect::<Vec<_>>(),
+                            "connection_count": d.connections.len(),
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "file": file_path,
+                    "direction": "dependents",
+                    "depth": depth,
+                    "dependents": files,
+                    "count": files.len(),
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
     }

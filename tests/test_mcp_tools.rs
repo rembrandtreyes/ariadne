@@ -56,7 +56,7 @@ async fn test_list_tools_returns_ten() {
         .list_tools(None, ctx)
         .await
         .expect("list_tools should succeed");
-    assert_eq!(result.tools.len(), 20, "Ariadne exposes 20 MCP tools");
+    assert_eq!(result.tools.len(), 22, "Ariadne exposes 22 MCP tools");
 }
 
 #[tokio::test]
@@ -291,14 +291,38 @@ async fn test_tool_names_include_new_tools() {
         .expect("list_tools should succeed");
 
     let names: Vec<String> = result.tools.iter().map(|t| t.name.to_string()).collect();
-    assert!(names.contains(&"diff_impact".to_string()), "should have diff_impact");
-    assert!(names.contains(&"affected_tests".to_string()), "should have affected_tests");
-    assert!(names.contains(&"why_symbol".to_string()), "should have why_symbol");
-    assert!(names.contains(&"get_heritage".to_string()), "should have get_heritage");
-    assert!(names.contains(&"get_execution_flows".to_string()), "should have get_execution_flows");
-    assert!(names.contains(&"get_coupling".to_string()), "should have get_coupling");
-    assert!(names.contains(&"get_communities".to_string()), "should have get_communities");
-    assert!(names.contains(&"get_api_endpoints".to_string()), "should have get_api_endpoints");
+    assert!(
+        names.contains(&"diff_impact".to_string()),
+        "should have diff_impact"
+    );
+    assert!(
+        names.contains(&"affected_tests".to_string()),
+        "should have affected_tests"
+    );
+    assert!(
+        names.contains(&"why_symbol".to_string()),
+        "should have why_symbol"
+    );
+    assert!(
+        names.contains(&"get_heritage".to_string()),
+        "should have get_heritage"
+    );
+    assert!(
+        names.contains(&"get_execution_flows".to_string()),
+        "should have get_execution_flows"
+    );
+    assert!(
+        names.contains(&"get_coupling".to_string()),
+        "should have get_coupling"
+    );
+    assert!(
+        names.contains(&"get_communities".to_string()),
+        "should have get_communities"
+    );
+    assert!(
+        names.contains(&"get_api_endpoints".to_string()),
+        "should have get_api_endpoints"
+    );
 }
 
 #[tokio::test]
