@@ -71,25 +71,13 @@ impl AriadneService {
             .collect()
     }
 
-    /// Resolve file paths to their symbol IDs from the database.
+    /// Resolve file paths to their symbol IDs from the database (batched query).
     fn resolve_file_symbols(&self, paths: &[String]) -> Result<Vec<i64>, String> {
-        let mut symbol_ids = Vec::new();
-        for path in paths {
-            match self.with_db(|db| {
-                let file = query::find_file_by_path(db, path)?;
-                if let Some(f) = file {
-                    let syms = query::get_file_symbols(db, f.id)?;
-                    Ok::<Vec<i64>, anyhow::Error>(syms.iter().map(|s| s.id).collect())
-                } else {
-                    Ok(vec![])
-                }
-            }) {
-                Ok(Ok(ids)) => symbol_ids.extend(ids),
-                Ok(Err(e)) => return Err(format!("Error resolving {path}: {e}")),
-                Err(e) => return Err(format!("{e}")),
-            }
+        match self.with_db(|db| query::resolve_paths_to_symbol_ids(db, paths)) {
+            Ok(Ok(ids)) => Ok(ids),
+            Ok(Err(e)) => Err(format!("Error resolving file symbols: {e}")),
+            Err(e) => Err(format!("{e}")),
         }
-        Ok(symbol_ids)
     }
 
     pub(crate) fn tool_diff_impact(&self, params: &CallToolRequestParam) -> CallToolResult {

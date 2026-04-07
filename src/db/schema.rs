@@ -205,6 +205,7 @@ CREATE INDEX IF NOT EXISTS idx_service_edges_from ON service_edges(from_service_
 CREATE INDEX IF NOT EXISTS idx_service_edges_to ON service_edges(to_service_id);
 CREATE INDEX IF NOT EXISTS idx_symbol_history_symbol ON symbol_history(symbol_id);
 CREATE INDEX IF NOT EXISTS idx_symbol_history_volatile ON symbol_history(is_volatile) WHERE is_volatile = 1;
+CREATE INDEX IF NOT EXISTS idx_files_relative_path ON files(path);
 ";
 
 /// Create all schema tables and indexes.

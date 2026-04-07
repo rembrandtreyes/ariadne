@@ -325,47 +325,29 @@ pub fn get_languages(db: &Database) -> anyhow::Result<Vec<String>> {
 }
 
 /// Build an in-memory CallGraph from the database.
+///
+/// Uses edge-driven loading: loads call edges first (up to `limit`), then loads
+/// only the symbols referenced by those edges. This means `symbol_index` contains
+/// only symbols that participate in at least one resolved call edge — not every
+/// symbol in the database. Memory scales with edge count, not total symbol count.
 pub fn build_call_graph(
     db: &Database,
     limit: Option<usize>,
 ) -> anyhow::Result<crate::graph::CallGraph> {
     use crate::graph::{CallEdge, CallGraph, SymbolNode};
+    use std::collections::HashSet;
 
-    let mut graph = CallGraph::new();
     let conn = db.conn();
 
-    // Load all symbols with their file paths
-    let mut sym_stmt = conn.prepare(
-        "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.is_dead, s.is_test
-         FROM symbols s JOIN files f ON s.file_id = f.id",
-    )?;
-
-    let symbols: Vec<SymbolNode> = sym_stmt
-        .query_map([], |row| {
-            Ok(SymbolNode {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                qualified_name: row.get(2)?,
-                kind: row.get(3)?,
-                file_path: row.get(4)?,
-                is_dead: row.get(5)?,
-                is_test: row.get(6)?,
-            })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for sym in symbols {
-        graph.add_symbol(sym);
-    }
-
-    // Load all resolved calls
+    // Step 1: Load edges first (with limit)
+    let edge_limit = limit.unwrap_or(usize::MAX);
     let mut call_stmt = conn.prepare(
         "SELECT caller_symbol_id, callee_symbol_id, confidence, resolution, line
-         FROM calls WHERE callee_symbol_id IS NOT NULL",
+         FROM calls WHERE callee_symbol_id IS NOT NULL LIMIT ?1",
     )?;
 
     let calls: Vec<(i64, i64, f64, String, u32)> = call_stmt
-        .query_map([], |row| {
+        .query_map(params![edge_limit as i64], |row| {
             Ok((
                 row.get(0)?,
                 row.get(1)?,
@@ -376,11 +358,49 @@ pub fn build_call_graph(
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
-    let edge_limit = limit.unwrap_or(usize::MAX);
-    for (i, (caller_id, callee_id, confidence, resolution, line)) in calls.into_iter().enumerate() {
-        if i >= edge_limit {
-            break;
+    // Step 2: Collect unique symbol IDs referenced by edges
+    let mut referenced_ids: HashSet<i64> = HashSet::with_capacity(calls.len());
+    for (caller_id, callee_id, _, _, _) in &calls {
+        referenced_ids.insert(*caller_id);
+        referenced_ids.insert(*callee_id);
+    }
+
+    // Step 3: Load only referenced symbols (batch via IN clause, chunked for SQLite limit)
+    let mut graph = CallGraph::new();
+    let id_vec: Vec<i64> = referenced_ids.into_iter().collect();
+    for chunk in id_vec.chunks(500) {
+        let placeholders: String = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.is_dead, s.is_test
+             FROM symbols s JOIN files f ON s.file_id = f.id
+             WHERE s.id IN ({})",
+            placeholders
+        );
+        let mut sym_stmt = conn.prepare(&sql)?;
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = chunk
+            .iter()
+            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        let symbols: Vec<SymbolNode> = sym_stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+                Ok(SymbolNode {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    qualified_name: row.get(2)?,
+                    kind: row.get(3)?,
+                    file_path: row.get(4)?,
+                    is_dead: row.get(5)?,
+                    is_test: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for sym in symbols {
+            graph.add_symbol(sym);
         }
+    }
+
+    // Step 4: Add edges (all symbols are guaranteed present from step 3)
+    for (caller_id, callee_id, confidence, resolution, line) in calls {
         graph.add_call(
             caller_id,
             callee_id,
@@ -410,6 +430,44 @@ pub fn find_file_by_path(db: &Database, path: &str) -> anyhow::Result<Option<Fil
         })),
         None => Ok(None),
     }
+}
+
+/// Resolve multiple file paths to their symbol IDs in a single batched query.
+/// Replaces the N+1 pattern of calling find_file_by_path + get_file_symbols per path.
+pub fn resolve_paths_to_symbol_ids(db: &Database, paths: &[String]) -> anyhow::Result<Vec<i64>> {
+    if paths.is_empty() {
+        return Ok(vec![]);
+    }
+    let conn = db.conn();
+    let mut all_ids = Vec::new();
+
+    for chunk in paths.chunks(250) {
+        // Build OR conditions: each path matches exact or suffix
+        let conditions: Vec<String> = (0..chunk.len())
+            .map(|i| {
+                format!(
+                    "f.path = ?{n} OR f.path LIKE '%/' || ?{n} ESCAPE '\\'",
+                    n = i + 1
+                )
+            })
+            .collect();
+        let where_clause = conditions.join(" OR ");
+        let sql = format!(
+            "SELECT s.id FROM files f JOIN symbols s ON s.file_id = f.id WHERE {} ORDER BY s.file_id, s.line_start",
+            where_clause
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = chunk
+            .iter()
+            .map(|p| Box::new(p.clone()) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        let ids: Vec<i64> = stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        all_ids.extend(ids);
+    }
+
+    Ok(all_ids)
 }
 
 /// Get coupling data for a file.
