@@ -235,6 +235,24 @@ fn all_tools() -> Vec<Tool> {
             "get_codebase_health",
             "Returns a whole-codebase health snapshot with letter grade (A-F), dead code ratio, cycle count, coupling density, modularity score, and natural-language summary. Single-call replacement for multiple sequential queries.",
         ),
+        // Path tool
+        Tool::new(
+            "get_dependency_path",
+            "Find the shortest directed dependency path between two symbols in the call graph. Returns the ordered path as symbol nodes, hop count, and reachability status. Returns reachable=false (not an error) when no path exists.",
+            make_schema(
+                serde_json::json!({
+                    "from_symbol": {
+                        "type": "string",
+                        "description": "Starting symbol name or qualified name"
+                    },
+                    "to_symbol": {
+                        "type": "string",
+                        "description": "Target symbol name or qualified name"
+                    }
+                }),
+                vec!["from_symbol", "to_symbol"],
+            ),
+        ),
     ]
 }
 
@@ -368,6 +386,7 @@ impl AriadneService {
             "blast_radius" => self.tool_blast_radius(params),
             "detect_cycles" => self.tool_detect_cycles(),
             "get_boundaries" => self.tool_get_boundaries(),
+            "get_dependency_path" => self.tool_get_dependency_path(params),
             // Impact tools
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),
