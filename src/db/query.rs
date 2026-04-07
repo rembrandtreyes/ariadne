@@ -748,6 +748,99 @@ pub fn get_symbol_history(
     }
 }
 
+/// Risk signal data for a single file, aggregated from symbols, history, coupling, and calls.
+#[derive(Debug, Clone, Serialize)]
+pub struct FileRiskData {
+    pub file_id: i64,
+    pub path: String,
+    pub total_symbols: i64,
+    pub dead_symbols: i64,
+    pub total_modifications: i64,
+    pub max_authors: i64,
+    pub volatile_count: i64,
+    pub symbols_with_history: i64,
+    pub coupled_files: i64,
+    pub max_coupling_strength: f64,
+    pub external_fan_in: i64,
+}
+
+/// Get aggregated risk signal data for a file: churn, coupling, fan-in, dead code.
+/// Returns None if the file has no symbols.
+pub fn get_file_risk_data(db: &Database, file_id: i64) -> anyhow::Result<Option<FileRiskData>> {
+    let path: String = db.conn().query_row(
+        "SELECT path FROM files WHERE id = ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+
+    let total_symbols: i64 = db.conn().query_row(
+        "SELECT COUNT(*) FROM symbols WHERE file_id = ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+
+    if total_symbols == 0 {
+        return Ok(None);
+    }
+
+    let dead_symbols: i64 = db.conn().query_row(
+        "SELECT COUNT(*) FROM symbols WHERE file_id = ?1 AND is_dead = 1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+
+    // Churn signals from symbol_history
+    let (total_modifications, max_authors, volatile_count, symbols_with_history): (
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = db.conn().query_row(
+        "SELECT COALESCE(SUM(sh.modification_count), 0),
+                COALESCE(MAX(sh.author_count), 0),
+                COALESCE(SUM(CASE WHEN sh.is_volatile THEN 1 ELSE 0 END), 0),
+                COUNT(sh.id)
+         FROM symbols s
+         LEFT JOIN symbol_history sh ON sh.symbol_id = s.id
+         WHERE s.file_id = ?1",
+        params![file_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+
+    // Coupling signals
+    let (coupled_files, max_coupling_strength): (i64, f64) = db.conn().query_row(
+        "SELECT COUNT(*), COALESCE(MAX(strength), 0.0)
+         FROM coupling WHERE file_a_id = ?1 OR file_b_id = ?1",
+        params![file_id],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+
+    // External fan-in: distinct callers from OTHER files
+    let external_fan_in: i64 = db.conn().query_row(
+        "SELECT COUNT(DISTINCT c.caller_symbol_id)
+         FROM calls c
+         JOIN symbols callee ON c.callee_symbol_id = callee.id
+         JOIN symbols caller ON c.caller_symbol_id = caller.id
+         WHERE callee.file_id = ?1 AND caller.file_id != ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+
+    Ok(Some(FileRiskData {
+        file_id,
+        path,
+        total_symbols,
+        dead_symbols,
+        total_modifications,
+        max_authors,
+        volatile_count,
+        symbols_with_history,
+        coupled_files,
+        max_coupling_strength,
+        external_fan_in,
+    }))
+}
+
 /// Get all API endpoints with handler information.
 pub fn get_api_endpoints(db: &Database) -> anyhow::Result<Vec<ApiEndpointRow>> {
     let mut stmt = db.conn().prepare(

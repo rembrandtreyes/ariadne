@@ -4,6 +4,63 @@ use crate::db::query;
 
 use super::{get_string_param, AriadneService};
 
+/// Compute a 0.0–1.0 risk score from raw file signals, with confidence tracking.
+fn compute_risk(data: &query::FileRiskData) -> (f64, f64, String, Vec<&'static str>) {
+    let mut available_signals: Vec<&'static str> = Vec::new();
+    let mut scores: Vec<f64> = Vec::new();
+
+    // Churn score: total modifications across symbols, normalized
+    if data.symbols_with_history > 0 {
+        available_signals.push("churn");
+        let churn = (data.total_modifications as f64 / 50.0).min(1.0);
+        scores.push(churn);
+    }
+
+    // Coupling score: number of coupled files + max strength
+    if data.coupled_files > 0 {
+        available_signals.push("coupling");
+        let coupling =
+            (data.coupled_files as f64 / 10.0).min(1.0) * 0.5 + data.max_coupling_strength * 0.5;
+        scores.push(coupling.min(1.0));
+    }
+
+    // Fan-in score: external callers
+    // Always available (0 fan-in is valid data, not missing data)
+    available_signals.push("fan_in");
+    let fan_in = (data.external_fan_in as f64 / 50.0).min(1.0);
+    scores.push(fan_in);
+
+    // Dead code proximity: fraction of dead symbols in file
+    available_signals.push("dead_code");
+    let dead_code = if data.total_symbols > 0 {
+        data.dead_symbols as f64 / data.total_symbols as f64
+    } else {
+        0.0
+    };
+    scores.push(dead_code);
+
+    let confidence = available_signals.len() as f64 / 4.0;
+    let risk_score = if scores.is_empty() {
+        0.0
+    } else {
+        scores.iter().sum::<f64>() / scores.len() as f64
+    };
+
+    let risk_level = match risk_score {
+        s if s >= 0.75 => "critical",
+        s if s >= 0.5 => "high",
+        s if s >= 0.25 => "medium",
+        _ => "low",
+    };
+
+    (
+        risk_score,
+        confidence,
+        risk_level.to_string(),
+        available_signals,
+    )
+}
+
 impl AriadneService {
     /// Parse comma-separated changed_files parameter into a Vec of trimmed paths.
     fn parse_changed_files(params: &CallToolRequestParam) -> Vec<String> {
@@ -132,6 +189,94 @@ impl AriadneService {
             }
             Err(e) => CallToolResult::error(vec![Content::text(format!("Diff impact failed: {e}"))]),
         }
+    }
+
+    pub(crate) fn tool_compute_file_risk(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let paths = Self::parse_changed_files(params);
+        if paths.is_empty() {
+            return CallToolResult::error(vec![Content::text(
+                "changed_files parameter is required (comma-separated file paths)",
+            )]);
+        }
+
+        let mut file_risks = Vec::new();
+        for path in &paths {
+            match self.with_db(|db| {
+                let file = query::find_file_by_path(db, path)?;
+                match file {
+                    Some(f) => query::get_file_risk_data(db, f.id),
+                    None => Ok(None),
+                }
+            }) {
+                Ok(Ok(Some(data))) => {
+                    let (risk_score, confidence, risk_level, available_signals) =
+                        compute_risk(&data);
+                    file_risks.push(serde_json::json!({
+                        "file": data.path,
+                        "risk_score": (risk_score * 1000.0).round() / 1000.0,
+                        "risk_level": risk_level,
+                        "confidence": (confidence * 100.0).round() / 100.0,
+                        "available_signals": available_signals,
+                        "factors": {
+                            "churn": {
+                                "total_modifications": data.total_modifications,
+                                "max_authors": data.max_authors,
+                                "volatile_symbols": data.volatile_count,
+                            },
+                            "coupling": {
+                                "coupled_files": data.coupled_files,
+                                "max_strength": (data.max_coupling_strength * 1000.0).round() / 1000.0,
+                            },
+                            "fan_in": {
+                                "external_callers": data.external_fan_in,
+                            },
+                            "dead_code": {
+                                "dead_symbols": data.dead_symbols,
+                                "total_symbols": data.total_symbols,
+                            },
+                        },
+                    }));
+                }
+                Ok(Ok(None)) => {
+                    file_risks.push(serde_json::json!({
+                        "file": path,
+                        "risk_score": 0.0,
+                        "risk_level": "low",
+                        "confidence": 0.0,
+                        "available_signals": [],
+                        "note": "File has no indexed symbols",
+                    }));
+                }
+                Ok(Err(e)) => {
+                    return CallToolResult::error(vec![Content::text(format!(
+                        "Error analyzing {path}: {e}"
+                    ))]);
+                }
+                Err(e) => return CallToolResult::error(vec![Content::text(format!("{e}"))]),
+            }
+        }
+
+        // Sort by risk_score descending
+        file_risks.sort_by(|a, b| {
+            b.get("risk_score")
+                .and_then(|v| v.as_f64())
+                .partial_cmp(&a.get("risk_score").and_then(|v| v.as_f64()))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let result = serde_json::json!({
+            "files": file_risks,
+            "file_count": file_risks.len(),
+            "interpretation": {
+                "low": "0.0-0.25: Stable, low risk of introducing bugs",
+                "medium": "0.25-0.5: Moderate risk, standard review recommended",
+                "high": "0.5-0.75: High risk, careful review and testing recommended",
+                "critical": "0.75-1.0: Very high risk, consider senior review and extra test coverage",
+            },
+        });
+
+        let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+        CallToolResult::success(vec![Content::text(json)])
     }
 
     pub(crate) fn tool_affected_tests(&self, params: &CallToolRequestParam) -> CallToolResult {

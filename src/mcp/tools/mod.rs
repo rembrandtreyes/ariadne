@@ -63,7 +63,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 23 Ariadne MCP tools.
+/// Return the 24 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -137,6 +137,10 @@ fn all_tools() -> Vec<Tool> {
         files_param_tool(
             "affected_tests",
             "Find test functions that transitively depend on symbols in the changed files.",
+        ),
+        files_param_tool(
+            "compute_file_risk",
+            "Compute per-file risk scores (0.0-1.0) for changed files. Combines churn velocity, coupling degree, fan-in count, and dead code proximity into a single risk assessment with confidence tracking. Use for PR review triage.",
         ),
         string_param_tool(
             "why_symbol",
@@ -346,6 +350,7 @@ impl AriadneService {
             // Impact tools
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),
+            "compute_file_risk" => self.tool_compute_file_risk(params),
             // Architecture tools
             "find_dead_code" => self.tool_find_dead_code(),
             "get_coupling" => self.tool_get_coupling(),
