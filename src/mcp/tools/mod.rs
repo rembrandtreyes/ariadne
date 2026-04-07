@@ -63,7 +63,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 24 Ariadne MCP tools.
+/// Return the 27 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -214,6 +214,21 @@ fn all_tools() -> Vec<Tool> {
                 vec!["file_path"],
             ),
         ),
+        // Quality tools
+        string_param_tool(
+            "get_symbol_health",
+            "Score a symbol's health (0.0-1.0) by combining stability (churn, volatility), connectivity (fan-in/fan-out), and dead code status. Use for refactoring prioritization.",
+            "symbol",
+            "Symbol name or qualified name",
+        ),
+        no_param_tool(
+            "get_complexity_hotspots",
+            "Find the top 50 symbols with highest combined complexity: fan-in, fan-out, churn velocity, and volatility. Excludes test and dead code.",
+        ),
+        no_param_tool(
+            "get_code_smells",
+            "Detect code smell patterns: high volatility (frequent changes), high fan-in (bottleneck), high fan-out (shotgun surgery risk), and dead code.",
+        ),
     ]
 }
 
@@ -351,6 +366,10 @@ impl AriadneService {
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),
             "compute_file_risk" => self.tool_compute_file_risk(params),
+            // Quality tools
+            "get_symbol_health" => self.tool_get_symbol_health(params),
+            "get_complexity_hotspots" => self.tool_get_complexity_hotspots(),
+            "get_code_smells" => self.tool_get_code_smells(),
             // Architecture tools
             "find_dead_code" => self.tool_find_dead_code(),
             "get_coupling" => self.tool_get_coupling(),

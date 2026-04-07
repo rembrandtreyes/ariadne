@@ -841,6 +841,176 @@ pub fn get_file_risk_data(db: &Database, file_id: i64) -> anyhow::Result<Option<
     }))
 }
 
+/// Health data for a single symbol, combining call graph metrics and temporal signals.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolHealthData {
+    pub id: i64,
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file_path: String,
+    pub line_start: u32,
+    pub line_end: u32,
+    pub is_dead: bool,
+    pub fan_in: i64,
+    pub fan_out: i64,
+    pub modification_count: i64,
+    pub author_count: i64,
+    pub is_volatile: bool,
+    pub has_history: bool,
+}
+
+/// Get health signal data for a symbol by name: fan-in, fan-out, and temporal history.
+pub fn get_symbol_health_data(
+    db: &Database,
+    name: &str,
+) -> anyhow::Result<Option<SymbolHealthData>> {
+    let sym = find_symbol_by_name(db, name)?;
+    let sym = match sym {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    let file_path = file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
+
+    let fan_in: i64 = db.conn().query_row(
+        "SELECT COUNT(DISTINCT caller_symbol_id) FROM calls
+         WHERE callee_symbol_id = ?1",
+        params![sym.id],
+        |row| row.get(0),
+    )?;
+
+    let fan_out: i64 = db.conn().query_row(
+        "SELECT COUNT(DISTINCT callee_symbol_id) FROM calls
+         WHERE caller_symbol_id = ?1 AND callee_symbol_id IS NOT NULL",
+        params![sym.id],
+        |row| row.get(0),
+    )?;
+
+    let (modification_count, author_count, is_volatile, has_history): (i64, i64, bool, bool) =
+        db.conn().query_row(
+            "SELECT COALESCE(sh.modification_count, 0),
+                    COALESCE(sh.author_count, 0),
+                    COALESCE(sh.is_volatile, 0),
+                    CASE WHEN sh.id IS NOT NULL THEN 1 ELSE 0 END
+             FROM symbols s
+             LEFT JOIN symbol_history sh ON sh.symbol_id = s.id
+             WHERE s.id = ?1",
+            params![sym.id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+
+    Ok(Some(SymbolHealthData {
+        id: sym.id,
+        name: sym.name,
+        qualified_name: sym.qualified_name,
+        kind: sym.kind,
+        file_path,
+        line_start: sym.line_start,
+        line_end: sym.line_end,
+        is_dead: sym.is_dead,
+        fan_in,
+        fan_out,
+        modification_count,
+        author_count,
+        is_volatile,
+        has_history,
+    }))
+}
+
+/// Get symbols ranked by combined complexity signals (fan-in + fan-out + volatility).
+/// Returns the top `limit` hotspots, excluding test symbols and dead code.
+pub fn get_complexity_hotspots(db: &Database, limit: i64) -> anyhow::Result<Vec<SymbolHealthData>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT s.id, s.name, s.qualified_name, s.kind, f.path,
+                s.line_start, s.line_end, s.is_dead,
+                (SELECT COUNT(DISTINCT caller_symbol_id) FROM calls WHERE callee_symbol_id = s.id) as fan_in,
+                (SELECT COUNT(DISTINCT callee_symbol_id) FROM calls WHERE caller_symbol_id = s.id AND callee_symbol_id IS NOT NULL) as fan_out,
+                COALESCE(sh.modification_count, 0),
+                COALESCE(sh.author_count, 0),
+                COALESCE(sh.is_volatile, 0),
+                CASE WHEN sh.id IS NOT NULL THEN 1 ELSE 0 END as has_history
+         FROM symbols s
+         JOIN files f ON s.file_id = f.id
+         LEFT JOIN symbol_history sh ON sh.symbol_id = s.id
+         WHERE s.is_test = 0 AND s.is_dead = 0
+         ORDER BY (fan_in + fan_out + COALESCE(sh.modification_count, 0) * 0.1
+                   + CASE WHEN sh.is_volatile THEN 10 ELSE 0 END) DESC
+         LIMIT ?1",
+    )?;
+
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            Ok(SymbolHealthData {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                file_path: row.get(4)?,
+                line_start: row.get(5)?,
+                line_end: row.get(6)?,
+                is_dead: row.get(7)?,
+                fan_in: row.get(8)?,
+                fan_out: row.get(9)?,
+                modification_count: row.get(10)?,
+                author_count: row.get(11)?,
+                is_volatile: row.get(12)?,
+                has_history: row.get(13)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
+/// Get symbols that exhibit code smell patterns (high volatility, high fan-in, etc.).
+/// Returns all non-test symbols with their health data for smell classification in the tool layer.
+pub fn get_code_smell_candidates(db: &Database) -> anyhow::Result<Vec<SymbolHealthData>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT s.id, s.name, s.qualified_name, s.kind, f.path,
+                s.line_start, s.line_end, s.is_dead,
+                (SELECT COUNT(DISTINCT caller_symbol_id) FROM calls WHERE callee_symbol_id = s.id) as fan_in,
+                (SELECT COUNT(DISTINCT callee_symbol_id) FROM calls WHERE caller_symbol_id = s.id AND callee_symbol_id IS NOT NULL) as fan_out,
+                COALESCE(sh.modification_count, 0),
+                COALESCE(sh.author_count, 0),
+                COALESCE(sh.is_volatile, 0),
+                CASE WHEN sh.id IS NOT NULL THEN 1 ELSE 0 END as has_history
+         FROM symbols s
+         JOIN files f ON s.file_id = f.id
+         LEFT JOIN symbol_history sh ON sh.symbol_id = s.id
+         WHERE s.is_test = 0
+           AND (
+             (sh.is_volatile = 1 AND sh.modification_count > 10)
+             OR (SELECT COUNT(DISTINCT caller_symbol_id) FROM calls WHERE callee_symbol_id = s.id) > 5
+             OR (SELECT COUNT(DISTINCT callee_symbol_id) FROM calls WHERE caller_symbol_id = s.id AND callee_symbol_id IS NOT NULL) > 8
+             OR (s.is_dead = 1)
+           )
+         ORDER BY COALESCE(sh.modification_count, 0) DESC",
+    )?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(SymbolHealthData {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                file_path: row.get(4)?,
+                line_start: row.get(5)?,
+                line_end: row.get(6)?,
+                is_dead: row.get(7)?,
+                fan_in: row.get(8)?,
+                fan_out: row.get(9)?,
+                modification_count: row.get(10)?,
+                author_count: row.get(11)?,
+                is_volatile: row.get(12)?,
+                has_history: row.get(13)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
 /// Get all API endpoints with handler information.
 pub fn get_api_endpoints(db: &Database) -> anyhow::Result<Vec<ApiEndpointRow>> {
     let mut stmt = db.conn().prepare(

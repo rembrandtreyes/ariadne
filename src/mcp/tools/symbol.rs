@@ -335,4 +335,199 @@ impl AriadneService {
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
     }
+
+    pub(crate) fn tool_get_symbol_health(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        match self.with_db(|db| query::get_symbol_health_data(db, &symbol_name)) {
+            Ok(Ok(Some(data))) => {
+                let stability_score = 1.0
+                    - ((data.modification_count as f64 / 30.0) * 0.5
+                        + (data.author_count as f64 / 10.0) * 0.3
+                        + if data.is_volatile { 0.2 } else { 0.0 })
+                    .min(1.0);
+                let complexity_score = (((data.fan_in + data.fan_out) as f64 / 20.0) * 0.7
+                    + ((data.line_end - data.line_start) as f64 / 200.0) * 0.3)
+                    .min(1.0);
+
+                let health_score = stability_score * 0.5
+                    + (1.0 - complexity_score) * 0.3
+                    + if data.is_dead { 0.0 } else { 0.2 };
+                let health_score = health_score.clamp(0.0, 1.0);
+
+                let confidence: f64 = if data.has_history { 0.8 } else { 0.3 }
+                    + if data.fan_in > 0 || data.fan_out > 0 {
+                        0.2
+                    } else {
+                        0.0
+                    };
+                let confidence = confidence.min(1.0);
+
+                let health_level = match health_score {
+                    s if s >= 0.8 => "excellent",
+                    s if s >= 0.6 => "good",
+                    s if s >= 0.4 => "fair",
+                    s if s >= 0.2 => "poor",
+                    _ => "critical",
+                };
+
+                let mut signals = Vec::new();
+                if data.is_volatile {
+                    signals.push("high_volatility");
+                }
+                if data.fan_in > 5 {
+                    signals.push("high_fan_in");
+                }
+                if data.fan_out > 8 {
+                    signals.push("high_fan_out");
+                }
+                if data.is_dead {
+                    signals.push("dead_code");
+                }
+                if data.author_count > 5 {
+                    signals.push("many_authors");
+                }
+
+                let result = serde_json::json!({
+                    "symbol": {
+                        "name": data.name,
+                        "qualified_name": data.qualified_name,
+                        "kind": data.kind,
+                        "file": data.file_path,
+                        "line_start": data.line_start,
+                        "line_end": data.line_end,
+                    },
+                    "health_score": (health_score * 1000.0).round() / 1000.0,
+                    "health_level": health_level,
+                    "stability_score": (stability_score * 1000.0).round() / 1000.0,
+                    "complexity_score": (complexity_score * 1000.0).round() / 1000.0,
+                    "confidence": (confidence * 1000.0).round() / 1000.0,
+                    "signals": signals,
+                    "metrics": {
+                        "fan_in": data.fan_in,
+                        "fan_out": data.fan_out,
+                        "modification_count": data.modification_count,
+                        "author_count": data.author_count,
+                        "is_volatile": data.is_volatile,
+                        "is_dead": data.is_dead,
+                    },
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Ok(None)) => CallToolResult::error(vec![Content::text(format!(
+                "Symbol not found: {symbol_name}"
+            ))]),
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Health query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    pub(crate) fn tool_get_complexity_hotspots(&self) -> CallToolResult {
+        let total_symbols: i64 = match self.with_db(|db| {
+            Ok::<_, anyhow::Error>(db.conn().query_row(
+                "SELECT COUNT(*) FROM symbols WHERE is_test = 0 AND is_dead = 0",
+                [],
+                |row| row.get(0),
+            )?)
+        }) {
+            Ok(Ok(n)) => n,
+            _ => 0,
+        };
+
+        match self.with_db(|db| query::get_complexity_hotspots(db, 50)) {
+            Ok(Ok(hotspots)) => {
+                let items: Vec<_> = hotspots
+                    .iter()
+                    .map(|h| {
+                        serde_json::json!({
+                            "symbol": h.name,
+                            "qualified_name": h.qualified_name,
+                            "kind": h.kind,
+                            "file": h.file_path,
+                            "fan_in": h.fan_in,
+                            "fan_out": h.fan_out,
+                            "modification_count": h.modification_count,
+                            "is_volatile": h.is_volatile,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "hotspots": items,
+                    "count": items.len(),
+                    "total_symbols": total_symbols,
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Hotspot query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    pub(crate) fn tool_get_code_smells(&self) -> CallToolResult {
+        match self.with_db(query::get_code_smell_candidates) {
+            Ok(Ok(candidates)) => {
+                let mut smells = Vec::new();
+                for c in &candidates {
+                    if c.is_volatile && c.modification_count > 10 {
+                        smells.push(serde_json::json!({
+                            "symbol": c.name,
+                            "qualified_name": c.qualified_name,
+                            "file": c.file_path,
+                            "smell_type": "high_volatility",
+                            "severity": if c.modification_count > 25 { "high" } else { "medium" },
+                            "details": {
+                                "modification_count": c.modification_count,
+                                "author_count": c.author_count,
+                            },
+                        }));
+                    }
+                    if c.fan_in > 5 {
+                        smells.push(serde_json::json!({
+                            "symbol": c.name,
+                            "qualified_name": c.qualified_name,
+                            "file": c.file_path,
+                            "smell_type": "high_fan_in",
+                            "severity": if c.fan_in > 15 { "high" } else { "medium" },
+                            "details": { "fan_in": c.fan_in },
+                        }));
+                    }
+                    if c.fan_out > 8 {
+                        smells.push(serde_json::json!({
+                            "symbol": c.name,
+                            "qualified_name": c.qualified_name,
+                            "file": c.file_path,
+                            "smell_type": "high_fan_out",
+                            "severity": if c.fan_out > 15 { "high" } else { "medium" },
+                            "details": { "fan_out": c.fan_out },
+                        }));
+                    }
+                    if c.is_dead {
+                        smells.push(serde_json::json!({
+                            "symbol": c.name,
+                            "qualified_name": c.qualified_name,
+                            "file": c.file_path,
+                            "smell_type": "dead_code",
+                            "severity": "medium",
+                            "details": { "is_dead": true },
+                        }));
+                    }
+                }
+                let result = serde_json::json!({
+                    "smells": smells,
+                    "count": smells.len(),
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("Code smell query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
 }
