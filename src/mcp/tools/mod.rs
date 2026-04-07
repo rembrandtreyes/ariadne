@@ -1,6 +1,7 @@
 mod architecture;
 mod file;
 mod graph;
+mod health;
 mod impact;
 mod symbol;
 
@@ -63,7 +64,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 27 Ariadne MCP tools.
+/// Return the 28 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -229,6 +230,11 @@ fn all_tools() -> Vec<Tool> {
             "get_code_smells",
             "Detect code smell patterns: high volatility (frequent changes), high fan-in (bottleneck), high fan-out (shotgun surgery risk), and dead code.",
         ),
+        // Health tool
+        no_param_tool(
+            "get_codebase_health",
+            "Returns a whole-codebase health snapshot with letter grade (A-F), dead code ratio, cycle count, coupling density, modularity score, and natural-language summary. Single-call replacement for multiple sequential queries.",
+        ),
     ]
 }
 
@@ -375,6 +381,8 @@ impl AriadneService {
             "get_coupling" => self.tool_get_coupling(),
             "get_communities" => self.tool_get_communities(),
             "get_api_endpoints" => self.tool_get_api_endpoints(),
+            // Health tool
+            "get_codebase_health" => self.tool_get_codebase_health(),
             _ => CallToolResult::error(vec![Content::text(format!("Unknown tool: {}", name))]),
         }
     }

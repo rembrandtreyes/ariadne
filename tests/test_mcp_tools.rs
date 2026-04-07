@@ -56,7 +56,7 @@ async fn test_list_tools_returns_ten() {
         .list_tools(None, ctx)
         .await
         .expect("list_tools should succeed");
-    assert_eq!(result.tools.len(), 27, "Ariadne exposes 27 MCP tools");
+    assert_eq!(result.tools.len(), 28, "Ariadne exposes 28 MCP tools");
 }
 
 #[tokio::test]
