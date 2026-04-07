@@ -270,11 +270,38 @@ pub fn insert_service_edge(
     Ok(())
 }
 
+/// Insert or replace a symbol history record (git blame aggregate).
+pub fn insert_symbol_history(
+    db: &Database,
+    symbol_id: i64,
+    created_at: Option<i64>,
+    last_modified_at: Option<i64>,
+    modification_count: i32,
+    author_count: i32,
+    is_volatile: bool,
+) -> anyhow::Result<()> {
+    db.conn().execute(
+        "INSERT OR REPLACE INTO symbol_history
+         (symbol_id, created_at, last_modified_at, modification_count, author_count, is_volatile)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            symbol_id,
+            created_at,
+            last_modified_at,
+            modification_count,
+            author_count,
+            is_volatile
+        ],
+    )?;
+    Ok(())
+}
+
 /// Clear all data from the database in FK-safe order for re-indexing.
 pub fn clear_all_data(db: &Database) -> anyhow::Result<()> {
     // Delete in dependency order: children before parents
     db.conn().execute_batch(
-        "DELETE FROM flow_steps;
+        "DELETE FROM symbol_history;
+         DELETE FROM flow_steps;
          DELETE FROM flows;
          DELETE FROM rule_violations;
          DELETE FROM service_edges;

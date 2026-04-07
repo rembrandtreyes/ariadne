@@ -6,6 +6,7 @@ pub mod dead_code;
 pub mod discovery;
 pub mod flow;
 pub mod framework_entry_points;
+pub mod git_history;
 pub mod heritage;
 pub mod import_resolution;
 pub mod parsing;
@@ -70,7 +71,7 @@ fn run_pipeline_phases(
     discovered: &discovery::DiscoveryResult,
     config: &RepoConfig,
 ) -> anyhow::Result<Vec<PhaseTiming>> {
-    let mut timings = Vec::with_capacity(13);
+    let mut timings = Vec::with_capacity(15);
 
     macro_rules! timed {
         ($name:expr, $body:expr) => {{
@@ -99,6 +100,7 @@ fn run_pipeline_phases(
     timed!("dead_code", dead_code::detect_dead_code(db, config))?;
     timed!("flow", flow::trace_flows(db))?;
     timed!("coupling", coupling::analyze_coupling(db, root))?;
+    timed!("git_history", git_history::analyze_git_history(db, root))?;
     timed!("search_index", search_index::build_search_index(db))?;
     timed!("api_resolution", api_resolution::resolve_api_boundaries(db))?;
     timed!("service_topology", service_topology::build_topology(db))?;

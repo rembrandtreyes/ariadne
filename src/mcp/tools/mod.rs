@@ -63,7 +63,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 22 Ariadne MCP tools.
+/// Return the 23 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -153,6 +153,12 @@ fn all_tools() -> Vec<Tool> {
         string_param_tool(
             "get_execution_flows",
             "Trace execution flows passing through a symbol — ordered call paths from entry points.",
+            "symbol",
+            "Symbol name or qualified name",
+        ),
+        string_param_tool(
+            "get_symbol_history",
+            "Get temporal history for a symbol: creation date, last modification, change frequency, author count, and volatility. Reveals code stability patterns unavailable from static analysis.",
             "symbol",
             "Symbol name or qualified name",
         ),
@@ -325,6 +331,7 @@ impl AriadneService {
             "why_symbol" => self.tool_why_symbol(params),
             "get_heritage" => self.tool_get_heritage(params),
             "get_execution_flows" => self.tool_get_execution_flows(params),
+            "get_symbol_history" => self.tool_get_symbol_history(params),
             // File tools
             "get_imports" => self.tool_get_imports(params),
             "get_file_summary" => self.tool_get_file_summary(params),

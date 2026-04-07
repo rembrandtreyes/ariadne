@@ -701,6 +701,53 @@ fn group_file_connections(
     Ok(grouped.into_values().collect())
 }
 
+/// A symbol history row returned from queries.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolHistoryRow {
+    pub symbol_id: i64,
+    pub symbol_name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file_path: String,
+    pub created_at: Option<i64>,
+    pub last_modified_at: Option<i64>,
+    pub modification_count: i32,
+    pub author_count: i32,
+    pub is_volatile: bool,
+}
+
+/// Get temporal history for a symbol (git blame aggregate).
+pub fn get_symbol_history(
+    db: &Database,
+    symbol_id: i64,
+) -> anyhow::Result<Option<SymbolHistoryRow>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT sh.symbol_id, s.name, s.qualified_name, s.kind, f.path,
+                sh.created_at, sh.last_modified_at, sh.modification_count,
+                sh.author_count, sh.is_volatile
+         FROM symbol_history sh
+         JOIN symbols s ON sh.symbol_id = s.id
+         JOIN files f ON s.file_id = f.id
+         WHERE sh.symbol_id = ?1",
+    )?;
+    let mut rows = stmt.query(params![symbol_id])?;
+    match rows.next()? {
+        Some(row) => Ok(Some(SymbolHistoryRow {
+            symbol_id: row.get(0)?,
+            symbol_name: row.get(1)?,
+            qualified_name: row.get(2)?,
+            kind: row.get(3)?,
+            file_path: row.get(4)?,
+            created_at: row.get(5)?,
+            last_modified_at: row.get(6)?,
+            modification_count: row.get(7)?,
+            author_count: row.get(8)?,
+            is_volatile: row.get(9)?,
+        })),
+        None => Ok(None),
+    }
+}
+
 /// Get all API endpoints with handler information.
 pub fn get_api_endpoints(db: &Database) -> anyhow::Result<Vec<ApiEndpointRow>> {
     let mut stmt = db.conn().prepare(

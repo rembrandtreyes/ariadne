@@ -8,9 +8,9 @@
 //!
 //! ## Key modules
 //!
-//! - [`pipeline`] — 14-phase indexing pipeline (parse → resolve → analyze)
+//! - [`pipeline`] — 15-phase indexing pipeline (parse → resolve → analyze)
 //! - [`db`] — SQLite database wrapper and query layer
-//! - [`mcp`] — Model Context Protocol server (22 tools)
+//! - [`mcp`] — Model Context Protocol server (23 tools)
 //! - [`lsp`] — Language Server Protocol server (diagnostics, hover, code lens)
 //! - [`graph`] — In-memory call graph, blast radius, call chain analysis
 //! - [`analysis`] — Dead code detection, community detection, SCIP export

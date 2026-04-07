@@ -161,6 +161,17 @@ CREATE TABLE IF NOT EXISTS rule_violations (
     severity TEXT NOT NULL DEFAULT 'error'
 );
 
+-- Symbol temporal history (git blame aggregated per symbol)
+CREATE TABLE IF NOT EXISTS symbol_history (
+    id INTEGER PRIMARY KEY,
+    symbol_id INTEGER NOT NULL UNIQUE REFERENCES symbols(id) ON DELETE CASCADE,
+    created_at INTEGER,
+    last_modified_at INTEGER,
+    modification_count INTEGER NOT NULL DEFAULT 0,
+    author_count INTEGER NOT NULL DEFAULT 0,
+    is_volatile BOOLEAN NOT NULL DEFAULT FALSE
+);
+
 -- Metadata key-value store
 CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
@@ -192,6 +203,8 @@ CREATE INDEX IF NOT EXISTS idx_api_endpoints_path ON api_endpoints(path_pattern)
 CREATE INDEX IF NOT EXISTS idx_api_calls_service ON api_calls(service_id);
 CREATE INDEX IF NOT EXISTS idx_service_edges_from ON service_edges(from_service_id);
 CREATE INDEX IF NOT EXISTS idx_service_edges_to ON service_edges(to_service_id);
+CREATE INDEX IF NOT EXISTS idx_symbol_history_symbol ON symbol_history(symbol_id);
+CREATE INDEX IF NOT EXISTS idx_symbol_history_volatile ON symbol_history(is_volatile) WHERE is_volatile = 1;
 ";
 
 /// Create all schema tables and indexes.

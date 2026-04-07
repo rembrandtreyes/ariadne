@@ -227,6 +227,68 @@ impl AriadneService {
         }
     }
 
+    pub(crate) fn tool_get_symbol_history(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
+            Ok(Ok(Some(s))) => s,
+            Ok(Ok(None)) => {
+                return CallToolResult::error(vec![Content::text(format!(
+                    "Symbol not found: {symbol_name}"
+                ))])
+            }
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
+        };
+
+        let file_path = match self.with_db(|db| query::file_path_by_id(db, sym.file_id)) {
+            Ok(Ok(p)) => p,
+            _ => "unknown".to_string(),
+        };
+
+        match self.with_db(|db| query::get_symbol_history(db, sym.id)) {
+            Ok(Ok(Some(history))) => {
+                let result = serde_json::json!({
+                    "symbol": {
+                        "name": sym.name,
+                        "qualified_name": sym.qualified_name,
+                        "kind": sym.kind,
+                        "file": file_path,
+                        "line_start": sym.line_start,
+                        "line_end": sym.line_end,
+                    },
+                    "history": {
+                        "created_at": history.created_at,
+                        "last_modified_at": history.last_modified_at,
+                        "modification_count": history.modification_count,
+                        "author_count": history.author_count,
+                        "is_volatile": history.is_volatile,
+                    },
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Ok(None)) => {
+                let result = serde_json::json!({
+                    "symbol": {
+                        "name": sym.name,
+                        "qualified_name": sym.qualified_name,
+                        "kind": sym.kind,
+                        "file": file_path,
+                    },
+                    "history": null,
+                    "note": "No git history available. Ensure the project has been indexed with a git repository present."
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => {
+                CallToolResult::error(vec![Content::text(format!("History query failed: {e}"))])
+            }
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
     pub(crate) fn tool_get_execution_flows(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
         let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
