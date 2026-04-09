@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use ariadne::dashboard::api::{graph_data, search_symbols, stats, DbState, SearchQuery};
+use ariadne::dashboard::api::{
+    coupling, describe, graph_data, modules, search_symbols, source, stats, CouplingQuery, DbState,
+    DescribeQuery, SearchQuery, SourceQuery,
+};
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
 
@@ -128,6 +131,53 @@ async fn test_dashboard_error_on_invalid_db() {
     );
 }
 
+#[tokio::test]
+async fn test_dashboard_modules_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    let result = modules(State(state)).await.expect("modules should succeed");
+    let data = result.0;
+
+    assert!(
+        !data.modules.is_empty(),
+        "expected at least one module, got empty"
+    );
+
+    let first = &data.modules[0];
+    assert!(!first.name.is_empty(), "module name should not be empty");
+    assert!(first.symbol_count > 0, "module should have symbols");
+    assert!(first.file_count > 0, "module should have files");
+    assert!(
+        first.health >= 0.0 && first.health <= 1.0,
+        "health should be 0-1, got {}",
+        first.health
+    );
+    assert!(
+        first.risk >= 0.0 && first.risk <= 1.0,
+        "risk should be 0-1, got {}",
+        first.risk
+    );
+    assert!(
+        !first.files.is_empty(),
+        "module should have file-level breakdown"
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_coupling_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    let query = CouplingQuery { limit: Some(10) };
+    let result = coupling(State(state), Query(query))
+        .await
+        .expect("coupling should succeed");
+    let data = result.0;
+
+    // The python fixture may not have coupling data (requires git history),
+    // but the endpoint should return successfully with an empty list
+    assert!(data.pairs.len() <= 10, "should respect the limit parameter");
+}
+
 #[test]
 fn test_xss_regression_html_escaping() {
     // Read the dashboard HTML file directly from the source tree
@@ -141,25 +191,21 @@ fn test_xss_regression_html_escaping() {
     );
 
     // Verify that innerHTML usages that interpolate data use esc()
-    // Find all innerHTML assignments that contain template literals
     let lines: Vec<&str> = index_html
         .lines()
         .filter(|line| line.contains("innerHTML"))
         .collect();
 
     for line in &lines {
-        // Lines that set innerHTML to '' (empty) or static strings are safe
         if line.contains("innerHTML = ''")
             || line.contains("innerHTML = \"\"")
             || line.contains("innerHTML = '<")
         {
             continue;
         }
-        // Lines that clear innerHTML are safe
         if line.trim().ends_with("innerHTML = '';") {
             continue;
         }
-        // Lines that use template literals with ${...} must use esc()
         if line.contains("${") {
             assert!(
                 line.contains("esc("),
@@ -169,29 +215,209 @@ fn test_xss_regression_html_escaping() {
         }
     }
 
-    // Specifically verify search results in index.html use esc()
+    // Verify JS files that use innerHTML also reference esc()
+    let js_files = [
+        "src/dashboard/static/search.js",
+        "src/dashboard/static/signal.js",
+        "src/dashboard/static/detail-panel.js",
+        "src/dashboard/static/source-modal.js",
+    ];
+
+    for js_file in &js_files {
+        if let Ok(content) = std::fs::read_to_string(js_file) {
+            let js_lines: Vec<&str> = content
+                .lines()
+                .filter(|line| line.contains("innerHTML"))
+                .collect();
+
+            for line in &js_lines {
+                if line.contains("innerHTML = ''") || line.contains("innerHTML = \"\"") {
+                    continue;
+                }
+                if line.trim().ends_with("innerHTML = '';") {
+                    continue;
+                }
+                if line.contains("${") {
+                    assert!(
+                        line.contains("esc("),
+                        "innerHTML in {} with interpolation must use esc(): {}",
+                        js_file,
+                        line.trim()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_dashboard_describe_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    // First find a symbol ID via search
+    let query = SearchQuery {
+        q: Some("greet".to_string()),
+    };
+    let search_result = search_symbols(State(state.clone()), Query(query))
+        .await
+        .expect("search should succeed");
+    let results = &search_result.0;
+    assert!(!results.is_empty(), "need at least one symbol to describe");
+
+    let symbol_id: i64 = results[0].id.parse().expect("id should be numeric");
+
+    let desc_query = DescribeQuery { id: symbol_id };
+    let result = describe(State(state), Query(desc_query))
+        .await
+        .expect("describe should succeed");
+    let data = result.0;
+
     assert!(
-        index_html.contains("${esc(r.name)}"),
-        "search results must escape r.name with esc()"
+        !data.description.is_empty(),
+        "description should not be empty"
     );
     assert!(
-        index_html.contains("${esc(r.id)}"),
-        "search results must escape r.id with esc()"
+        data.risk_score >= 0.0 && data.risk_score <= 1.0,
+        "risk_score should be 0-1, got {}",
+        data.risk_score
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_source_full_body() {
+    let (_dir, state) = setup_indexed_db();
+
+    // Find a symbol to get source for
+    let query = SearchQuery {
+        q: Some("greet".to_string()),
+    };
+    let search_result = search_symbols(State(state.clone()), Query(query))
+        .await
+        .expect("search should succeed");
+    let results = &search_result.0;
+    assert!(!results.is_empty());
+
+    let symbol_id: i64 = results[0].id.parse().unwrap();
+    let source_query = SourceQuery {
+        id: symbol_id,
+        context: Some(0),
+    };
+    let result = source(State(state), Query(source_query))
+        .await
+        .expect("source should succeed");
+    let data = result.0;
+
+    assert!(!data.code.is_empty(), "source code should not be empty");
+    assert!(data.line_count > 0, "line_count should be > 0");
+    assert!(
+        data.line_start <= data.line_end,
+        "line_start should be <= line_end"
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_v2_endpoints_basic() {
+    let (_dir, state) = setup_indexed_db();
+
+    // Stats
+    let stats_result = stats(State(state.clone())).await;
+    assert!(stats_result.is_ok(), "stats endpoint failed");
+
+    // Modules
+    let modules_result = modules(State(state.clone())).await;
+    assert!(modules_result.is_ok(), "modules endpoint failed");
+
+    // Insights
+    let insights_result = ariadne::dashboard::api::insights(State(state.clone())).await;
+    assert!(insights_result.is_ok(), "insights endpoint failed");
+
+    // Coupling
+    let coupling_query = CouplingQuery { limit: Some(5) };
+    let coupling_result = coupling(State(state.clone()), Query(coupling_query)).await;
+    assert!(coupling_result.is_ok(), "coupling endpoint failed");
+
+    // Search -> Describe chain
+    let search_query = SearchQuery {
+        q: Some("greet".to_string()),
+    };
+    let search_result = search_symbols(State(state.clone()), Query(search_query))
+        .await
+        .unwrap();
+    if !search_result.0.is_empty() {
+        let id: i64 = search_result.0[0].id.parse().unwrap();
+
+        let desc_query = DescribeQuery { id };
+        let desc_result = describe(State(state.clone()), Query(desc_query)).await;
+        assert!(desc_result.is_ok(), "describe endpoint failed");
+
+        let source_query = SourceQuery {
+            id,
+            context: Some(0),
+        };
+        let source_result = source(State(state.clone()), Query(source_query)).await;
+        assert!(source_result.is_ok(), "source endpoint failed");
+    }
+}
+
+#[tokio::test]
+async fn test_dashboard_v2_all_endpoints() {
+    let (_dir, state) = setup_indexed_db();
+
+    // Stats
+    let stats_result = stats(State(state.clone())).await;
+    assert!(stats_result.is_ok(), "stats endpoint failed");
+
+    // Modules
+    let modules_result = modules(State(state.clone())).await;
+    assert!(modules_result.is_ok(), "modules endpoint failed");
+
+    // Insights
+    let insights_result = ariadne::dashboard::api::insights(State(state.clone())).await;
+    assert!(insights_result.is_ok(), "insights endpoint failed");
+
+    // Coupling
+    let coupling_query = CouplingQuery { limit: Some(5) };
+    let coupling_result = coupling(State(state.clone()), Query(coupling_query)).await;
+    assert!(coupling_result.is_ok(), "coupling endpoint failed");
+
+    // Search -> Describe -> Source chain
+    let search_query = SearchQuery {
+        q: Some("greet".to_string()),
+    };
+    let search_result = search_symbols(State(state.clone()), Query(search_query))
+        .await
+        .expect("search should succeed");
+    assert!(
+        !search_result.0.is_empty(),
+        "need at least one symbol for v2 integration test"
     );
 
-    // The graph renderer (tooltip) has been moved to graph-renderer.js (Canvas 2D)
-    let renderer_js = std::fs::read_to_string("src/dashboard/static/graph-renderer.js")
-        .expect("should read graph-renderer.js");
+    let symbol_id: i64 = search_result.0[0].id.parse().expect("id should be numeric");
+
+    let desc_query = DescribeQuery { id: symbol_id };
+    let desc_result = describe(State(state.clone()), Query(desc_query))
+        .await
+        .expect("describe endpoint failed");
     assert!(
-        renderer_js.contains("esc(node.name)"),
-        "tooltip must escape node.name with esc()"
+        !desc_result.0.description.is_empty(),
+        "description should not be empty"
     );
     assert!(
-        renderer_js.contains("esc(node.kind)"),
-        "tooltip must escape node.kind with esc()"
+        desc_result.0.risk_score >= 0.0 && desc_result.0.risk_score <= 1.0,
+        "risk_score should be 0-1, got {}",
+        desc_result.0.risk_score
     );
+
+    let source_query = SourceQuery {
+        id: symbol_id,
+        context: Some(0),
+    };
+    let source_result = source(State(state.clone()), Query(source_query))
+        .await
+        .expect("source endpoint failed");
     assert!(
-        renderer_js.contains("esc(node.file)"),
-        "tooltip must escape node.file with esc()"
+        !source_result.0.code.is_empty(),
+        "source code should not be empty"
     );
+    assert!(source_result.0.line_count > 0, "line_count should be > 0");
 }

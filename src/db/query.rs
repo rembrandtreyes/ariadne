@@ -1069,6 +1069,183 @@ pub fn get_code_smell_candidates(db: &Database) -> anyhow::Result<Vec<SymbolHeal
     Ok(rows)
 }
 
+/// File-level summary within a module for the dashboard.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModuleFileSummary {
+    pub name: String,
+    pub symbol_count: u64,
+    pub dead_count: u64,
+    pub risk: f64,
+    pub health: f64,
+}
+
+/// Module-level aggregation for the dashboard Signal view.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModuleSummary {
+    pub name: String,
+    pub path: String,
+    pub symbol_count: u64,
+    pub file_count: u64,
+    pub health: f64,
+    pub risk: f64,
+    pub dead_count: u64,
+    pub cycle_count: u64,
+    pub god_objects: u64,
+    pub files: Vec<ModuleFileSummary>,
+}
+
+/// Build module summaries grouped by top-level source directory.
+///
+/// Groups files by the first directory component of their path after any "src/" prefix
+/// (e.g., "src/pipeline/foo.rs" → "pipeline"). Computes per-module symbol counts,
+/// dead code counts, and per-file breakdowns.
+pub fn get_module_summaries(db: &Database) -> anyhow::Result<Vec<ModuleSummary>> {
+    let conn = db.conn();
+
+    let mut stmt = conn.prepare(
+        "SELECT f.id, f.path,
+                COUNT(s.id) as sym_count,
+                SUM(CASE WHEN s.is_dead = 1 THEN 1 ELSE 0 END) as dead_count
+         FROM files f
+         LEFT JOIN symbols s ON s.file_id = f.id
+         GROUP BY f.id
+         ORDER BY f.path",
+    )?;
+
+    struct FileInfo {
+        _id: i64,
+        path: String,
+        sym_count: u64,
+        dead_count: u64,
+    }
+
+    let file_infos: Vec<FileInfo> = stmt
+        .query_map([], |row| {
+            Ok(FileInfo {
+                _id: row.get(0)?,
+                path: row.get(1)?,
+                sym_count: row.get::<_, i64>(2)? as u64,
+                dead_count: row.get::<_, i64>(3)? as u64,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut module_map: std::collections::BTreeMap<String, Vec<usize>> =
+        std::collections::BTreeMap::new();
+
+    for (idx, fi) in file_infos.iter().enumerate() {
+        let module_name = extract_module_name(&fi.path);
+        module_map.entry(module_name).or_default().push(idx);
+    }
+
+    let mut modules = Vec::new();
+    for (name, indices) in &module_map {
+        let symbol_count: u64 = indices.iter().map(|&i| file_infos[i].sym_count).sum();
+        let dead_count: u64 = indices.iter().map(|&i| file_infos[i].dead_count).sum();
+        let file_count = indices.len() as u64;
+
+        let file_summaries: Vec<ModuleFileSummary> = indices
+            .iter()
+            .filter(|&&i| file_infos[i].sym_count > 0)
+            .map(|&i| {
+                let fi = &file_infos[i];
+                let dead_ratio = fi.dead_count as f64 / fi.sym_count as f64;
+                let file_risk = dead_ratio.min(1.0);
+                ModuleFileSummary {
+                    name: fi.path.rsplit('/').next().unwrap_or(&fi.path).to_string(),
+                    symbol_count: fi.sym_count,
+                    dead_count: fi.dead_count,
+                    risk: file_risk,
+                    health: (1.0 - file_risk).max(0.0),
+                }
+            })
+            .collect();
+
+        let dead_ratio = if symbol_count > 0 {
+            dead_count as f64 / symbol_count as f64
+        } else {
+            0.0
+        };
+        let module_risk = dead_ratio.min(1.0);
+
+        modules.push(ModuleSummary {
+            name: name.clone(),
+            path: format!("src/{}", name),
+            symbol_count,
+            file_count,
+            health: (1.0 - module_risk).max(0.0),
+            risk: module_risk,
+            dead_count,
+            cycle_count: 0,
+            god_objects: 0,
+            files: file_summaries,
+        });
+    }
+
+    modules.sort_by(|a, b| b.symbol_count.cmp(&a.symbol_count));
+
+    Ok(modules)
+}
+
+/// A coupling pair with module-level grouping for the dashboard Signal view.
+#[derive(Debug, Clone, Serialize)]
+pub struct CouplingPairSummary {
+    pub from_module: String,
+    pub to_module: String,
+    pub from_file: String,
+    pub to_file: String,
+    pub strength: f64,
+    pub co_changes: i32,
+    pub is_cycle: bool,
+}
+
+/// Get top N coupled file pairs, annotated with module names, for the dashboard Signal view.
+pub fn get_top_coupling_pairs(
+    db: &Database,
+    limit: i64,
+) -> anyhow::Result<Vec<CouplingPairSummary>> {
+    let conn = db.conn();
+    let mut stmt = conn.prepare(
+        "SELECT fa.path, fb.path, c.co_changes, c.strength
+         FROM coupling c
+         JOIN files fa ON c.file_a_id = fa.id
+         JOIN files fb ON c.file_b_id = fb.id
+         ORDER BY c.strength DESC
+         LIMIT ?1",
+    )?;
+
+    let pairs = stmt
+        .query_map(params![limit], |row| {
+            let path_a: String = row.get(0)?;
+            let path_b: String = row.get(1)?;
+            let co_changes: i32 = row.get(2)?;
+            let strength: f64 = row.get(3)?;
+            let mod_a = extract_module_name(&path_a);
+            let mod_b = extract_module_name(&path_b);
+            Ok(CouplingPairSummary {
+                from_module: mod_a,
+                to_module: mod_b,
+                from_file: path_a,
+                to_file: path_b,
+                strength,
+                co_changes,
+                is_cycle: false,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(pairs)
+}
+
+/// Extract module name from a file path (e.g., "src/pipeline/foo.rs" → "pipeline").
+fn extract_module_name(path: &str) -> String {
+    let path = path.strip_prefix("src/").unwrap_or(path);
+    match path.split('/').next() {
+        Some(first) if path.contains('/') => first.to_string(),
+        _ => "root".to_string(),
+    }
+}
+
 /// Get all API endpoints with handler information.
 pub fn get_api_endpoints(db: &Database) -> anyhow::Result<Vec<ApiEndpointRow>> {
     let mut stmt = db.conn().prepare(

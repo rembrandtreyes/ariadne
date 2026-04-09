@@ -537,6 +537,7 @@ pub struct SourceResult {
     pub code: String,
     pub line_start: u32,
     pub line_end: u32,
+    pub line_count: u32,
     pub language: String,
     pub file: String,
 }
@@ -544,6 +545,7 @@ pub struct SourceResult {
 #[derive(Deserialize)]
 pub struct SourceQuery {
     pub id: i64,
+    pub context: Option<u32>,
 }
 
 pub async fn source(
@@ -551,12 +553,61 @@ pub async fn source(
     Query(query): Query<SourceQuery>,
 ) -> Result<Json<SourceResult>, ApiError> {
     let db = open_db(&db_path)?;
-    let result = fetch_source(&db, query.id)
+    let context = query.context.unwrap_or(0);
+    let result = fetch_source(&db, query.id, context)
         .map_err(|_| ApiError::query_failed("Failed to fetch source code."))?;
     Ok(Json(result))
 }
 
-fn fetch_source(db: &Database, symbol_id: i64) -> anyhow::Result<SourceResult> {
+#[derive(Serialize)]
+pub struct ModulesResponse {
+    pub modules: Vec<crate::db::query::ModuleSummary>,
+}
+
+pub async fn modules(State(db_path): State<DbState>) -> Result<Json<ModulesResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let mods = crate::db::query::get_module_summaries(&db)
+        .map_err(|_| ApiError::query_failed("Failed to build module summaries."))?;
+    Ok(Json(ModulesResponse { modules: mods }))
+}
+
+#[derive(Deserialize)]
+pub struct CouplingQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct CouplingResponse {
+    pub pairs: Vec<crate::db::query::CouplingPairSummary>,
+}
+
+pub async fn coupling(
+    State(db_path): State<DbState>,
+    Query(query): Query<CouplingQuery>,
+) -> Result<Json<CouplingResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let limit = query.limit.unwrap_or(10).min(50);
+    let pairs = crate::db::query::get_top_coupling_pairs(&db, limit)
+        .map_err(|_| ApiError::query_failed("Failed to load coupling data."))?;
+    Ok(Json(CouplingResponse { pairs }))
+}
+
+#[derive(Deserialize)]
+pub struct DescribeQuery {
+    pub id: i64,
+}
+
+pub async fn describe(
+    State(db_path): State<DbState>,
+    Query(query): Query<DescribeQuery>,
+) -> Result<Json<crate::dashboard::describe::DescribeResult>, ApiError> {
+    let db = open_db(&db_path)?;
+    let result = crate::dashboard::describe::describe_symbol(&db, query.id)
+        .map_err(|_| ApiError::query_failed("Failed to generate description."))?;
+    Ok(Json(result))
+}
+
+fn fetch_source(db: &Database, symbol_id: i64, context: u32) -> anyhow::Result<SourceResult> {
     let conn = db.conn();
 
     let (absolute_path, line_start, line_end, language, file_path): (
@@ -594,17 +645,17 @@ fn fetch_source(db: &Database, symbol_id: i64) -> anyhow::Result<SourceResult> {
     let all_lines: Vec<&str> = content.lines().collect();
     let total = all_lines.len() as u32;
 
-    // 3 lines of context above/below; line numbers are 1-indexed
-    let context: u32 = 3;
     let start_idx = line_start.saturating_sub(context + 1) as usize;
     let end_idx = (line_end + context).min(total) as usize;
 
     let code = all_lines[start_idx..end_idx].join("\n");
+    let line_count = (end_idx - start_idx) as u32;
 
     Ok(SourceResult {
         code,
         line_start,
         line_end,
+        line_count,
         language,
         file: file_path,
     })
