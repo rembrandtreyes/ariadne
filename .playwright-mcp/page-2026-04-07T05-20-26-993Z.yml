@@ -1,0 +1,175 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - img [ref=e5]
+      - generic [ref=e7]: Ariadne
+    - generic [ref=e8]:
+      - button "Signal" [ref=e9] [cursor=pointer]: Signal
+      - button "Void" [ref=e11] [cursor=pointer]: Void
+    - generic [ref=e13]: 1,842 sym · 247 files
+  - generic [ref=e14]:
+    - generic:
+      - generic:
+        - generic:
+          - heading "Your codebase scores 84" [level=1]
+          - paragraph: 247 files · 4 languages · 67 issues found
+        - generic:
+          - generic:
+            - generic: "47"
+            - generic: dead symbols
+          - generic:
+            - generic: "5"
+            - generic: cycles
+          - generic:
+            - generic: "3"
+            - generic: god modules
+          - generic:
+            - generic: "12"
+            - generic: risky files
+        - generic: Critical Risks
+        - generic:
+          - generic:
+            - generic: "92"
+            - generic:
+              - generic: pipeline/resolve.rs
+              - generic: High cyclomatic complexity (47), 12 dependencies, changed 23 times in 30 days. Central bottleneck in resolve phase.
+            - generic: →
+          - generic:
+            - generic: "87"
+            - generic:
+              - generic: graph/blast_radius.rs
+              - generic: Circular dependency with analysis/dead_code.rs. 8 callers, 340 lines, no test coverage for edge cases.
+            - generic: →
+        - generic: Modules
+        - generic:
+          - generic:
+            - generic:
+              - generic: pipeline/
+              - generic: 412 sym
+            - generic:
+              - generic: 14 phases
+              - generic: 3 risky
+          - generic:
+            - generic:
+              - generic: parse/
+              - generic: 286 sym
+            - generic:
+              - generic: 9 languages
+              - generic: tree-sitter
+          - generic:
+            - generic:
+              - generic: db/
+              - generic: 148 sym
+            - generic:
+              - generic: SQLite
+              - generic: schema
+          - generic:
+            - generic:
+              - generic: mcp/
+              - generic: 94 sym
+            - generic:
+              - generic: 10 tools
+              - generic: stdio
+          - generic:
+            - generic:
+              - generic: graph/
+              - generic: 203 sym
+            - generic:
+              - generic: petgraph
+              - generic: 1 cycle
+          - generic:
+            - generic:
+              - generic: analysis/
+              - generic: 176 sym
+            - generic:
+              - generic: dead code
+              - generic: arch rules
+    - generic:
+      - img
+      - generic [ref=e106]: Interface
+      - generic [ref=e107]: Core
+      - generic [ref=e108]: Data
+      - generic [ref=e109] [cursor=pointer]:
+        - generic [ref=e112]: mcp/
+        - generic [ref=e113]: 94 symbols · 6 files
+      - generic [ref=e125] [cursor=pointer]:
+        - generic [ref=e128]: pipeline/
+        - generic [ref=e129]: 412 symbols · 18 files
+      - generic [ref=e141] [cursor=pointer]:
+        - generic [ref=e144]: parse/
+        - generic [ref=e145]: 286 symbols · 12 files
+      - generic [ref=e157] [cursor=pointer]:
+        - generic [ref=e160]: graph/
+        - generic [ref=e161]: 203 symbols · 8 files
+      - generic [ref=e173] [cursor=pointer]:
+        - generic [ref=e176]: db/
+        - generic [ref=e177]: 148 symbols · 5 files
+      - generic [ref=e189] [cursor=pointer]:
+        - generic [ref=e192]: analysis/
+        - generic [ref=e193]: 176 symbols · 7 files
+      - generic [ref=e205]:
+        - button "×" [ref=e206] [cursor=pointer]
+        - generic [ref=e207]: pipeline/
+        - generic [ref=e208]: Core indexing pipeline · 14 phases
+        - generic [ref=e209]:
+          - generic [ref=e210]: Overview
+          - generic [ref=e211]:
+            - generic [ref=e212]:
+              - generic [ref=e213]: "412"
+              - generic [ref=e214]: Symbols
+            - generic [ref=e215]:
+              - generic [ref=e216]: "18"
+              - generic [ref=e217]: Files
+            - generic [ref=e218]:
+              - generic [ref=e219]: 72%
+              - generic [ref=e220]: Health
+            - generic [ref=e221]:
+              - generic [ref=e222]: High
+              - generic [ref=e223]: Complexity
+        - generic [ref=e224]:
+          - generic [ref=e225]: Files
+          - list [ref=e226]:
+            - listitem [ref=e227]:
+              - generic [ref=e228]: mod.rs
+              - generic [ref=e229]: 245 lines
+            - listitem [ref=e230]:
+              - generic [ref=e231]: resolve.rs
+              - generic [ref=e232]: 340 lines
+            - listitem [ref=e233]:
+              - generic [ref=e234]: parse_phase.rs
+              - generic [ref=e235]: 189 lines
+            - listitem [ref=e236]:
+              - generic [ref=e237]: analyze.rs
+              - generic [ref=e238]: 276 lines
+            - listitem [ref=e239]:
+              - generic [ref=e240]: output.rs
+              - generic [ref=e241]: 134 lines
+            - listitem [ref=e242]:
+              - generic [ref=e243]: types.rs
+              - generic [ref=e244]: 98 lines
+        - generic [ref=e245]:
+          - generic [ref=e246]: Dependencies
+          - generic [ref=e247]:
+            - generic [ref=e248]:
+              - generic [ref=e249]: →
+              - generic [ref=e250]: parse/
+              - generic [ref=e251]: imports
+            - generic [ref=e252]:
+              - generic [ref=e253]: →
+              - generic [ref=e254]: db/
+              - generic [ref=e255]: imports
+            - generic [ref=e256]:
+              - generic [ref=e257]: →
+              - generic [ref=e258]: graph/
+              - generic [ref=e259]: imports
+            - generic [ref=e260]:
+              - generic [ref=e261]: →
+              - generic [ref=e262]: config/
+              - generic [ref=e263]: imports
+      - generic [ref=e264]:
+        - button "Architecture" [ref=e265] [cursor=pointer]
+        - button "Risk" [ref=e266] [cursor=pointer]
+        - button "Coupling" [ref=e267] [cursor=pointer]
+  - generic [ref=e103]:
+    - generic [ref=e104]: / search
+    - generic [ref=e105]: Esc close

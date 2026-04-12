@@ -197,3 +197,44 @@ fn test_dead_code_default_behavior_preserved() {
         "empty entry_points should produce same results as None"
     );
 }
+
+/// Synthetic <module> symbols must be entry points and never marked dead after
+/// a full pipeline run. If they were dead, all module-level call edges would
+/// become unreachable in the dead code BFS.
+#[test]
+fn test_module_symbol_is_entry_point_not_dead() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let db = Database::open(&db_path).unwrap();
+    let config = RepoConfig::default();
+    let fixture = Path::new("tests/fixtures/js_ts_repo");
+
+    run_full_pipeline(&db, fixture, &config).unwrap();
+
+    let module_count: i64 = db
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM symbols WHERE name = '<module>'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        module_count > 0,
+        "full pipeline on js_ts_repo should produce at least one <module> symbol"
+    );
+
+    // Every <module> symbol must be an entry point and not dead
+    let bad_count: i64 = db
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM symbols WHERE name = '<module>' AND (is_dead = 1 OR is_entry_point = 0)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        bad_count, 0,
+        "<module> symbols must all be entry points (is_entry_point=1) and not dead (is_dead=0)"
+    );
+}

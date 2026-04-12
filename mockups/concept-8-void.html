@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Void — Living Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Outfit', sans-serif;
+    background: #000;
+    color: #e4e4e7;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ===== AMBIENT BACKGROUND ===== */
+  .ambient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .ambient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.07;
+    animation: drift 20s ease-in-out infinite;
+  }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -20px) scale(1.1); }
+    66% { transform: translate(-20px, 30px) scale(0.95); }
+  }
+
+  /* ===== GLASS LAYER ===== */
+  .glass {
+    position: relative;
+    z-index: 1;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== COMMAND BAR (Raycast-style) ===== */
+  .cmd-bar {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    z-index: 300;
+    background: rgba(12,12,14,0.75);
+    backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    padding: 4px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  }
+
+  .cmd-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 12px;
+  }
+
+  .cmd-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .cmd-input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: #e4e4e7;
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    outline: none;
+  }
+
+  .cmd-input::placeholder { color: #3f3f46; }
+
+  .cmd-shortcuts {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .cmd-key {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    color: #52525b;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== METRICS STRIP ===== */
+  .metrics-strip {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 200;
+    display: flex;
+    gap: 3px;
+  }
+
+  .ms-pill {
+    padding: 7px 12px;
+    background: rgba(12,12,14,0.6);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .ms-pill:hover {
+    background: rgba(24,24,27,0.8);
+    border-color: rgba(255,255,255,0.08);
+  }
+
+  .ms-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .ms-lbl { color: #52525b; font-size: 10px; }
+
+  .ms-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  /* ===== MAIN CANVAS ===== */
+  .main-canvas {
+    flex: 1;
+    position: relative;
+    padding-top: 60px;
+  }
+
+  /* ===== ARCHITECTURE NODES ===== */
+  .arch-node {
+    position: absolute;
+    background: rgba(12,12,14,0.5);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 20;
+    overflow: visible;
+  }
+
+  .arch-node::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 14px;
+    padding: 1px;
+    background: linear-gradient(135deg, transparent, transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .arch-node:hover {
+    transform: translateY(-3px) scale(1.01);
+    border-color: rgba(255,255,255,0.08);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 60px var(--node-glow, rgba(99,102,241,0.05));
+  }
+
+  .arch-node:hover::before {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--node-accent, #6366f1), transparent 60%);
+  }
+
+  .arch-node.active {
+    border-color: rgba(255,255,255,0.1);
+    box-shadow: 0 0 0 1px var(--node-accent, #6366f1), 0 20px 40px rgba(0,0,0,0.4), 0 0 80px var(--node-glow, rgba(99,102,241,0.08));
+  }
+
+  .arch-node.active::before {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--node-accent, #6366f1), transparent 60%);
+  }
+
+  .an-inner { padding: 14px 16px; }
+
+  .an-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .an-status {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 8px var(--status-color, #4ade80);
+  }
+
+  .an-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fafafa;
+    letter-spacing: -0.3px;
+  }
+
+  .an-count {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #3f3f46;
+    margin-left: auto;
+  }
+
+  .an-subtitle {
+    font-size: 10px;
+    color: #3f3f46;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 10px;
+  }
+
+  /* File sparkline — horizontal bars showing file health */
+  .an-sparkline {
+    display: flex;
+    gap: 2px;
+    height: 20px;
+    margin-bottom: 8px;
+  }
+
+  .an-spark {
+    flex: 1;
+    border-radius: 3px;
+    min-width: 4px;
+    position: relative;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .an-spark:hover {
+    filter: brightness(1.4);
+    transform: scaleY(1.15);
+  }
+
+  .an-spark::after {
+    content: attr(data-name);
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #71717a;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+
+  .an-spark:hover::after { opacity: 1; }
+
+  /* Issue pills */
+  .an-pills {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .an-pill {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+  }
+
+  /* ===== SVG EDGES ===== */
+  .edge-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .edge-path {
+    fill: none;
+    stroke-linecap: round;
+  }
+
+  /* Animated flow particles */
+  .flow-particle {
+    fill: currentColor;
+    opacity: 0;
+  }
+
+  @keyframes flowAlong {
+    0% { offset-distance: 0%; opacity: 0; }
+    10% { opacity: 0.8; }
+    90% { opacity: 0.8; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+
+  .flow-dot {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    opacity: 0;
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  /* ===== FOCUS PANEL ===== */
+  .focus-panel {
+    position: fixed;
+    right: -440px;
+    top: 0;
+    bottom: 0;
+    width: 420px;
+    background: rgba(8,8,10,0.85);
+    backdrop-filter: blur(24px) saturate(1.3);
+    border-left: 1px solid rgba(255,255,255,0.04);
+    z-index: 200;
+    transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .focus-panel.open { right: 0; }
+
+  .fp-head {
+    padding: 20px 24px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    flex-shrink: 0;
+  }
+
+  .fp-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .fp-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fafafa;
+    letter-spacing: -0.4px;
+  }
+
+  .fp-close {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03);
+    color: #52525b;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+
+  .fp-close:hover { color: #a1a1aa; border-color: rgba(255,255,255,0.1); }
+
+  .fp-sub {
+    font-size: 11px;
+    color: #3f3f46;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 4px;
+  }
+
+  .fp-tabs {
+    display: flex;
+    padding: 0 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    flex-shrink: 0;
+  }
+
+  .fp-tab {
+    padding: 10px 0;
+    margin-right: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #3f3f46;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  .fp-tab:hover { color: #71717a; }
+  .fp-tab.active { color: #e4e4e7; border-bottom-color: #a855f7; }
+
+  .fp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+  }
+
+  .fp-body::-webkit-scrollbar { width: 3px; }
+  .fp-body::-webkit-scrollbar-track { background: transparent; }
+  .fp-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+
+  .fp-section { margin-bottom: 20px; }
+
+  .fp-section-head {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #3f3f46;
+    margin-bottom: 10px;
+  }
+
+  /* Stat orbs */
+  .fp-orbs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .fp-orb {
+    flex: 1;
+    padding: 14px 10px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+
+  .fp-orb:hover { border-color: rgba(255,255,255,0.08); }
+
+  .fp-orb-val {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+  }
+
+  .fp-orb-lbl {
+    font-size: 9px;
+    color: #3f3f46;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+
+  /* Gradient risk bar */
+  .fp-risk-gradient {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right, #22c55e 0%, #22c55e 60%, #eab308 70%, #f97316 80%, #ef4444 90%, #ef4444 100%);
+    position: relative;
+    margin-top: 8px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
+
+  .fp-risk-marker {
+    position: absolute;
+    top: -4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    transform: translateX(-50%);
+  }
+
+  /* File list */
+  .fp-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 1px;
+  }
+
+  .fp-file:hover { background: rgba(255,255,255,0.02); }
+
+  .fp-file-bar {
+    width: 3px;
+    height: 20px;
+    border-radius: 1.5px;
+    flex-shrink: 0;
+  }
+
+  .fp-file-info { flex: 1; min-width: 0; }
+
+  .fp-file-name {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #d4d4d8;
+    font-weight: 400;
+  }
+
+  .fp-file-meta {
+    font-size: 9px;
+    color: #3f3f46;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .fp-file-score {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  /* Dependency items */
+  .fp-dep {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 1px;
+  }
+
+  .fp-dep:hover { background: rgba(255,255,255,0.02); }
+
+  .fp-dep-dir {
+    font-size: 10px;
+    color: #3f3f46;
+    font-family: 'JetBrains Mono', monospace;
+    width: 16px;
+  }
+
+  .fp-dep-name {
+    font-size: 12px;
+    color: #a1a1aa;
+    flex: 1;
+  }
+
+  .fp-dep-strength {
+    width: 50px;
+    height: 3px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .fp-dep-fill { height: 100%; border-radius: 2px; }
+
+  .fp-dep-val {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #52525b;
+    width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* Issue cards */
+  .fp-issue {
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.015);
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 10px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .fp-issue:hover {
+    border-color: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.025);
+  }
+
+  .fp-issue-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .fp-issue-type {
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+  }
+
+  .fp-issue-impact {
+    font-size: 9px;
+    color: #3f3f46;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .fp-issue-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #fafafa;
+  }
+
+  .fp-issue-desc {
+    font-size: 10px;
+    color: #52525b;
+    margin-top: 2px;
+  }
+
+  /* ===== FLOATING BOTTOM HUD ===== */
+  .bottom-hud {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    gap: 3px;
+    padding: 4px;
+    background: rgba(12,12,14,0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+  }
+
+  .hud-btn {
+    padding: 6px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #52525b;
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    font-family: 'Outfit', sans-serif;
+  }
+
+  .hud-btn:hover { color: #a1a1aa; background: rgba(255,255,255,0.03); }
+  .hud-btn.active { color: #fafafa; background: rgba(255,255,255,0.06); }
+
+  .hud-div { width: 1px; height: 20px; background: rgba(255,255,255,0.04); align-self: center; }
+
+  /* ===== LAYER INDICATORS ===== */
+  .layer-ind {
+    position: fixed;
+    left: 16px;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #27272a;
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    z-index: 50;
+  }
+</style>
+</head>
+<body>
+
+<!-- AMBIENT BACKGROUND -->
+<div class="ambient">
+  <div class="ambient-orb" style="width: 600px; height: 600px; background: #6366f1; top: -100px; left: 10%;"></div>
+  <div class="ambient-orb" style="width: 500px; height: 500px; background: #ec4899; bottom: -100px; right: 5%; animation-delay: -7s;"></div>
+  <div class="ambient-orb" style="width: 400px; height: 400px; background: #22c55e; top: 40%; left: 30%; animation-delay: -13s;"></div>
+</div>
+
+<div class="glass">
+
+  <!-- COMMAND BAR -->
+  <div class="cmd-bar">
+    <div class="cmd-inner">
+      <div class="cmd-logo">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+      </div>
+      <input class="cmd-input" type="text" placeholder="Search symbols, files, or type a command..." />
+      <div class="cmd-shortcuts">
+        <span class="cmd-key">/</span>
+        <span class="cmd-key">⌘K</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- METRICS STRIP -->
+  <div class="metrics-strip">
+    <div class="ms-pill">
+      <span class="ms-dot" style="background: #4ade80; box-shadow: 0 0 6px #4ade80;"></span>
+      <span class="ms-val" style="color: #4ade80;">84</span>
+      <span class="ms-lbl">health</span>
+    </div>
+    <div class="ms-pill">
+      <span class="ms-val" style="color: #f87171;">47</span>
+      <span class="ms-lbl">dead</span>
+    </div>
+    <div class="ms-pill">
+      <span class="ms-val" style="color: #fb923c;">5</span>
+      <span class="ms-lbl">cycles</span>
+    </div>
+    <div class="ms-pill">
+      <span class="ms-val" style="color: #e4e4e7;">1,842</span>
+      <span class="ms-lbl">sym</span>
+    </div>
+  </div>
+
+  <!-- LAYER INDICATORS -->
+  <div class="layer-ind" style="top: 80px;">Interface</div>
+  <div class="layer-ind" style="top: 250px;">Core</div>
+  <div class="layer-ind" style="top: 460px;">Data</div>
+
+  <!-- MAIN CANVAS -->
+  <div class="main-canvas">
+
+    <!-- SVG EDGES -->
+    <svg class="edge-layer" id="edges">
+      <defs>
+        <linearGradient id="gEdge1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ef4444" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#ef4444" stop-opacity="0.05"/>
+        </linearGradient>
+        <linearGradient id="gEdge2" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#6366f1" stop-opacity="0.03"/>
+        </linearGradient>
+        <linearGradient id="gCycle" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#fb923c" stop-opacity="0.3"/>
+          <stop offset="50%" stop-color="#fb923c" stop-opacity="0.15"/>
+          <stop offset="100%" stop-color="#fb923c" stop-opacity="0.3"/>
+        </linearGradient>
+      </defs>
+
+      <!-- pipeline → db (heavy coupling) -->
+      <path class="edge-path" d="M 400,290 C 400,400 280,420 260,490" stroke="url(#gEdge1)" stroke-width="2.5" id="edge-pipe-db"/>
+      <!-- pipeline ↔ graph (cycle) -->
+      <path class="edge-path" d="M 480,280 C 550,350 590,370 610,410" stroke="url(#gCycle)" stroke-width="2" stroke-dasharray="6 4" id="edge-pipe-graph"/>
+      <!-- pipeline ← parse -->
+      <path class="edge-path" d="M 320,210 C 260,190 180,200 140,230" stroke="url(#gEdge2)" stroke-width="1.5"/>
+      <!-- mcp → db -->
+      <path class="edge-path" d="M 680,170 C 550,300 350,400 270,490" stroke="url(#gEdge2)" stroke-width="1"/>
+      <!-- analysis ↔ db (cycle) -->
+      <path class="edge-path" d="M 460,540 C 380,560 310,560 280,540" stroke="url(#gCycle)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    </svg>
+
+    <!-- Animated flow dots -->
+    <div class="flow-dot" id="flowDot1" style="background: #ef4444; box-shadow: 0 0 8px #ef4444;"></div>
+    <div class="flow-dot" id="flowDot2" style="background: #6366f1; box-shadow: 0 0 6px #6366f1;"></div>
+
+    <!-- NODES: INTERFACE LAYER -->
+    <div class="arch-node" style="left: 50px; top: 60px; --node-accent: #22d3ee; --node-glow: rgba(34,211,238,0.05); --status-color: #22d3ee;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 100px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #22d3ee;"></div>
+          <span class="an-name">main.rs</span>
+        </div>
+        <div class="an-subtitle">CLI entry · 12 sym</div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 580px; top: 50px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.05); --status-color: #4ade80;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 190px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">mcp/</span>
+          <span class="an-count">156</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 4;" data-name="tools/mod.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;" data-name="tools/symbol.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;" data-name="tools/impact.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;" data-name="tools/graph.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;" data-name="mod.rs"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(74,222,128,0.06); color: #4ade80;">healthy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 830px; top: 70px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 100px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">dash/</span>
+          <span class="an-count">87</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CORE LAYER -->
+    <div class="arch-node active" style="left: 280px; top: 190px; --node-accent: #a855f7; --node-glow: rgba(168,85,247,0.06);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 250px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">pipeline/</span>
+          <span class="an-count">387 · 14 files</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(239,68,68,0.5); flex: 3;" data-name="call_resolution.rs ⚠ 0.91"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 4;" data-name="parsing.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 2;" data-name="structure.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;" data-name="import_resolution.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;" data-name="community.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;" data-name="dead_code.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.12); flex: 1;" data-name="heritage.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.1); flex: 1;" data-name="coupling.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.08); flex: 1;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.06); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(251,146,60,0.08); color: #fb923c;">2 cycles</span>
+          <span class="an-pill" style="background: rgba(192,132,252,0.08); color: #c084fc;">risk 0.71</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 50px; top: 220px; --node-accent: #facc15; --node-glow: rgba(250,204,21,0.04);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 170px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">parse/</span>
+          <span class="an-count">284</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 3;" data-name="python.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;" data-name="javascript.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 3;" data-name="typescript.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;" data-name="rust.rs"></div>
+          <div class="an-spark" style="background: rgba(239,68,68,0.35); flex: 2;" data-name="ruby.rs ⚠ 5 dead"></div>
+          <div class="an-spark" style="background: rgba(239,68,68,0.3); flex: 1;" data-name="php.rs ⚠ 4 dead"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(248,113,113,0.08); color: #f87171;">12 dead</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 560px; top: 370px; --node-accent: #facc15; --node-glow: rgba(250,204,21,0.04);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 170px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">graph/</span>
+          <span class="an-count">142</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(250,204,21,0.4); flex: 4;" data-name="mod.rs ⚠ god obj"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;" data-name="blast_radius.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;" data-name="circular.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(250,204,21,0.08); color: #facc15;">god object</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA LAYER -->
+    <div class="arch-node" style="left: 200px; top: 470px; --node-accent: #f87171; --node-glow: rgba(248,113,113,0.05);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 190px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">db/</span>
+          <span class="an-count">198</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(239,68,68,0.45); flex: 6;" data-name="query.rs ⚠ god obj"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;" data-name="schema.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;" data-name="mod.rs"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;" data-name="migrations.rs"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(250,204,21,0.08); color: #facc15;">god object</span>
+          <span class="an-pill" style="background: rgba(251,146,60,0.08); color: #fb923c;">cycle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 440px; top: 510px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 140px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">analysis/</span>
+          <span class="an-count">118</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(74,222,128,0.06); color: #4ade80;">healthy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 640px; top: 510px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="select(this)">
+      <div class="an-inner" style="min-width: 110px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">search/</span>
+          <span class="an-count">64</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Small peripheral nodes -->
+    <div class="arch-node" style="left: 810px; top: 220px; --node-accent: #fb923c;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 80px; padding: 8px 12px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">config/</span></div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 810px; top: 280px; --node-accent: #f87171;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 80px; padding: 8px 12px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px; color: #f87171;">output/</span></div>
+        <div style="font-size: 8px; color: #3f3f46; font-family: 'JetBrains Mono'; margin-top: 2px;">8 dead</div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 810px; top: 340px; --node-accent: #4ade80;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 80px; padding: 8px 12px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">watch/</span></div>
+      </div>
+    </div>
+
+    <div class="arch-node" style="left: 810px; top: 390px; --node-accent: #4ade80;" onclick="select(this)">
+      <div class="an-inner" style="min-width: 80px; padding: 8px 12px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">lsp/</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM HUD -->
+  <div class="bottom-hud">
+    <button class="hud-btn active">Architecture</button>
+    <button class="hud-btn">Risk Map</button>
+    <button class="hud-btn">Coupling</button>
+    <div class="hud-div"></div>
+    <button class="hud-btn">Dependencies</button>
+    <button class="hud-btn">Dead Code</button>
+  </div>
+
+</div>
+
+<!-- FOCUS PANEL -->
+<div class="focus-panel open" id="focusPanel">
+  <div class="fp-head">
+    <div class="fp-title-row">
+      <span class="fp-title">pipeline/</span>
+      <button class="fp-close" onclick="closePanel()">×</button>
+    </div>
+    <div class="fp-sub">src/pipeline · 14 files · 387 symbols</div>
+  </div>
+
+  <div class="fp-tabs">
+    <button class="fp-tab active">Overview</button>
+    <button class="fp-tab">Files</button>
+    <button class="fp-tab">Issues</button>
+    <button class="fp-tab">Symbols</button>
+  </div>
+
+  <div class="fp-body">
+    <div class="fp-section">
+      <div class="fp-orbs">
+        <div class="fp-orb"><div class="fp-orb-val" style="color: #fafafa;">387</div><div class="fp-orb-lbl">Symbols</div></div>
+        <div class="fp-orb"><div class="fp-orb-val" style="color: #4ade80;">.78</div><div class="fp-orb-lbl">Health</div></div>
+        <div class="fp-orb"><div class="fp-orb-val" style="color: #c084fc;">.71</div><div class="fp-orb-lbl">Risk</div></div>
+      </div>
+    </div>
+
+    <div class="fp-section">
+      <div class="fp-section-head">Risk Distribution</div>
+      <div class="fp-risk-gradient">
+        <div class="fp-risk-marker" style="left: 71%; background: #c084fc;"></div>
+      </div>
+    </div>
+
+    <div class="fp-section">
+      <div class="fp-section-head">Dependencies</div>
+      <div class="fp-dep"><span class="fp-dep-dir">→</span><span class="fp-dep-name">db/</span><div class="fp-dep-strength"><div class="fp-dep-fill" style="width: 85%; background: #f87171;"></div></div><span class="fp-dep-val" style="color: #f87171;">.85</span></div>
+      <div class="fp-dep"><span class="fp-dep-dir" style="color: #fb923c;">↔</span><span class="fp-dep-name">graph/ <span style="font-size: 8px; color: #fb923c;">cycle</span></span><div class="fp-dep-strength"><div class="fp-dep-fill" style="width: 73%; background: #fb923c;"></div></div><span class="fp-dep-val" style="color: #fb923c;">.73</span></div>
+      <div class="fp-dep"><span class="fp-dep-dir">←</span><span class="fp-dep-name">parse/</span><div class="fp-dep-strength"><div class="fp-dep-fill" style="width: 61%; background: #facc15;"></div></div><span class="fp-dep-val">.61</span></div>
+      <div class="fp-dep"><span class="fp-dep-dir">→</span><span class="fp-dep-name">config/</span><div class="fp-dep-strength"><div class="fp-dep-fill" style="width: 25%; background: #4ade80;"></div></div><span class="fp-dep-val">.25</span></div>
+    </div>
+
+    <div class="fp-section">
+      <div class="fp-section-head">Files by Risk</div>
+      <div class="fp-file"><div class="fp-file-bar" style="background: #f87171;"></div><div class="fp-file-info"><div class="fp-file-name">call_resolution.rs</div><div class="fp-file-meta">34 sym · fan-in 34 · churn high</div></div><span class="fp-file-score" style="background: rgba(248,113,113,0.1); color: #f87171;">0.91</span></div>
+      <div class="fp-file"><div class="fp-file-bar" style="background: #fb923c;"></div><div class="fp-file-info"><div class="fp-file-name">parsing.rs</div><div class="fp-file-meta">48 sym · fan-in 22</div></div><span class="fp-file-score" style="background: rgba(251,146,60,0.1); color: #fb923c;">0.67</span></div>
+      <div class="fp-file"><div class="fp-file-bar" style="background: #facc15;"></div><div class="fp-file-info"><div class="fp-file-name">structure.rs</div><div class="fp-file-meta">28 sym</div></div><span class="fp-file-score" style="background: rgba(250,204,21,0.08); color: #facc15;">0.48</span></div>
+      <div class="fp-file"><div class="fp-file-bar" style="background: #4ade80;"></div><div class="fp-file-info"><div class="fp-file-name">import_resolution.rs</div><div class="fp-file-meta">22 sym</div></div><span class="fp-file-score" style="background: rgba(74,222,128,0.06); color: #4ade80;">0.22</span></div>
+    </div>
+
+    <div class="fp-section">
+      <div class="fp-section-head">Issues</div>
+      <div class="fp-issue">
+        <div class="fp-issue-top">
+          <span class="fp-issue-type" style="background: rgba(192,132,252,0.08); color: #c084fc;">critical risk</span>
+          <span class="fp-issue-impact">blast: 34 symbols</span>
+        </div>
+        <div class="fp-issue-name">call_resolution.rs</div>
+        <div class="fp-issue-desc">Highest risk in codebase. High churn + 8 coupled files.</div>
+      </div>
+      <div class="fp-issue">
+        <div class="fp-issue-top">
+          <span class="fp-issue-type" style="background: rgba(251,146,60,0.08); color: #fb923c;">cycle</span>
+          <span class="fp-issue-impact">coupling 0.73</span>
+        </div>
+        <div class="fp-issue-name">pipeline ↔ graph</div>
+        <div class="fp-issue-desc">Mutual dependency between modules</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function select(el) {
+  document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('focusPanel').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('focusPanel').classList.remove('open');
+  document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('active'));
+}
+
+document.querySelectorAll('.hud-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('.hud-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+document.querySelectorAll('.fp-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.fp-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+});
+
+// Animate flow particles along edges
+function animateFlows() {
+  const dot1 = document.getElementById('flowDot1');
+  const dot2 = document.getElementById('flowDot2');
+  const edge1 = document.getElementById('edge-pipe-db');
+  const edge2 = document.getElementById('edge-pipe-graph');
+
+  if (!edge1 || !edge2) return;
+
+  const len1 = edge1.getTotalLength();
+  const len2 = edge2.getTotalLength();
+  let t1 = 0, t2 = 0.5;
+
+  function tick() {
+    t1 = (t1 + 0.003) % 1;
+    t2 = (t2 + 0.004) % 1;
+
+    const p1 = edge1.getPointAtLength(t1 * len1);
+    const p2 = edge2.getPointAtLength(t2 * len2);
+
+    dot1.style.left = p1.x + 'px';
+    dot1.style.top = p1.y + 'px';
+    dot1.style.opacity = Math.sin(t1 * Math.PI) * 0.7;
+
+    dot2.style.left = p2.x + 'px';
+    dot2.style.top = p2.y + 'px';
+    dot2.style.opacity = Math.sin(t2 * Math.PI) * 0.5;
+
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+animateFlows();
+</script>
+
+</body>
+</html>

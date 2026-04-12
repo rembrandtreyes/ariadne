@@ -248,3 +248,79 @@ fn test_all_languages_parse_without_panic() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Module-level call tracking (A1 fix)
+// ---------------------------------------------------------------------------
+
+/// JS parser must emit a synthetic <module> symbol so that module-level calls
+/// have a valid caller_symbol_id when inserted into the calls table.
+#[test]
+fn test_js_parser_emits_module_symbol() {
+    let parser = get_parser(Language::JavaScript);
+    let source = std::fs::read_to_string("tests/fixtures/js_ts_repo/module_calls.js")
+        .expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "module_calls.js")
+        .expect("parse succeeds");
+
+    let module_sym = result.symbols.iter().find(|s| s.name == "<module>");
+    assert!(
+        module_sym.is_some(),
+        "JS parser must emit a <module> symbol to anchor module-level calls"
+    );
+    let sym = module_sym.unwrap();
+    assert_eq!(
+        sym.kind,
+        SymbolKind::Module,
+        "<module> symbol must have kind=Module"
+    );
+    assert!(!sym.is_exported, "<module> symbol must not be exported");
+}
+
+/// Module-level calls must be emitted with caller_name = "<module>".
+#[test]
+fn test_js_module_level_calls_use_module_caller() {
+    let parser = get_parser(Language::JavaScript);
+    let source = std::fs::read_to_string("tests/fixtures/js_ts_repo/module_calls.js")
+        .expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "module_calls.js")
+        .expect("parse succeeds");
+
+    let module_calls: Vec<_> = result
+        .calls
+        .iter()
+        .filter(|c| c.caller_name == "<module>")
+        .collect();
+    assert!(
+        !module_calls.is_empty(),
+        "module-level calls must have caller_name = '<module>'"
+    );
+
+    let calls_setup = result
+        .calls
+        .iter()
+        .any(|c| c.callee_name == "setup" && c.caller_name == "<module>");
+    assert!(
+        calls_setup,
+        "setup() at module level must be called from <module>"
+    );
+}
+
+/// TS parser must also emit a <module> symbol.
+#[test]
+fn test_ts_parser_emits_module_symbol() {
+    let parser = get_parser(Language::TypeScript);
+    let source =
+        std::fs::read_to_string("tests/fixtures/js_ts_repo/utils.ts").expect("fixture exists");
+    let result = parser
+        .parse_file(&source, "utils.ts")
+        .expect("parse succeeds");
+
+    let module_sym = result.symbols.iter().find(|s| s.name == "<module>");
+    assert!(
+        module_sym.is_some(),
+        "TS parser must emit a <module> symbol to anchor module-level calls"
+    );
+}

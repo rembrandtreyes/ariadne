@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Heatgrid — Concept Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0B0F19;
+    --bg-secondary: #111827;
+    --bg-card: #1A1F2E;
+    --bg-elevated: #252B3B;
+    --border: #2A3149;
+    --border-subtle: #1E2538;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-yellow: #EAB308;
+    --accent-orange: #F97316;
+    --accent-red: #EF4444;
+    --accent-purple: #A855F7;
+    --accent-cyan: #06B6D4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  code, .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== HEADER ===== */
+  .header {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .logo-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-text { font-size: 15px; font-weight: 600; }
+
+  .search-wrap {
+    flex: 1;
+    max-width: 400px;
+    position: relative;
+  }
+
+  .search-wrap input {
+    width: 100%;
+    padding: 7px 12px 7px 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+  }
+
+  .search-wrap input:focus { border-color: var(--accent-blue); }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+
+  .header-metrics {
+    display: flex;
+    gap: 16px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .hm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+
+  .hm-value {
+    font-family: 'Fira Code', monospace;
+    font-weight: 600;
+  }
+
+  .hm-label {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  .hm-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  /* View toggle */
+  .view-toggle {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .vt-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .vt-btn:hover { color: var(--text-secondary); }
+  .vt-btn.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+  /* ===== TOOLBAR ===== */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    padding: 10px 24px;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+
+  .toolbar-label {
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+  }
+
+  .toolbar-group {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-card);
+    border-radius: 5px;
+    padding: 2px;
+    border: 1px solid var(--border);
+  }
+
+  .tg-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .tg-btn:hover { color: var(--text-secondary); }
+  .tg-btn.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+  .toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  .sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .sort-btn:hover { border-color: var(--accent-blue); }
+
+  /* ===== HEATGRID TABLE ===== */
+  .grid-container {
+    padding: 16px 24px;
+    overflow-x: auto;
+  }
+
+  .heatgrid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .heatgrid th {
+    padding: 8px 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    text-align: left;
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .heatgrid th:hover { color: var(--text-secondary); }
+
+  .heatgrid th.col-heat {
+    text-align: center;
+    width: 80px;
+  }
+
+  .heatgrid th .sort-arrow {
+    display: inline-block;
+    margin-left: 4px;
+    color: var(--accent-blue);
+    font-size: 8px;
+  }
+
+  /* Group row */
+  .hg-group {
+    background: var(--bg-secondary);
+  }
+
+  .hg-group td {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+
+  .hg-group td:first-child {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hg-group .expand-icon {
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+  }
+
+  .hg-group.collapsed .expand-icon { transform: rotate(-90deg); }
+
+  /* File row */
+  .hg-row {
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  .hg-row:hover { background: var(--bg-card); }
+  .hg-row.selected { background: var(--bg-card-hover, #222842); }
+
+  .hg-row td {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+  }
+
+  .hg-row td:first-child {
+    font-family: 'Fira Code', monospace;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .file-indent { width: 20px; flex-shrink: 0; }
+
+  .file-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 8px;
+    font-weight: 700;
+  }
+
+  /* Heat cell */
+  .heat-cell {
+    text-align: center;
+    position: relative;
+  }
+
+  .heat-bar {
+    display: inline-block;
+    height: 18px;
+    border-radius: 3px;
+    min-width: 4px;
+    position: relative;
+    transition: width 0.3s ease;
+  }
+
+  .heat-value {
+    font-size: 9px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    white-space: nowrap;
+    color: rgba(255,255,255,0.8);
+  }
+
+  /* Status indicators */
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+  }
+
+  .issue-badges {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .issue-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .ib-dead { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+  .ib-cycle { background: rgba(249,115,22,0.15); color: var(--accent-orange); }
+  .ib-god { background: rgba(234,179,8,0.15); color: var(--accent-yellow); }
+  .ib-risk { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
+  .ib-coupled { background: rgba(6,182,212,0.15); color: var(--accent-cyan); }
+
+  /* Symbol count bar */
+  .symbol-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .symbol-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--accent-blue);
+    opacity: 0.4;
+  }
+
+  .symbol-count {
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* ===== DETAIL DRAWER ===== */
+  .drawer {
+    position: fixed;
+    bottom: -400px;
+    left: 24px;
+    right: 24px;
+    height: 360px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 12px 12px 0 0;
+    z-index: 200;
+    transition: bottom 0.3s ease;
+    display: flex;
+    overflow: hidden;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.3);
+  }
+
+  .drawer.open { bottom: 0; }
+
+  .drawer-main {
+    flex: 1;
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .drawer-title { font-size: 15px; font-weight: 600; }
+  .drawer-subtitle { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; }
+
+  .drawer-close {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .drawer-close:hover { color: var(--text-primary); border-color: var(--accent-blue); }
+
+  .drawer-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .ds {
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .ds-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .ds-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .drawer-sidebar {
+    width: 280px;
+    border-left: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+  }
+
+  .ds-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .ds-list-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .ds-list-item:hover { background: var(--bg-card); }
+
+  /* ===== SUMMARY STRIP ===== */
+  .summary-strip {
+    display: flex;
+    padding: 12px 24px;
+    gap: 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ss-card {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .ss-card:hover { border-color: var(--accent-blue); }
+
+  .ss-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .ss-info { flex: 1; }
+
+  .ss-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .ss-label {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  /* Legend at bottom */
+  .legend-bar {
+    padding: 8px 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 50;
+  }
+
+  .legend-title {
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+    </div>
+    <span class="logo-text">Ariadne</span>
+  </div>
+
+  <div class="search-wrap">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" placeholder="Filter files..." />
+  </div>
+
+  <div class="view-toggle">
+    <button class="vt-btn active">Heatgrid</button>
+    <button class="vt-btn">Treemap</button>
+    <button class="vt-btn">Graph</button>
+  </div>
+
+  <div class="header-metrics">
+    <div class="hm"><span class="hm-dot" style="background: var(--accent-green)"></span><span class="hm-value" style="color: var(--accent-green)">84</span><span class="hm-label">health</span></div>
+    <div class="hm"><span class="hm-dot" style="background: var(--accent-blue)"></span><span class="hm-value">1,842</span><span class="hm-label">symbols</span></div>
+    <div class="hm"><span class="hm-dot" style="background: var(--accent-cyan)"></span><span class="hm-value">247</span><span class="hm-label">files</span></div>
+    <div class="hm"><span class="hm-value" style="color: var(--text-secondary)">87.4%</span><span class="hm-label">resolved</span></div>
+  </div>
+</header>
+
+<!-- SUMMARY STRIP -->
+<div class="summary-strip">
+  <div class="ss-card">
+    <div class="ss-icon" style="background: rgba(239,68,68,0.1); color: var(--accent-red);">47</div>
+    <div class="ss-info">
+      <div class="ss-label">Dead functions across 9 files</div>
+    </div>
+  </div>
+  <div class="ss-card">
+    <div class="ss-icon" style="background: rgba(249,115,22,0.1); color: var(--accent-orange);">5</div>
+    <div class="ss-info">
+      <div class="ss-label">Circular dependency cycles</div>
+    </div>
+  </div>
+  <div class="ss-card">
+    <div class="ss-icon" style="background: rgba(234,179,8,0.1); color: var(--accent-yellow);">3</div>
+    <div class="ss-info">
+      <div class="ss-label">God objects (50+ connections)</div>
+    </div>
+  </div>
+  <div class="ss-card">
+    <div class="ss-icon" style="background: rgba(168,85,247,0.1); color: var(--accent-purple);">12</div>
+    <div class="ss-info">
+      <div class="ss-label">High-risk files (score > 0.7)</div>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <span class="toolbar-label">Color by</span>
+  <div class="toolbar-group">
+    <button class="tg-btn active">Risk</button>
+    <button class="tg-btn">Health</button>
+    <button class="tg-btn">Churn</button>
+    <button class="tg-btn">Coupling</button>
+  </div>
+
+  <div class="toolbar-divider"></div>
+
+  <span class="toolbar-label">Group by</span>
+  <div class="toolbar-group">
+    <button class="tg-btn active">Directory</button>
+    <button class="tg-btn">Community</button>
+    <button class="tg-btn">Risk Level</button>
+  </div>
+
+  <div class="toolbar-divider"></div>
+
+  <span class="toolbar-label">Show</span>
+  <div class="toolbar-group">
+    <button class="tg-btn active">All</button>
+    <button class="tg-btn">Issues Only</button>
+    <button class="tg-btn">Dead Code</button>
+  </div>
+
+  <div class="toolbar-divider"></div>
+
+  <button class="sort-btn">
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5h10M11 9h7M11 13h4M3 17l3 3 3-3M6 18V4"/></svg>
+    Sort: Risk ↓
+  </button>
+</div>
+
+<!-- HEATGRID TABLE -->
+<div class="grid-container" style="padding-bottom: 40px;">
+<table class="heatgrid">
+  <thead>
+    <tr>
+      <th style="width: 260px;">File <span class="sort-arrow"></span></th>
+      <th style="width: 100px;">Symbols</th>
+      <th class="col-heat">Risk <span class="sort-arrow">▼</span></th>
+      <th class="col-heat">Health</th>
+      <th class="col-heat">Fan-In</th>
+      <th class="col-heat">Fan-Out</th>
+      <th class="col-heat">Churn</th>
+      <th class="col-heat">Coupling</th>
+      <th style="width: 180px;">Issues</th>
+    </tr>
+  </thead>
+  <tbody>
+    <!-- pipeline/ group -->
+    <tr class="hg-group" onclick="toggleGroup(this)">
+      <td colspan="9">
+        <span class="expand-icon">▾</span>
+        <span style="color: var(--accent-purple)">pipeline/</span>
+        <span style="color: var(--text-muted); font-weight: 400; margin-left: 8px;">14 files · 387 symbols · avg risk: 0.71</span>
+      </td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(239,68,68,0.2); color: var(--accent-red);">rs</span>
+        call_resolution.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 38px;"></div><span class="symbol-count">34</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 54px; background: rgba(239,68,68,0.5);"><span class="heat-value">0.91</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 27px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.45</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 48px; background: rgba(249,115,22,0.4);"><span class="heat-value">34</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 36px; background: rgba(234,179,8,0.3);"><span class="heat-value">18</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 50px; background: rgba(239,68,68,0.4);"><span class="heat-value">high</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 50px; background: rgba(249,115,22,0.4);"><span class="heat-value">8 files</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-risk">high risk</span><span class="issue-badge ib-coupled">coupled</span></div></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(234,179,8,0.2); color: var(--accent-yellow);">rs</span>
+        parsing.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 54px;"></div><span class="symbol-count">48</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 30px; background: rgba(234,179,8,0.4);"><span class="heat-value">0.40</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 51px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.85</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 24px; background: rgba(234,179,8,0.3);"><span class="heat-value">22</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 18px; background: rgba(34,197,94,0.3);"><span class="heat-value">12</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 30px; background: rgba(234,179,8,0.3);"><span class="heat-value">med</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 30px; background: rgba(234,179,8,0.3);"><span class="heat-value">4 files</span></div></td>
+      <td></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(234,179,8,0.2); color: var(--accent-yellow);">rs</span>
+        structure.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 32px;"></div><span class="symbol-count">28</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 29px; background: rgba(234,179,8,0.4);"><span class="heat-value">0.48</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 49px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.82</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 18px; background: rgba(34,197,94,0.3);"><span class="heat-value">14</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">8</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 20px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 18px; background: rgba(34,197,94,0.3);"><span class="heat-value">2 files</span></div></td>
+      <td></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(34,197,94,0.2); color: var(--accent-green);">rs</span>
+        import_resolution.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 25px;"></div><span class="symbol-count">22</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 13px; background: rgba(34,197,94,0.3);"><span class="heat-value">0.22</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 53px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.88</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 10px; background: rgba(34,197,94,0.3);"><span class="heat-value">8</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 8px; background: rgba(34,197,94,0.3);"><span class="heat-value">5</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">1 file</span></div></td>
+      <td></td>
+    </tr>
+
+    <!-- db/ group -->
+    <tr class="hg-group" onclick="toggleGroup(this)">
+      <td colspan="9">
+        <span class="expand-icon">▾</span>
+        <span style="color: var(--accent-orange)">db/</span>
+        <span style="color: var(--text-muted); font-weight: 400; margin-left: 8px;">4 files · 198 symbols · avg risk: 0.72</span>
+      </td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(239,68,68,0.2); color: var(--accent-red);">rs</span>
+        query.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 60px;"></div><span class="symbol-count">89</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 52px; background: rgba(239,68,68,0.5);"><span class="heat-value">0.87</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 30px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.50</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 60px; background: rgba(239,68,68,0.4);"><span class="heat-value">89</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 20px; background: rgba(34,197,94,0.3);"><span class="heat-value">12</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 42px; background: rgba(249,115,22,0.4);"><span class="heat-value">high</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 45px; background: rgba(249,115,22,0.4);"><span class="heat-value">6 files</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-god">god object</span><span class="issue-badge ib-cycle">cycle</span></div></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(34,197,94,0.2); color: var(--accent-green);">rs</span>
+        schema.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 36px;"></div><span class="symbol-count">52</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">0.20</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 53px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.88</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 6px; background: rgba(34,197,94,0.3);"><span class="heat-value">4</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">2</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 10px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 6px; background: rgba(34,197,94,0.3);"><span class="heat-value">1 file</span></div></td>
+      <td></td>
+    </tr>
+
+    <!-- graph/ group -->
+    <tr class="hg-group" onclick="toggleGroup(this)">
+      <td colspan="9">
+        <span class="expand-icon">▾</span>
+        <span style="color: var(--accent-yellow)">graph/</span>
+        <span style="color: var(--text-muted); font-weight: 400; margin-left: 8px;">5 files · 142 symbols · avg risk: 0.58</span>
+      </td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(234,179,8,0.2); color: var(--accent-yellow);">rs</span>
+        mod.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 36px;"></div><span class="symbol-count">52</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 42px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.70</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 33px; background: rgba(234,179,8,0.4);"><span class="heat-value">0.55</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 50px; background: rgba(239,68,68,0.4);"><span class="heat-value">56</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 42px; background: rgba(249,115,22,0.4);"><span class="heat-value">33</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 36px; background: rgba(234,179,8,0.3);"><span class="heat-value">med</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 36px; background: rgba(234,179,8,0.3);"><span class="heat-value">5 files</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-god">god object</span></div></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(34,197,94,0.2); color: var(--accent-green);">rs</span>
+        blast_radius.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 24px;"></div><span class="symbol-count">34</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 18px; background: rgba(34,197,94,0.3);"><span class="heat-value">0.30</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 48px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.80</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">8</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 10px; background: rgba(34,197,94,0.3);"><span class="heat-value">6</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 15px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 10px; background: rgba(34,197,94,0.3);"><span class="heat-value">2 files</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-dead">1 dead</span></div></td>
+    </tr>
+
+    <!-- output/ group -->
+    <tr class="hg-group" onclick="toggleGroup(this)">
+      <td colspan="9">
+        <span class="expand-icon">▾</span>
+        <span style="color: var(--accent-red)">output/</span>
+        <span style="color: var(--text-muted); font-weight: 400; margin-left: 8px;">2 files · 42 symbols · avg risk: 0.65</span>
+      </td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(239,68,68,0.2); color: var(--accent-red);">rs</span>
+        formatters.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 20px;"></div><span class="symbol-count">28</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 42px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.70</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 21px; background: rgba(239,68,68,0.4);"><span class="heat-value">0.35</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">2</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">1</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 8px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">0</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-dead">8 dead</span></div></td>
+    </tr>
+
+    <!-- parse/ group -->
+    <tr class="hg-group" onclick="toggleGroup(this)">
+      <td colspan="9">
+        <span class="expand-icon">▾</span>
+        <span style="color: var(--accent-yellow)">parse/</span>
+        <span style="color: var(--text-muted); font-weight: 400; margin-left: 8px;">10 files · 284 symbols · avg risk: 0.45</span>
+      </td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(249,115,22,0.2); color: var(--accent-orange);">rs</span>
+        ruby.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 17px;"></div><span class="symbol-count">24</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 36px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.60</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 24px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.40</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">1</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 6px; background: rgba(34,197,94,0.3);"><span class="heat-value">3</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 8px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">0</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-dead">5 dead</span></div></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(249,115,22,0.2); color: var(--accent-orange);">rs</span>
+        php.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 14px;"></div><span class="symbol-count">20</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 33px; background: rgba(234,179,8,0.4);"><span class="heat-value">0.55</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 27px; background: rgba(249,115,22,0.4);"><span class="heat-value">0.45</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">1</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 6px; background: rgba(34,197,94,0.3);"><span class="heat-value">2</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 8px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 4px; background: rgba(34,197,94,0.3);"><span class="heat-value">0</span></div></td>
+      <td><div class="issue-badges"><span class="issue-badge ib-dead">4 dead</span></div></td>
+    </tr>
+
+    <tr class="hg-row">
+      <td>
+        <span class="file-indent"></span>
+        <span class="file-icon" style="background: rgba(34,197,94,0.2); color: var(--accent-green);">rs</span>
+        python.rs
+      </td>
+      <td><div class="symbol-bar-wrap"><div class="symbol-bar" style="width: 30px;"></div><span class="symbol-count">42</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 9px; background: rgba(34,197,94,0.3);"><span class="heat-value">0.15</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 53px; background: rgba(34,197,94,0.4);"><span class="heat-value">0.88</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 8px; background: rgba(34,197,94,0.3);"><span class="heat-value">4</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 10px; background: rgba(34,197,94,0.3);"><span class="heat-value">6</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 12px; background: rgba(34,197,94,0.3);"><span class="heat-value">low</span></div></td>
+      <td class="heat-cell"><div class="heat-bar" style="width: 6px; background: rgba(34,197,94,0.3);"><span class="heat-value">1 file</span></div></td>
+      <td></td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+<!-- LEGEND BAR -->
+<div class="legend-bar">
+  <span class="legend-title">Heat Scale:</span>
+  <div class="legend-item"><div class="legend-swatch" style="background: rgba(34,197,94,0.4);"></div> Low (0-0.3)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background: rgba(234,179,8,0.4);"></div> Medium (0.3-0.6)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background: rgba(249,115,22,0.4);"></div> High (0.6-0.8)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background: rgba(239,68,68,0.5);"></div> Critical (0.8-1.0)</div>
+  <span style="margin-left: auto;">Bar width = relative magnitude</span>
+</div>
+
+<script>
+// Toggle group rows
+function toggleGroup(groupRow) {
+  groupRow.classList.toggle('collapsed');
+  let next = groupRow.nextElementSibling;
+  while (next && !next.classList.contains('hg-group')) {
+    next.style.display = groupRow.classList.contains('collapsed') ? 'none' : '';
+    next = next.nextElementSibling;
+  }
+}
+
+// Toolbar button switching
+document.querySelectorAll('.toolbar-group').forEach(group => {
+  group.querySelectorAll('.tg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      group.querySelectorAll('.tg-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+});
+
+// View toggle
+document.querySelectorAll('.vt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.vt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Row selection
+document.querySelectorAll('.hg-row').forEach(row => {
+  row.addEventListener('click', () => {
+    document.querySelectorAll('.hg-row').forEach(r => r.classList.remove('selected'));
+    row.classList.add('selected');
+  });
+});
+</script>
+
+</body>
+</html>

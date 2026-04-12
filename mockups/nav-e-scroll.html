@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — Scroll to Morph</title>
+<style>
+  :root {
+    --bg: #000000;
+    --surface: #0a0a0c;
+    --surface-2: #111114;
+    --surface-3: #19191d;
+    --border: #1e1e24;
+    --border-glow: rgba(99,102,241,0.15);
+    --text-0: #fafaf9;
+    --text-1: #d4d4d8;
+    --text-2: #a1a1aa;
+    --text-3: #52525b;
+    --text-4: #3f3f46;
+    --blue: #60a5fa;
+    --green: #4ade80;
+    --yellow: #fde047;
+    --orange: #fb923c;
+    --red: #f87171;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --pink: #f472b6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    overflow-x: hidden;
+  }
+
+  .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+  .serif { font-family: Georgia, 'Times New Roman', serif; }
+
+  /* ===== AMBIENT ORB BACKGROUND ===== */
+  .ambient {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .ambient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(140px);
+    opacity: 0.04;
+    animation: drift 25s ease-in-out infinite;
+  }
+
+  .ambient-orb:nth-child(1) {
+    width: 600px; height: 600px;
+    background: #6366f1;
+    top: -10%; left: 20%;
+    animation-delay: 0s;
+  }
+  .ambient-orb:nth-child(2) {
+    width: 500px; height: 500px;
+    background: #a855f7;
+    top: 30%; right: 10%;
+    animation-delay: -8s;
+  }
+  .ambient-orb:nth-child(3) {
+    width: 400px; height: 400px;
+    background: #ec4899;
+    bottom: 10%; left: 40%;
+    animation-delay: -16s;
+  }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -25px) scale(1.05); }
+    66% { transform: translate(-20px, 20px) scale(0.97); }
+  }
+
+  /* ===== MINIMAL NAV ===== */
+  .nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    z-index: 200;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: opacity 0.3s;
+  }
+
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nav-mark {
+    width: 20px; height: 20px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+  }
+
+  .nav-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.3px;
+  }
+
+  .nav-indicator {
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: color 0.4s, opacity 0.4s;
+  }
+
+  .nav-indicator.in-void {
+    color: var(--purple);
+  }
+
+  /* ===== SCROLL CONTAINER ===== */
+  .scroll-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== ZONE 1: HERO ===== */
+  .zone-hero {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 0 40px;
+  }
+
+  .hero-label {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 24px;
+  }
+
+  .hero-score-line {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .hero-text {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(36px, 5vw, 64px);
+    font-weight: 400;
+    color: var(--text-0);
+    line-height: 1.1;
+    letter-spacing: -1.5px;
+  }
+
+  .hero-score {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(72px, 10vw, 140px);
+    font-weight: 400;
+    color: var(--text-0);
+    line-height: 1;
+    letter-spacing: -4px;
+    background: linear-gradient(135deg, var(--text-0) 40%, var(--green) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 40px;
+    margin-top: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hero-stat {
+    text-align: center;
+  }
+
+  .hero-stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -1px;
+  }
+
+  .hero-stat-label {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .hero-scroll-hint {
+    position: absolute;
+    bottom: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-4);
+    font-size: 12px;
+    letter-spacing: 1px;
+    animation: hintPulse 2.5s ease-in-out infinite;
+  }
+
+  .hero-scroll-hint svg {
+    width: 16px; height: 16px;
+    stroke: currentColor;
+    animation: hintBounce 2.5s ease-in-out infinite;
+  }
+
+  @keyframes hintPulse {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+  }
+
+  @keyframes hintBounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(4px); }
+  }
+
+  /* ===== ZONE 2: RISKS ===== */
+  .zone-risks {
+    min-height: 100vh;
+    padding: 120px 40px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+
+  .zone-title {
+    font-size: 11px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 16px;
+  }
+
+  .risk-card {
+    width: 100%;
+    max-width: 640px;
+    padding: 24px 28px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  }
+
+  .risk-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .risk-card:nth-child(2) { transition-delay: 0.12s; }
+  .risk-card:nth-child(3) { transition-delay: 0.24s; }
+  .risk-card:nth-child(4) { transition-delay: 0.36s; }
+
+  .risk-score-ring {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .risk-score-ring svg {
+    position: absolute;
+    inset: 0;
+  }
+
+  .risk-score-ring .ring-value {
+    font-size: 15px;
+    font-weight: 600;
+    position: relative;
+    z-index: 1;
+  }
+
+  .risk-info {
+    flex: 1;
+  }
+
+  .risk-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-0);
+    margin-bottom: 4px;
+  }
+
+  .risk-name .mono {
+    font-size: 13px;
+  }
+
+  .risk-desc {
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.4;
+  }
+
+  .risk-tag {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  /* ===== ZONE 3: MODULES (Grid) ===== */
+  .zone-modules {
+    min-height: 100vh;
+    padding: 80px 40px 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    max-width: 800px;
+    width: 100%;
+    margin-top: 32px;
+  }
+
+  .module-card-grid {
+    padding: 20px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+    cursor: default;
+  }
+
+  .module-card-grid.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .module-card-grid:nth-child(1) { transition-delay: 0s; }
+  .module-card-grid:nth-child(2) { transition-delay: 0.06s; }
+  .module-card-grid:nth-child(3) { transition-delay: 0.12s; }
+  .module-card-grid:nth-child(4) { transition-delay: 0.18s; }
+  .module-card-grid:nth-child(5) { transition-delay: 0.24s; }
+  .module-card-grid:nth-child(6) { transition-delay: 0.30s; }
+
+  .module-name-grid {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-0);
+    margin-bottom: 8px;
+  }
+
+  .module-meta-grid {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+
+  .module-health-bar {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+
+  .module-health-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s ease-out;
+  }
+
+  /* ===== ZONE 4/5: MORPH TARGET + VOID ===== */
+  .zone-morph-spacer {
+    height: 150vh;
+    position: relative;
+  }
+
+  .void-container {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.01s;
+  }
+
+  .void-container.active {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  /* Dot grid background */
+  .void-dotgrid {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.8s;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .void-container.active .void-dotgrid {
+    opacity: 1;
+  }
+
+  /* SVG connections layer */
+  .void-connections {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .void-connections path {
+    fill: none;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 4px currentColor);
+  }
+
+  /* Morphing module cards */
+  .morph-card {
+    position: fixed;
+    z-index: 60;
+    padding: 16px 20px;
+    background: rgba(20,20,28,0.94);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 10px;
+    backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    pointer-events: none;
+    opacity: 0;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    min-width: 150px;
+  }
+
+  .morph-card.interactive {
+    pointer-events: auto;
+    background: rgba(22,22,30,0.95);
+    border-color: rgba(255,255,255,0.14);
+  }
+
+  .morph-card.interactive:hover {
+    border-color: rgba(99,102,241,0.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 24px rgba(99,102,241,0.12), 0 0 0 1px rgba(99,102,241,0.15) inset;
+    background: rgba(26,26,36,0.97);
+  }
+
+  .morph-card-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-bottom: 8px;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  .morph-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    margin-bottom: 4px;
+    letter-spacing: -0.2px;
+  }
+
+  .morph-card-meta {
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  /* Detail panel */
+  .detail-panel {
+    position: fixed;
+    right: -380px;
+    top: 60px;
+    bottom: 20px;
+    width: 360px;
+    z-index: 100;
+    background: rgba(10,10,14,0.92);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
+    backdrop-filter: blur(24px);
+    padding: 28px;
+    overflow-y: auto;
+    transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .detail-panel.open {
+    right: 20px;
+  }
+
+  .detail-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 28px; height: 28px;
+    border: none;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+  }
+
+  .detail-close:hover {
+    background: rgba(255,255,255,0.1);
+  }
+
+  .detail-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    margin-bottom: 14px;
+  }
+
+  .detail-name {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-0);
+    margin-bottom: 4px;
+  }
+
+  .detail-type {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 20px;
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-4);
+    margin-bottom: 10px;
+    margin-top: 24px;
+  }
+
+  .detail-stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .detail-stat-label {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .detail-stat-value {
+    font-size: 12px;
+    color: var(--text-0);
+    font-weight: 500;
+  }
+
+  .detail-dep {
+    font-size: 12px;
+    color: var(--text-2);
+    padding: 6px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .detail-dep-arrow {
+    color: var(--text-4);
+    font-size: 10px;
+  }
+
+  /* ===== ZONE END ===== */
+  .zone-end {
+    height: 50vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .end-text {
+    font-size: 13px;
+    color: var(--text-4);
+    letter-spacing: 1px;
+  }
+
+  /* ===== SCROLL PROGRESS BAR ===== */
+  .scroll-progress {
+    position: fixed;
+    top: 48px;
+    left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+    z-index: 300;
+    width: 0%;
+    transition: width 0.05s linear;
+  }
+
+  /* ===== UTILITY ===== */
+  @media (max-width: 700px) {
+    .module-grid { grid-template-columns: repeat(2, 1fr); }
+    .hero-stats { gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient background -->
+<div class="ambient">
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+  <div class="ambient-orb"></div>
+</div>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-left">
+    <div class="nav-mark"></div>
+    <span class="nav-name">Ariadne</span>
+  </div>
+  <span class="nav-indicator" id="navIndicator">SIGNAL</span>
+</nav>
+
+<!-- Scroll progress -->
+<div class="scroll-progress" id="scrollProgress"></div>
+
+<!-- Main scrollable content -->
+<div class="scroll-content">
+
+  <!-- ZONE 1: HERO -->
+  <section class="zone-hero" id="zoneHero">
+    <div class="hero-label">CODEBASE HEALTH REPORT</div>
+    <div class="hero-score-line">
+      <div class="hero-text">Your codebase scores</div>
+    </div>
+    <div class="hero-score">84</div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color: var(--yellow)">47</div>
+        <div class="hero-stat-label">dead symbols</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color: var(--red)">5</div>
+        <div class="hero-stat-label">cycles</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color: var(--orange)">3</div>
+        <div class="hero-stat-label">god objects</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-value" style="color: var(--purple)">12</div>
+        <div class="hero-stat-label">risky files</div>
+      </div>
+    </div>
+    <div class="hero-scroll-hint">
+      <span>Scroll to explore</span>
+      <svg viewBox="0 0 16 16" fill="none">
+        <path d="M4 6L8 10L12 6" stroke-width="1.5"/>
+      </svg>
+    </div>
+  </section>
+
+  <!-- ZONE 2: RISKS -->
+  <section class="zone-risks" id="zoneRisks">
+    <div class="zone-title">CRITICAL RISKS</div>
+
+    <div class="risk-card" data-reveal>
+      <div class="risk-score-ring">
+        <svg viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(248,113,113,0.1)" stroke-width="3"/>
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--red)" stroke-width="3"
+            stroke-dasharray="150.8" stroke-dashoffset="13.6" stroke-linecap="round"
+            transform="rotate(-90 28 28)"/>
+        </svg>
+        <span class="ring-value" style="color: var(--red)">0.91</span>
+      </div>
+      <div class="risk-info">
+        <div class="risk-name"><span class="mono">call_resolution.rs</span></div>
+        <div class="risk-desc">High churn, dense coupling, 847 lines. Changed 23 times in 30 days.</div>
+      </div>
+      <div class="risk-tag" style="background: rgba(248,113,113,0.1); color: var(--red);">CRITICAL</div>
+    </div>
+
+    <div class="risk-card" data-reveal>
+      <div class="risk-score-ring">
+        <svg viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(251,146,60,0.1)" stroke-width="3"/>
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--orange)" stroke-width="3"
+            stroke-dasharray="150.8" stroke-dashoffset="19.6" stroke-linecap="round"
+            transform="rotate(-90 28 28)"/>
+        </svg>
+        <span class="ring-value" style="color: var(--orange)">0.87</span>
+      </div>
+      <div class="risk-info">
+        <div class="risk-name">Database <span style="color: var(--text-3)">god object</span></div>
+        <div class="risk-desc">67 public methods, 12 responsibilities. Violation of single-responsibility principle.</div>
+      </div>
+      <div class="risk-tag" style="background: rgba(251,146,60,0.1); color: var(--orange);">HIGH</div>
+    </div>
+
+    <div class="risk-card" data-reveal>
+      <div class="risk-score-ring">
+        <svg viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="rgba(251,146,60,0.1)" stroke-width="3"/>
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--orange)" stroke-width="3"
+            stroke-dasharray="150.8" stroke-dashoffset="22.6" stroke-linecap="round"
+            transform="rotate(-90 28 28)"/>
+        </svg>
+        <span class="ring-value" style="color: var(--orange)">0.85</span>
+      </div>
+      <div class="risk-info">
+        <div class="risk-name"><span class="mono">pipeline</span> <span style="color:var(--text-4)">&#x21c4;</span> <span class="mono">db</span> <span style="color: var(--text-3)">cycle</span></div>
+        <div class="risk-desc">Circular dependency between pipeline and database modules. 3 call chains involved.</div>
+      </div>
+      <div class="risk-tag" style="background: rgba(251,146,60,0.1); color: var(--orange);">HIGH</div>
+    </div>
+  </section>
+
+  <!-- ZONE 3: MODULES -->
+  <section class="zone-modules" id="zoneModules">
+    <div class="zone-title">MODULE HEALTH</div>
+
+    <div class="module-grid" id="moduleGrid">
+      <div class="module-card-grid" data-reveal data-module="pipeline">
+        <div class="module-name-grid">pipeline</div>
+        <div class="module-meta-grid mono">142 symbols &middot; 91%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 91%; background: var(--green);"></div>
+        </div>
+      </div>
+      <div class="module-card-grid" data-reveal data-module="parse">
+        <div class="module-name-grid">parse</div>
+        <div class="module-meta-grid mono">238 symbols &middot; 88%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 88%; background: var(--green);"></div>
+        </div>
+      </div>
+      <div class="module-card-grid" data-reveal data-module="db">
+        <div class="module-name-grid">db</div>
+        <div class="module-meta-grid mono">67 symbols &middot; 72%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 72%; background: var(--yellow);"></div>
+        </div>
+      </div>
+      <div class="module-card-grid" data-reveal data-module="graph">
+        <div class="module-name-grid">graph</div>
+        <div class="module-meta-grid mono">94 symbols &middot; 85%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 85%; background: var(--green);"></div>
+        </div>
+      </div>
+      <div class="module-card-grid" data-reveal data-module="analysis">
+        <div class="module-name-grid">analysis</div>
+        <div class="module-meta-grid mono">56 symbols &middot; 79%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 79%; background: var(--yellow);"></div>
+        </div>
+      </div>
+      <div class="module-card-grid" data-reveal data-module="mcp">
+        <div class="module-name-grid">mcp</div>
+        <div class="module-meta-grid mono">31 symbols &middot; 94%</div>
+        <div class="module-health-bar">
+          <div class="module-health-fill" style="width: 94%; background: var(--green);"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ZONE 4: MORPH SPACER (scroll distance drives the animation) -->
+  <div class="zone-morph-spacer" id="zoneMorph"></div>
+
+  <!-- ZONE 5: VOID (sticky endpoint -- stays after morph) -->
+  <div class="zone-end" id="zoneEnd">
+    <div class="end-text">SCROLL UP TO RETURN TO SIGNAL</div>
+  </div>
+
+</div><!-- /scroll-content -->
+
+<!-- VOID LAYER (fixed, overlays when active) -->
+<div class="void-container" id="voidContainer">
+  <div class="void-dotgrid"></div>
+  <svg class="void-connections" id="voidSVG" width="100%" height="100%" style="position:absolute;inset:0;width:100%;height:100%;"></svg>
+</div>
+
+<!-- MORPH CARDS (fixed position, interpolate between grid and map coords) -->
+<div id="morphCards"></div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-panel" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div class="detail-dot" id="detailDot"></div>
+  <div class="detail-name" id="detailName"></div>
+  <div class="detail-type" id="detailType"></div>
+  <div class="detail-section-title">METRICS</div>
+  <div id="detailMetrics"></div>
+  <div class="detail-section-title">DEPENDENCIES</div>
+  <div id="detailDeps"></div>
+</div>
+
+<script>
+(function() {
+  // ===== MODULE DATA =====
+  const modules = [
+    {
+      id: 'pipeline',
+      name: 'pipeline',
+      color: '#60a5fa',
+      symbols: 142,
+      health: 91,
+      type: 'Core Engine',
+      metrics: { files: 14, functions: 89, complexity: 'Medium', coupling: 0.34 },
+      deps: ['parse', 'db', 'graph']
+    },
+    {
+      id: 'parse',
+      name: 'parse',
+      color: '#4ade80',
+      symbols: 238,
+      health: 88,
+      type: 'Language Parsers',
+      metrics: { files: 22, functions: 156, complexity: 'High', coupling: 0.12 },
+      deps: ['db']
+    },
+    {
+      id: 'db',
+      name: 'db',
+      color: '#fde047',
+      symbols: 67,
+      health: 72,
+      type: 'Data Layer',
+      metrics: { files: 5, functions: 67, complexity: 'High', coupling: 0.78 },
+      deps: ['pipeline']
+    },
+    {
+      id: 'graph',
+      name: 'graph',
+      color: '#a78bfa',
+      symbols: 94,
+      health: 85,
+      type: 'Graph Engine',
+      metrics: { files: 8, functions: 61, complexity: 'Medium', coupling: 0.29 },
+      deps: ['db', 'analysis']
+    },
+    {
+      id: 'analysis',
+      name: 'analysis',
+      color: '#f472b6',
+      symbols: 56,
+      health: 79,
+      type: 'Code Analysis',
+      metrics: { files: 7, functions: 38, complexity: 'Low', coupling: 0.41 },
+      deps: ['graph', 'db']
+    },
+    {
+      id: 'mcp',
+      name: 'mcp',
+      color: '#22d3ee',
+      symbols: 31,
+      health: 94,
+      type: 'MCP Server',
+      metrics: { files: 6, functions: 22, complexity: 'Low', coupling: 0.18 },
+      deps: ['pipeline', 'graph', 'analysis']
+    }
+  ];
+
+  // Architecture map positions (as % of viewport)
+  const mapPositions = {
+    pipeline:  { x: 50, y: 25 },
+    parse:     { x: 20, y: 25 },
+    db:        { x: 50, y: 55 },
+    graph:     { x: 80, y: 35 },
+    analysis:  { x: 80, y: 65 },
+    mcp:       { x: 20, y: 60 }
+  };
+
+  // Connections between modules (for SVG lines)
+  const connections = [
+    { from: 'pipeline', to: 'parse',    color: 'rgba(96,165,250,0.4)' },
+    { from: 'pipeline', to: 'db',       color: 'rgba(96,165,250,0.4)' },
+    { from: 'pipeline', to: 'graph',    color: 'rgba(96,165,250,0.4)' },
+    { from: 'parse',    to: 'db',       color: 'rgba(74,222,128,0.4)' },
+    { from: 'graph',    to: 'db',       color: 'rgba(167,139,250,0.4)' },
+    { from: 'graph',    to: 'analysis', color: 'rgba(167,139,250,0.4)' },
+    { from: 'analysis', to: 'db',       color: 'rgba(244,114,182,0.4)' },
+    { from: 'mcp',      to: 'pipeline', color: 'rgba(34,211,238,0.4)' },
+    { from: 'mcp',      to: 'graph',    color: 'rgba(34,211,238,0.4)' },
+    { from: 'mcp',      to: 'analysis', color: 'rgba(34,211,238,0.4)' },
+    // Cycle edge (special)
+    { from: 'db',       to: 'pipeline', color: 'rgba(248,113,113,0.55)', cycle: true }
+  ];
+
+  // ===== CREATE MORPH CARDS =====
+  const morphCardsContainer = document.getElementById('morphCards');
+  const morphCardEls = {};
+
+  modules.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'morph-card';
+    card.dataset.module = m.id;
+    card.innerHTML = `
+      <div class="morph-card-dot" style="background: ${m.color}"></div>
+      <div class="morph-card-name">${m.name}</div>
+      <div class="morph-card-meta mono">${m.symbols} sym &middot; ${m.health}%</div>
+    `;
+    card.addEventListener('click', () => openDetail(m));
+    morphCardsContainer.appendChild(card);
+    morphCardEls[m.id] = card;
+  });
+
+  // ===== INTERSECTION OBSERVER FOR REVEAL ANIMATIONS =====
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('[data-reveal]').forEach(el => revealObserver.observe(el));
+
+  // ===== GRID POSITIONS CACHE =====
+  let gridPositions = {};
+  let lastWidth = 0;
+  let lastHeight = 0;
+
+  function cacheGridPositions() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (w === lastWidth && h === lastHeight) return;
+    lastWidth = w;
+    lastHeight = h;
+
+    const gridCards = document.querySelectorAll('.module-card-grid');
+    gridCards.forEach(card => {
+      const moduleId = card.dataset.module;
+      const rect = card.getBoundingClientRect();
+      const scrollY = window.scrollY;
+      // Store absolute document positions
+      gridPositions[moduleId] = {
+        x: rect.left + rect.width / 2,
+        y: rect.top + scrollY + rect.height / 2,
+        width: rect.width,
+        height: rect.height
+      };
+    });
+  }
+
+  // ===== MAP POSITIONS (viewport-relative) =====
+  function getMapPos(moduleId) {
+    const pos = mapPositions[moduleId];
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return {
+      x: (pos.x / 100) * w,
+      y: (pos.y / 100) * h,
+      width: 140,
+      height: 72
+    };
+  }
+
+  // ===== MORPH ZONE BOUNDS =====
+  function getMorphBounds() {
+    const morphEl = document.getElementById('zoneMorph');
+    const rect = morphEl.getBoundingClientRect();
+    const scrollY = window.scrollY;
+    return {
+      start: rect.top + scrollY,
+      end: rect.top + scrollY + rect.height * 0.7
+    };
+  }
+
+  // ===== SVG CONNECTIONS =====
+  const voidSVG = document.getElementById('voidSVG');
+
+  function buildConnections() {
+    voidSVG.innerHTML = '';
+    connections.forEach(conn => {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.dataset.from = conn.from;
+      path.dataset.to = conn.to;
+      path.setAttribute('stroke', conn.color);
+      if (conn.cycle) {
+        path.setAttribute('stroke-dasharray', '6 4');
+        path.setAttribute('stroke', 'rgba(248,113,113,0.4)');
+      }
+      voidSVG.appendChild(path);
+    });
+  }
+
+  function updateConnections(progress) {
+    const paths = voidSVG.querySelectorAll('path');
+    paths.forEach(path => {
+      const fromId = path.dataset.from;
+      const toId = path.dataset.to;
+      const fromCard = morphCardEls[fromId];
+      const toCard = morphCardEls[toId];
+
+      if (!fromCard || !toCard) return;
+
+      const fromRect = fromCard.getBoundingClientRect();
+      const toRect = toCard.getBoundingClientRect();
+
+      const x1 = fromRect.left + fromRect.width / 2;
+      const y1 = fromRect.top + fromRect.height / 2;
+      const x2 = toRect.left + toRect.width / 2;
+      const y2 = toRect.top + toRect.height / 2;
+
+      // Curved path
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const cx = midX - dy * 0.15;
+      const cy = midY + dx * 0.15;
+
+      const d = `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+      path.setAttribute('d', d);
+
+      // Animate stroke-dashoffset based on progress
+      const len = path.getTotalLength ? path.getTotalLength() : 200;
+      path.style.strokeDasharray = len;
+      path.style.strokeDashoffset = len * (1 - progress);
+      path.style.opacity = progress;
+    });
+  }
+
+  // ===== LERP UTILITY =====
+  function lerp(a, b, t) {
+    return a + (b - a) * t;
+  }
+
+  function easeInOutCubic(t) {
+    return t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  // ===== MAIN SCROLL HANDLER =====
+  const voidContainer = document.getElementById('voidContainer');
+  const navIndicator = document.getElementById('navIndicator');
+  const scrollProgressBar = document.getElementById('scrollProgress');
+  let currentMorphProgress = -1;
+  let rafId = null;
+
+  function onScroll() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      updateScene();
+    });
+  }
+
+  function updateScene() {
+    const scrollY = window.scrollY;
+    const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+
+    // Scroll progress bar
+    const totalProgress = Math.min(scrollY / docHeight, 1);
+    scrollProgressBar.style.width = (totalProgress * 100) + '%';
+
+    // Cache grid positions
+    cacheGridPositions();
+
+    // Morph bounds
+    const morph = getMorphBounds();
+    let morphProgress = 0;
+
+    if (scrollY >= morph.start && scrollY <= morph.end) {
+      morphProgress = (scrollY - morph.start) / (morph.end - morph.start);
+      morphProgress = Math.max(0, Math.min(1, morphProgress));
+    } else if (scrollY > morph.end) {
+      morphProgress = 1;
+    } else {
+      morphProgress = 0;
+    }
+
+    // Apply easing
+    const easedProgress = easeInOutCubic(morphProgress);
+
+    // Only update DOM if progress changed meaningfully
+    if (Math.abs(easedProgress - currentMorphProgress) > 0.002 || currentMorphProgress === -1) {
+      currentMorphProgress = easedProgress;
+      updateMorph(easedProgress, scrollY, morph);
+    }
+
+    // Nav indicator
+    if (easedProgress > 0.5) {
+      navIndicator.textContent = 'VOID';
+      navIndicator.classList.add('in-void');
+    } else {
+      navIndicator.textContent = 'SIGNAL';
+      navIndicator.classList.remove('in-void');
+    }
+
+    // Hide scroll hint after initial scroll
+    const hint = document.querySelector('.hero-scroll-hint');
+    if (hint) {
+      hint.style.opacity = Math.max(0, 1 - scrollY / 200);
+    }
+  }
+
+  function updateMorph(progress, scrollY, morph) {
+    const isActive = progress > 0.01;
+    const isComplete = progress > 0.98;
+
+    // Void container visibility
+    if (isActive) {
+      voidContainer.classList.add('active');
+    } else {
+      voidContainer.classList.remove('active');
+    }
+
+    // Update each morph card
+    modules.forEach(m => {
+      const card = morphCardEls[m.id];
+      const gridPos = gridPositions[m.id];
+
+      if (!gridPos) return;
+
+      const mapPos = getMapPos(m.id);
+
+      if (!isActive) {
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+        card.classList.remove('interactive');
+        return;
+      }
+
+      // Fade in: cards appear in first 30% of morph
+      const fadeIn = Math.min(1, progress / 0.3);
+
+      // Interpolate position: grid (source) -> map (target)
+      // Grid position is in document coords, convert to viewport
+      const gridViewportY = gridPos.y - scrollY;
+
+      const currentX = lerp(gridPos.x - gridPos.width / 2, mapPos.x - mapPos.width / 2, progress);
+      const currentY = lerp(gridViewportY - gridPos.height / 2, mapPos.y - mapPos.height / 2, progress);
+      const currentW = lerp(gridPos.width, mapPos.width, progress);
+
+      card.style.opacity = fadeIn;
+      card.style.left = currentX + 'px';
+      card.style.top = currentY + 'px';
+      card.style.width = currentW + 'px';
+      card.style.transform = 'none';
+
+      if (isComplete) {
+        card.classList.add('interactive');
+        card.style.pointerEvents = 'auto';
+      } else {
+        card.classList.remove('interactive');
+        card.style.pointerEvents = 'none';
+      }
+
+      // Fade original grid cards out
+      const gridCard = document.querySelector(`.module-card-grid[data-module="${m.id}"]`);
+      if (gridCard) {
+        gridCard.style.opacity = Math.max(0, 1 - progress * 3);
+      }
+    });
+
+    // Update SVG connections
+    if (isActive) {
+      // Connection lines draw in during later half of morph
+      const connProgress = Math.max(0, (progress - 0.3) / 0.7);
+      updateConnections(connProgress);
+    }
+  }
+
+  // ===== DETAIL PANEL =====
+  const detailPanel = document.getElementById('detailPanel');
+  const detailClose = document.getElementById('detailClose');
+
+  function openDetail(m) {
+    document.getElementById('detailDot').style.background = m.color;
+    document.getElementById('detailName').textContent = m.name;
+    document.getElementById('detailType').textContent = m.type;
+
+    const metricsEl = document.getElementById('detailMetrics');
+    metricsEl.innerHTML = '';
+    const metricEntries = [
+      ['Files', m.metrics.files],
+      ['Functions', m.metrics.functions],
+      ['Health', m.health + '%'],
+      ['Symbols', m.symbols],
+      ['Complexity', m.metrics.complexity],
+      ['Coupling', m.metrics.coupling.toFixed(2)]
+    ];
+    metricEntries.forEach(([label, value]) => {
+      const row = document.createElement('div');
+      row.className = 'detail-stat-row';
+      row.innerHTML = `
+        <span class="detail-stat-label">${label}</span>
+        <span class="detail-stat-value mono">${value}</span>
+      `;
+      metricsEl.appendChild(row);
+    });
+
+    const depsEl = document.getElementById('detailDeps');
+    depsEl.innerHTML = '';
+    m.deps.forEach(dep => {
+      const depEl = document.createElement('div');
+      depEl.className = 'detail-dep';
+      depEl.innerHTML = `<span class="detail-dep-arrow">&rarr;</span> <span class="mono">${dep}</span>`;
+      depsEl.appendChild(depEl);
+    });
+
+    detailPanel.classList.add('open');
+  }
+
+  detailClose.addEventListener('click', () => {
+    detailPanel.classList.remove('open');
+  });
+
+  // Close detail on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') detailPanel.classList.remove('open');
+  });
+
+  // ===== INIT =====
+  buildConnections();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', () => {
+    lastWidth = 0;
+    lastHeight = 0;
+    cacheGridPositions();
+    currentMorphProgress = -1;
+    updateScene();
+  });
+
+  // Initial render
+  setTimeout(() => {
+    cacheGridPositions();
+    updateScene();
+  }, 100);
+
+  // Animate health bars on load
+  document.querySelectorAll('.module-health-fill').forEach(bar => {
+    const w = bar.style.width;
+    bar.style.width = '0%';
+    setTimeout(() => { bar.style.width = w; }, 400);
+  });
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,212 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - img
+    - generic [ref=e4] [cursor=pointer]:
+      - generic [ref=e6]: pipeline
+      - generic [ref=e7]: 14 phases
+      - generic [ref=e8]:
+        - generic [ref=e9]: 2.4k lines
+        - generic [ref=e10]: 42 fns
+    - generic [ref=e11] [cursor=pointer]:
+      - generic [ref=e13]: parse
+      - generic [ref=e14]: tree-sitter
+      - generic [ref=e15]:
+        - generic [ref=e16]: 3.8k lines
+        - generic [ref=e17]: 67 fns
+    - generic [ref=e18] [cursor=pointer]:
+      - generic [ref=e20]: graph
+      - generic [ref=e21]: petgraph
+      - generic [ref=e22]:
+        - generic [ref=e23]: 1.9k lines
+        - generic [ref=e24]: 31 fns
+    - generic [ref=e25] [cursor=pointer]:
+      - generic [ref=e27]: db
+      - generic [ref=e28]: rusqlite
+      - generic [ref=e29]:
+        - generic [ref=e30]: 1.2k lines
+        - generic [ref=e31]: 28 fns
+    - generic [ref=e32] [cursor=pointer]:
+      - generic [ref=e34]: mcp
+      - generic [ref=e35]: rmcp / stdio
+      - generic [ref=e36]:
+        - generic [ref=e37]: 890 lines
+        - generic [ref=e38]: 18 fns
+    - generic [ref=e39] [cursor=pointer]:
+      - generic [ref=e41]: analysis
+      - generic [ref=e42]: detection
+      - generic [ref=e43]:
+        - generic [ref=e44]: 2.1k lines
+        - generic [ref=e45]: 35 fns
+    - generic [ref=e46] [cursor=pointer]:
+      - generic [ref=e48]: search
+      - generic [ref=e49]: fuzzy / fts
+      - generic [ref=e50]:
+        - generic [ref=e51]: 680 lines
+        - generic [ref=e52]: 12 fns
+    - generic [ref=e53] [cursor=pointer]:
+      - generic [ref=e55]: dashboard
+      - generic [ref=e56]: axum / rest
+      - generic [ref=e57]:
+        - generic [ref=e58]: 1.4k lines
+        - generic [ref=e59]: 22 fns
+    - generic [ref=e60] [cursor=pointer]:
+      - generic [ref=e62]: config
+      - generic [ref=e63]: workspace
+      - generic [ref=e64]:
+        - generic [ref=e65]: 420 lines
+        - generic [ref=e66]: 9 fns
+  - generic [ref=e67]:
+    - img [ref=e69]
+    - generic [ref=e72]: Ariadne
+    - generic [ref=e73]: "84"
+  - generic [ref=e74]:
+    - generic [ref=e75]:
+      - generic [ref=e77]: "47"
+      - text: dead
+    - generic [ref=e78]:
+      - generic [ref=e80]: "5"
+      - text: cycles
+    - generic [ref=e81]:
+      - generic [ref=e82]: /
+      - text: Signal
+  - generic [ref=e83]:
+    - button "Architecture" [ref=e84] [cursor=pointer]
+    - button "Risk" [ref=e85] [cursor=pointer]
+    - button "Coupling" [ref=e86] [cursor=pointer]
+  - generic [ref=e87]:
+    - generic [ref=e88] [cursor=pointer]: ×
+    - generic [ref=e89]:
+      - generic [ref=e90]: graph
+      - generic [ref=e91]: IN-MEMORY CALL GRAPH
+    - generic [ref=e92]:
+      - generic [ref=e93]: Metrics
+      - generic [ref=e94]:
+        - generic [ref=e95]:
+          - generic [ref=e96]: 1.9k
+          - generic [ref=e97]: Lines
+        - generic [ref=e98]:
+          - generic [ref=e99]: "31"
+          - generic [ref=e100]: Functions
+        - generic [ref=e101]:
+          - generic [ref=e102]: "2"
+          - generic [ref=e103]: Dependencies
+        - generic [ref=e104]:
+          - generic [ref=e105]: "74"
+          - generic [ref=e106]: Health
+    - generic [ref=e107]:
+      - generic [ref=e108]: Functions
+      - list [ref=e109]:
+        - listitem [ref=e110]:
+          - generic [ref=e111]: build_graph
+          - generic [ref=e112]: ok
+        - listitem [ref=e113]:
+          - generic [ref=e114]: blast_radius
+          - generic [ref=e115]: risk
+        - listitem [ref=e116]:
+          - generic [ref=e117]: detect_cycles
+          - generic [ref=e118]: ok
+        - listitem [ref=e119]:
+          - generic [ref=e120]: old_cycle_detection
+          - generic [ref=e121]: dead
+        - listitem [ref=e122]:
+          - generic [ref=e123]: find_call_chains
+          - generic [ref=e124]: ok
+        - listitem [ref=e125]:
+          - generic [ref=e126]: compute_centrality
+          - generic [ref=e127]: ok
+  - generic:
+    - generic:
+      - generic:
+        - img
+        - textbox "Search modules, functions, signals..."
+        - generic: ESC
+      - generic:
+        - button "Overview"
+        - button "Risks"
+        - button "Dead Code"
+        - button "Coupling"
+      - generic:
+        - generic:
+          - generic:
+            - generic: "84"
+            - generic:
+              - heading "Codebase Health" [level=3]
+              - paragraph: 14.8k lines across 9 modules, 264 functions indexed
+          - generic:
+            - generic:
+              - generic: "9"
+              - generic: Modules
+            - generic:
+              - generic: "264"
+              - generic: Functions
+            - generic:
+              - generic: "47"
+              - generic: Dead
+            - generic:
+              - generic: "5"
+              - generic: Cycles
+          - generic: Modules
+          - generic:
+            - generic:
+              - generic: PI
+              - generic:
+                - generic: pipeline
+                - generic: 14-phase indexing pipeline
+              - generic: "92"
+              - generic: ›
+            - generic:
+              - generic: PA
+              - generic:
+                - generic: parse
+                - generic: tree-sitter parsers (9 languages)
+              - generic: "88"
+              - generic: ›
+            - generic:
+              - generic: GR
+              - generic:
+                - generic: graph
+                - generic: in-memory call graph, blast radius
+              - generic: "74"
+              - generic: ›
+            - generic:
+              - generic: DB
+              - generic:
+                - generic: db
+                - generic: SQLite wrapper, schema, queries
+              - generic: "90"
+              - generic: ›
+            - generic:
+              - generic: MC
+              - generic:
+                - generic: mcp
+                - generic: MCP server, 10 tools, stdio transport
+              - generic: "86"
+              - generic: ›
+            - generic:
+              - generic: AN
+              - generic:
+                - generic: analysis
+                - generic: dead code, community, arch rules
+              - generic: "62"
+              - generic: ›
+            - generic:
+              - generic: SE
+              - generic:
+                - generic: search
+                - generic: full-text and fuzzy symbol search
+              - generic: "94"
+              - generic: ›
+            - generic:
+              - generic: DA
+              - generic:
+                - generic: dashboard
+                - generic: Axum REST API + static frontend
+              - generic: "76"
+              - generic: ›
+            - generic:
+              - generic: CO
+              - generic:
+                - generic: config
+                - generic: workspace config, language autodetection
+              - generic: "96"
+              - generic: ›

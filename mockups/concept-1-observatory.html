@@ -1,0 +1,1885 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Observatory — Concept Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0B0F19;
+    --bg-secondary: #111827;
+    --bg-card: #1A1F2E;
+    --bg-card-hover: #222842;
+    --bg-elevated: #252B3B;
+    --border: #2A3149;
+    --border-subtle: #1E2538;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-yellow: #EAB308;
+    --accent-orange: #F97316;
+    --accent-red: #EF4444;
+    --accent-purple: #A855F7;
+    --accent-cyan: #06B6D4;
+    --accent-pink: #EC4899;
+    --health-great: #22C55E;
+    --health-good: #84CC16;
+    --health-fair: #EAB308;
+    --health-poor: #F97316;
+    --health-bad: #EF4444;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  code, .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== HEADER ===== */
+  .header {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 24px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-icon svg { width: 16px; height: 16px; }
+
+  .logo-text {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  .search-bar {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+
+  .search-bar input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-bar input:focus { border-color: var(--accent-blue); }
+
+  .search-bar .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+
+  .search-bar .shortcut {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .header-stats {
+    display: flex;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .header-stat {
+    text-align: right;
+  }
+
+  .header-stat .value {
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .header-stat .label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--text-primary);
+    border-color: var(--accent-blue);
+  }
+
+  /* ===== MAIN LAYOUT ===== */
+  .main {
+    display: grid;
+    grid-template-columns: 300px 1fr 320px;
+    grid-template-rows: auto 1fr auto;
+    height: calc(100vh - 57px);
+  }
+
+  /* ===== METRICS BAR ===== */
+  .metrics-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    padding: 16px 24px;
+    gap: 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .metric-card {
+    flex: 1;
+    padding: 14px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: border-color 0.2s;
+    cursor: pointer;
+  }
+
+  .metric-card:hover { border-color: var(--accent-blue); }
+
+  .metric-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .metric-content { flex: 1; }
+
+  .metric-value {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+    line-height: 1.1;
+  }
+
+  .metric-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .metric-trend {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .trend-up { color: var(--accent-green); }
+  .trend-down { color: var(--accent-red); }
+  .trend-neutral { color: var(--text-muted); }
+
+  /* Health Score Ring */
+  .health-ring {
+    width: 44px;
+    height: 44px;
+    position: relative;
+  }
+
+  .health-ring svg { transform: rotate(-90deg); }
+
+  .health-ring .ring-bg {
+    fill: none;
+    stroke: var(--bg-primary);
+    stroke-width: 3;
+  }
+
+  .health-ring .ring-fill {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  .health-ring .ring-value {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  /* ===== LEFT PANEL: ISSUES ===== */
+  .panel-left {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 16px 18px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+  }
+
+  .panel-badge {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--accent-red);
+    color: white;
+    font-weight: 600;
+  }
+
+  .issue-tabs {
+    display: flex;
+    padding: 0 18px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .issue-tab {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    border: none;
+    background: none;
+  }
+
+  .issue-tab:hover { color: var(--text-secondary); background: var(--bg-card); }
+  .issue-tab.active { color: var(--text-primary); background: var(--bg-card); }
+
+  .issue-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+  }
+
+  .issue-list::-webkit-scrollbar { width: 4px; }
+  .issue-list::-webkit-scrollbar-track { background: transparent; }
+  .issue-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .issue-group-header {
+    padding: 10px 8px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .issue-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+  }
+
+  .issue-item:hover { background: var(--bg-card); }
+  .issue-item.selected { background: var(--bg-card-hover); border-left: 2px solid var(--accent-blue); }
+
+  .issue-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .issue-title .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .issue-path {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 12px;
+  }
+
+  .issue-meta {
+    display: flex;
+    gap: 10px;
+    padding-left: 12px;
+    margin-top: 4px;
+  }
+
+  .issue-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+  }
+
+  .badge-dead { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+  .badge-cycle { background: rgba(249,115,22,0.15); color: var(--accent-orange); }
+  .badge-god { background: rgba(234,179,8,0.15); color: var(--accent-yellow); }
+  .badge-risk { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
+  .badge-coupling { background: rgba(6,182,212,0.15); color: var(--accent-cyan); }
+
+  /* ===== CENTER PANEL: VISUALIZATION ===== */
+  .panel-center {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-primary);
+  }
+
+  .view-tabs {
+    display: flex;
+    padding: 12px 20px 0;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .view-tab {
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .view-tab:hover { color: var(--text-secondary); }
+
+  .view-tab.active {
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border-color: var(--border);
+  }
+
+  .view-content {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 0 8px 0 0;
+    margin: 0 20px;
+    background: var(--bg-card);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ===== TREEMAP VIEW ===== */
+  .treemap-container {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .treemap-breadcrumb {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 10;
+    font-size: 12px;
+    background: rgba(11,15,25,0.85);
+    backdrop-filter: blur(8px);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .breadcrumb-item { color: var(--text-muted); cursor: pointer; }
+  .breadcrumb-item:hover { color: var(--accent-blue); }
+  .breadcrumb-sep { color: var(--text-muted); font-size: 10px; }
+  .breadcrumb-current { color: var(--text-primary); font-weight: 500; }
+
+  .treemap-legend {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: rgba(11,15,25,0.85);
+    backdrop-filter: blur(8px);
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* Treemap cells */
+  .treemap-grid {
+    width: 100%;
+    height: 100%;
+    display: grid;
+    gap: 2px;
+    padding: 2px;
+    grid-template-columns: 3fr 2fr 2fr 1fr;
+    grid-template-rows: 2fr 1.5fr 1fr;
+  }
+
+  .treemap-cell {
+    border-radius: 4px;
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .treemap-cell:hover {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: -2px;
+    z-index: 2;
+  }
+
+  .treemap-cell .cell-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    margin-bottom: 2px;
+  }
+
+  .treemap-cell .cell-stats {
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .treemap-cell .cell-badge-list {
+    margin-top: auto;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .cell-mini-badge {
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    background: rgba(0,0,0,0.3);
+    color: rgba(255,255,255,0.7);
+  }
+
+  /* ===== RIGHT PANEL: DETAILS ===== */
+  .panel-right {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-section {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .detail-list { overflow-y: auto; flex: 1; }
+
+  .detail-list::-webkit-scrollbar { width: 4px; }
+  .detail-list::-webkit-scrollbar-track { background: transparent; }
+  .detail-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Insight cards */
+  .insight-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+  }
+
+  .insight-item:hover { background: var(--bg-card); }
+
+  .insight-rank {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+    flex-shrink: 0;
+  }
+
+  .insight-info { flex: 1; min-width: 0; }
+
+  .insight-name {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .insight-file {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .insight-score {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* Bar chart */
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .bar-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    width: 80px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+
+  .bar-value {
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-muted);
+    width: 36px;
+    flex-shrink: 0;
+  }
+
+  /* Coupling matrix mini */
+  .coupling-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .coupling-cell {
+    aspect-ratio: 1;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: outline 0.15s;
+  }
+
+  .coupling-cell:hover { outline: 1px solid var(--text-muted); }
+
+  /* ===== BOTTOM BAR ===== */
+  .bottom-bar {
+    grid-column: 1 / -1;
+    padding: 10px 24px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .lang-bar {
+    flex: 1;
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    gap: 1px;
+  }
+
+  .lang-segment { height: 100%; transition: flex 0.3s; }
+
+  .lang-labels {
+    display: flex;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+
+  .lang-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .lang-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .bottom-stat {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .bottom-stat .value {
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  /* ===== VIEW-SPECIFIC: GRAPH PREVIEW ===== */
+  .graph-preview {
+    display: none;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .graph-preview.active { display: block; }
+  .treemap-container.active { display: block; }
+
+  .view-content > div { display: none; }
+  .view-content > div.active { display: block; }
+
+  /* ===== GRAPH MINI ===== */
+  .graph-canvas-wrap {
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .graph-canvas-wrap canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .graph-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    gap: 4px;
+    background: rgba(11,15,25,0.85);
+    backdrop-filter: blur(8px);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .graph-control-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+
+  .graph-control-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+
+  /* ===== DSM / MATRIX VIEW ===== */
+  .dsm-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .dsm-grid-wrap {
+    position: relative;
+  }
+
+  .dsm-labels-left {
+    position: absolute;
+    left: -100px;
+    top: 24px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dsm-label {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .dsm-labels-top {
+    display: flex;
+    margin-left: 0;
+    height: 24px;
+  }
+
+  .dsm-label-top {
+    width: 28px;
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-muted);
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+  }
+
+  .dsm-matrix {
+    display: grid;
+    gap: 2px;
+  }
+
+  .dsm-cell {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: outline 0.15s;
+  }
+
+  .dsm-cell:hover { outline: 2px solid var(--accent-blue); }
+  .dsm-cell.diagonal { outline: 1px solid var(--border); }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 1200px) {
+    .main { grid-template-columns: 260px 1fr 280px; }
+  }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .panel-left, .panel-right { display: none; }
+    .metrics-bar { flex-wrap: wrap; }
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-in { animation: fadeIn 0.3s ease; }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+  }
+
+  .pulse-issue { animation: pulse-glow 2s ease infinite; }
+
+  /* Tooltip */
+  .tooltip {
+    position: fixed;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    z-index: 1000;
+    pointer-events: none;
+    max-width: 280px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    display: none;
+  }
+
+  .tooltip.visible { display: block; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4m0 12v4M2 12h4m12 0h4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+      </svg>
+    </div>
+    <span class="logo-text">Ariadne</span>
+  </div>
+
+  <div class="search-bar">
+    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" placeholder="Search symbols, files, modules..." />
+    <span class="shortcut">/</span>
+  </div>
+
+  <div class="header-stats">
+    <div class="header-stat">
+      <div class="value" style="color: var(--accent-blue)">247</div>
+      <div class="label">Files</div>
+    </div>
+    <div class="header-stat">
+      <div class="value" style="color: var(--accent-purple)">1,842</div>
+      <div class="label">Symbols</div>
+    </div>
+    <div class="header-stat">
+      <div class="value" style="color: var(--accent-cyan)">3,291</div>
+      <div class="label">Calls</div>
+    </div>
+    <div class="header-stat">
+      <div class="value" style="color: var(--accent-green)">87.4%</div>
+      <div class="label">Resolved</div>
+    </div>
+  </div>
+
+  <div class="header-actions">
+    <button class="icon-btn" title="Re-index">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+    </button>
+    <button class="icon-btn" title="Settings">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- METRICS BAR -->
+  <div class="metrics-bar">
+    <!-- Health Score -->
+    <div class="metric-card">
+      <div class="health-ring">
+        <svg width="44" height="44" viewBox="0 0 44 44">
+          <circle class="ring-bg" cx="22" cy="22" r="18"/>
+          <circle class="ring-fill" cx="22" cy="22" r="18" stroke="var(--health-good)" stroke-dasharray="113" stroke-dashoffset="18"/>
+        </svg>
+        <span class="ring-value" style="color: var(--health-good)">84</span>
+      </div>
+      <div class="metric-content">
+        <div class="metric-label">Health Score</div>
+        <div class="metric-trend trend-up">+3 from last index</div>
+      </div>
+    </div>
+
+    <!-- Dead Code -->
+    <div class="metric-card">
+      <div class="metric-icon" style="background: rgba(239,68,68,0.1)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-red)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>
+      </div>
+      <div class="metric-content">
+        <div class="metric-value" style="color: var(--accent-red)">47</div>
+        <div class="metric-label">Dead Functions</div>
+      </div>
+    </div>
+
+    <!-- Circular Deps -->
+    <div class="metric-card">
+      <div class="metric-icon" style="background: rgba(249,115,22,0.1)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><polyline points="22 2 22 8 16 8"/></svg>
+      </div>
+      <div class="metric-content">
+        <div class="metric-value" style="color: var(--accent-orange)">5</div>
+        <div class="metric-label">Circular Deps</div>
+      </div>
+    </div>
+
+    <!-- God Objects -->
+    <div class="metric-card">
+      <div class="metric-icon" style="background: rgba(234,179,8,0.1)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-yellow)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="metric-content">
+        <div class="metric-value" style="color: var(--accent-yellow)">3</div>
+        <div class="metric-label">God Objects</div>
+      </div>
+    </div>
+
+    <!-- Communities -->
+    <div class="metric-card">
+      <div class="metric-icon" style="background: rgba(59,130,246,0.1)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-blue)" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </div>
+      <div class="metric-content">
+        <div class="metric-value" style="color: var(--accent-blue)">8</div>
+        <div class="metric-label">Communities</div>
+      </div>
+    </div>
+
+    <!-- Risk Files -->
+    <div class="metric-card">
+      <div class="metric-icon" style="background: rgba(168,85,247,0.1)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-purple)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="metric-content">
+        <div class="metric-value" style="color: var(--accent-purple)">12</div>
+        <div class="metric-label">High-Risk Files</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL: ISSUES -->
+  <div class="panel-left">
+    <div class="panel-header">
+      <span class="panel-title">Issues</span>
+      <span class="panel-badge">67</span>
+    </div>
+    <div class="issue-tabs">
+      <button class="issue-tab active">All</button>
+      <button class="issue-tab">Critical</button>
+      <button class="issue-tab">Warning</button>
+      <button class="issue-tab">Info</button>
+    </div>
+    <div class="issue-list">
+
+      <div class="issue-group-header">
+        <span style="color: var(--accent-red)">&#x25CF;</span> Dead Code &middot; 47
+      </div>
+
+      <div class="issue-item selected">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-red)"></span>
+          process_legacy_webhook
+        </div>
+        <div class="issue-path">src/pipeline/api_resolution.rs</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-dead">dead</span>
+          <span class="issue-badge badge-risk">risk: 0.82</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-red)"></span>
+          format_xml_output
+        </div>
+        <div class="issue-path">src/output/formatters.rs</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-dead">dead</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-red)"></span>
+          parse_legacy_config
+        </div>
+        <div class="issue-path">src/config/mod.rs</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-dead">dead</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-red)"></span>
+          validate_ruby_ast
+        </div>
+        <div class="issue-path">src/parse/ruby.rs</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-dead">dead</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-red)"></span>
+          old_blast_radius
+        </div>
+        <div class="issue-path">src/graph/blast_radius.rs</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-dead">dead</span>
+        </div>
+      </div>
+
+      <div class="issue-group-header">
+        <span style="color: var(--accent-orange)">&#x25CF;</span> Circular Dependencies &middot; 5
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-orange)"></span>
+          pipeline &harr; graph
+        </div>
+        <div class="issue-path">src/pipeline/ ↔ src/graph/</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-cycle">cycle</span>
+          <span class="issue-badge badge-coupling">coupling: 0.73</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-orange)"></span>
+          db::query &harr; analysis
+        </div>
+        <div class="issue-path">src/db/ ↔ src/analysis/</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-cycle">cycle</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-orange)"></span>
+          parse &harr; pipeline::structure
+        </div>
+        <div class="issue-path">src/parse/ ↔ src/pipeline/</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-cycle">cycle</span>
+        </div>
+      </div>
+
+      <div class="issue-group-header">
+        <span style="color: var(--accent-yellow)">&#x25CF;</span> God Objects &middot; 3
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-yellow)"></span>
+          Database
+        </div>
+        <div class="issue-path">src/db/mod.rs — 127 connections</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-god">god object</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-yellow)"></span>
+          CallGraph
+        </div>
+        <div class="issue-path">src/graph/mod.rs — 89 connections</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-god">god object</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-yellow)"></span>
+          PipelineRunner
+        </div>
+        <div class="issue-path">src/pipeline/mod.rs — 64 connections</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-god">god object</span>
+        </div>
+      </div>
+
+      <div class="issue-group-header">
+        <span style="color: var(--accent-purple)">&#x25CF;</span> High Risk &middot; 12
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-purple)"></span>
+          call_resolution.rs
+        </div>
+        <div class="issue-path">src/pipeline/ — risk: 0.91</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-risk">churn: high</span>
+          <span class="issue-badge badge-coupling">coupled: 8 files</span>
+        </div>
+      </div>
+
+      <div class="issue-item">
+        <div class="issue-title">
+          <span class="dot" style="background: var(--accent-purple)"></span>
+          query.rs
+        </div>
+        <div class="issue-path">src/db/ — risk: 0.87</div>
+        <div class="issue-meta">
+          <span class="issue-badge badge-risk">fan-in: 34</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER PANEL: VISUALIZATION -->
+  <div class="panel-center">
+    <div class="view-tabs">
+      <button class="view-tab active" onclick="switchView('map')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        Code Map
+      </button>
+      <button class="view-tab" onclick="switchView('graph')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v6a3 3 0 0 0 3 3h6m0-12H9a3 3 0 0 0-3 3"/></svg>
+        Graph
+      </button>
+      <button class="view-tab" onclick="switchView('matrix')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Matrix
+      </button>
+      <button class="view-tab" onclick="switchView('flow')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        Flow
+      </button>
+    </div>
+
+    <div class="view-content">
+      <!-- TREEMAP VIEW -->
+      <div id="view-map" class="treemap-container active">
+        <div class="treemap-breadcrumb">
+          <span class="breadcrumb-item">ariadne</span>
+          <span class="breadcrumb-sep">/</span>
+          <span class="breadcrumb-current">src</span>
+        </div>
+
+        <div class="treemap-grid" style="height: 100%;">
+          <!-- pipeline/ - largest module -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #2D4A22, #3D5A32); grid-row: 1 / 3;">
+            <div class="cell-name">pipeline/</div>
+            <div class="cell-stats">387 symbols &middot; 14 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #F97316;">2 cycles</span>
+              <span class="cell-mini-badge">risk: 0.71</span>
+            </div>
+          </div>
+
+          <!-- parse/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #2A4428, #3A5438);">
+            <div class="cell-name">parse/</div>
+            <div class="cell-stats">284 symbols &middot; 10 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #EF4444;">12 dead</span>
+            </div>
+          </div>
+
+          <!-- db/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #4A3A1E, #5A4A28);">
+            <div class="cell-name">db/</div>
+            <div class="cell-stats">198 symbols &middot; 4 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #EAB308;">1 god obj</span>
+              <span class="cell-mini-badge" style="color: #F97316;">1 cycle</span>
+            </div>
+          </div>
+
+          <!-- mcp/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #1E3A4A, #284A5A);">
+            <div class="cell-name">mcp/</div>
+            <div class="cell-stats">156 symbols &middot; 6 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge">healthy</span>
+            </div>
+          </div>
+
+          <!-- graph/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #4A3A1E, #5A4A28);">
+            <div class="cell-name">graph/</div>
+            <div class="cell-stats">142 symbols &middot; 5 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #EAB308;">1 god obj</span>
+            </div>
+          </div>
+
+          <!-- analysis/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #2A4428, #3A5438);">
+            <div class="cell-name">analysis/</div>
+            <div class="cell-stats">118 symbols &middot; 5 files</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge">healthy</span>
+            </div>
+          </div>
+
+          <!-- dashboard/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #2A4428, #345232);">
+            <div class="cell-name">dashboard/</div>
+            <div class="cell-stats">87 symbols &middot; 3 files</div>
+          </div>
+
+          <!-- search/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #1E3A4A, #284A5A);">
+            <div class="cell-name">search/</div>
+            <div class="cell-stats">64 symbols</div>
+          </div>
+
+          <!-- config/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #4A2A1E, #5A3A28);">
+            <div class="cell-name">config/</div>
+            <div class="cell-stats">48 syms</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #EF4444;">5 dead</span>
+            </div>
+          </div>
+
+          <!-- output/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #4A2A1E, #5A3A28);">
+            <div class="cell-name">output/</div>
+            <div class="cell-stats">42 syms</div>
+            <div class="cell-badge-list" style="margin-top: auto;">
+              <span class="cell-mini-badge" style="color: #EF4444;">8 dead</span>
+            </div>
+          </div>
+
+          <!-- watch/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #2A4428, #3A5438);">
+            <div class="cell-name">watch/</div>
+            <div class="cell-stats">31 syms</div>
+          </div>
+
+          <!-- lsp/ -->
+          <div class="treemap-cell" style="background: linear-gradient(135deg, #1E3A4A, #284A5A);">
+            <div class="cell-name">lsp/</div>
+            <div class="cell-stats">28 syms</div>
+          </div>
+        </div>
+
+        <div class="treemap-legend">
+          <span style="font-weight: 500; color: var(--text-secondary);">Health:</span>
+          <div class="legend-item"><div class="legend-dot" style="background: #3A5438;"></div> Healthy</div>
+          <div class="legend-item"><div class="legend-dot" style="background: #5A4A28;"></div> Moderate</div>
+          <div class="legend-item"><div class="legend-dot" style="background: #5A3A28;"></div> Needs Attention</div>
+          <span style="margin-left: 8px; font-weight: 500; color: var(--text-secondary);">Size:</span>
+          <span>Symbol count</span>
+        </div>
+      </div>
+
+      <!-- GRAPH VIEW (placeholder with styled canvas) -->
+      <div id="view-graph" class="graph-canvas-wrap">
+        <canvas id="graphCanvas"></canvas>
+        <div class="graph-controls">
+          <button class="graph-control-btn" title="Zoom in">+</button>
+          <button class="graph-control-btn" title="Zoom out">−</button>
+          <button class="graph-control-btn" title="Fit to screen">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          </button>
+          <button class="graph-control-btn" title="Toggle labels">Aa</button>
+        </div>
+      </div>
+
+      <!-- MATRIX VIEW -->
+      <div id="view-matrix" class="dsm-container">
+        <div class="dsm-grid-wrap">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Dependency Structure Matrix</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Module-level coupling (darker = more dependencies)</div>
+          </div>
+          <div id="dsmMatrix" style="display: inline-block;"></div>
+        </div>
+      </div>
+
+      <!-- FLOW VIEW -->
+      <div id="view-flow" style="padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+        <div style="max-width: 700px; width: 100%;">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px;">Architecture Flow</div>
+            <div style="font-size: 11px; color: var(--text-muted);">Auto-generated module dependency flow</div>
+          </div>
+
+          <!-- Simplified architecture diagram using CSS -->
+          <div style="display: flex; flex-direction: column; gap: 24px; align-items: center;">
+            <!-- Entry Layer -->
+            <div style="display: flex; gap: 12px;">
+              <div style="padding: 10px 18px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-blue);">
+                CLI (main.rs)
+              </div>
+              <div style="padding: 10px 18px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-blue);">
+                MCP Server
+              </div>
+              <div style="padding: 10px 18px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-blue);">
+                Dashboard
+              </div>
+              <div style="padding: 10px 18px; background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-blue);">
+                LSP
+              </div>
+            </div>
+
+            <!-- Arrow -->
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+
+            <!-- Core Layer -->
+            <div style="display: flex; gap: 12px;">
+              <div style="padding: 10px 18px; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-purple);">
+                Pipeline (14 phases)
+              </div>
+              <div style="padding: 10px 18px; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-purple); position: relative;">
+                Graph Analysis
+                <span style="position: absolute; top: -6px; right: -6px; width: 12px; height: 12px; background: var(--accent-yellow); border-radius: 50%; border: 2px solid var(--bg-card);" title="God object"></span>
+              </div>
+              <div style="padding: 10px 18px; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-purple);">
+                Analysis
+              </div>
+            </div>
+
+            <!-- Bidirectional arrow (cycle indicator) -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+              <div style="font-size: 10px; padding: 2px 8px; background: rgba(249,115,22,0.15); color: var(--accent-orange); border-radius: 4px; font-family: 'Fira Code', monospace;">2 cycles detected</div>
+            </div>
+
+            <!-- Data Layer -->
+            <div style="display: flex; gap: 12px;">
+              <div style="padding: 10px 18px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-green);">
+                Parse (9 langs)
+              </div>
+              <div style="padding: 10px 18px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-green); position: relative;">
+                Database
+                <span style="position: absolute; top: -6px; right: -6px; width: 12px; height: 12px; background: var(--accent-yellow); border-radius: 50%; border: 2px solid var(--bg-card);" title="God object"></span>
+              </div>
+              <div style="padding: 10px 18px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--accent-green);">
+                Search
+              </div>
+            </div>
+
+            <!-- Arrow to storage -->
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+
+            <!-- Storage -->
+            <div style="padding: 10px 24px; background: rgba(100,116,139,0.15); border: 1px solid rgba(100,116,139,0.3); border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--text-secondary);">
+              SQLite (.ariadne.db)
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: DETAILS & INSIGHTS -->
+  <div class="panel-right">
+    <div class="panel-header">
+      <span class="panel-title">Insights</span>
+    </div>
+
+    <div class="detail-list">
+      <!-- Most Connected -->
+      <div class="detail-section">
+        <div class="detail-section-title">Highest Connectivity</div>
+        <div class="insight-item">
+          <span class="insight-rank" style="background: rgba(234,179,8,0.15); color: var(--accent-yellow);">1</span>
+          <div class="insight-info">
+            <div class="insight-name">Database::query</div>
+            <div class="insight-file">src/db/query.rs:42</div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-yellow);">127</span>
+        </div>
+        <div class="insight-item">
+          <span class="insight-rank" style="background: rgba(249,115,22,0.15); color: var(--accent-orange);">2</span>
+          <div class="insight-info">
+            <div class="insight-name">CallGraph::build</div>
+            <div class="insight-file">src/graph/mod.rs:89</div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-orange);">89</span>
+        </div>
+        <div class="insight-item">
+          <span class="insight-rank" style="background: rgba(168,85,247,0.15); color: var(--accent-purple);">3</span>
+          <div class="insight-info">
+            <div class="insight-name">PipelineRunner::run</div>
+            <div class="insight-file">src/pipeline/mod.rs:156</div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-purple);">64</span>
+        </div>
+        <div class="insight-item">
+          <span class="insight-rank" style="background: rgba(59,130,246,0.1); color: var(--text-muted);">4</span>
+          <div class="insight-info">
+            <div class="insight-name">resolve_calls</div>
+            <div class="insight-file">src/pipeline/call_resolution.rs:23</div>
+          </div>
+          <span class="insight-score" style="color: var(--text-muted);">51</span>
+        </div>
+        <div class="insight-item">
+          <span class="insight-rank" style="background: rgba(59,130,246,0.1); color: var(--text-muted);">5</span>
+          <div class="insight-info">
+            <div class="insight-name">LanguageParser::parse</div>
+            <div class="insight-file">src/parse/mod.rs:34</div>
+          </div>
+          <span class="insight-score" style="color: var(--text-muted);">44</span>
+        </div>
+      </div>
+
+      <!-- Language Distribution -->
+      <div class="detail-section">
+        <div class="detail-section-title">Languages Indexed</div>
+        <div class="bar-row">
+          <span class="bar-label">Rust</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 78%; background: var(--accent-orange);"></div></div>
+          <span class="bar-value">78%</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">JavaScript</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 12%; background: var(--accent-yellow);"></div></div>
+          <span class="bar-value">12%</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">TypeScript</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 6%; background: var(--accent-blue);"></div></div>
+          <span class="bar-value">6%</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">Python</span>
+          <div class="bar-track"><div class="bar-fill" style="width: 4%; background: var(--accent-green);"></div></div>
+          <span class="bar-value">4%</span>
+        </div>
+      </div>
+
+      <!-- Coupling Heatmap -->
+      <div class="detail-section">
+        <div class="detail-section-title">Module Coupling (Top Pairs)</div>
+        <div class="insight-item">
+          <div class="insight-info">
+            <div class="insight-name" style="font-size: 11px;">pipeline ↔ db</div>
+          </div>
+          <div style="width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+            <div style="width: 85%; height: 100%; background: var(--accent-red); border-radius: 3px;"></div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-red); font-size: 10px;">0.85</span>
+        </div>
+        <div class="insight-item">
+          <div class="insight-info">
+            <div class="insight-name" style="font-size: 11px;">pipeline ↔ graph</div>
+          </div>
+          <div style="width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+            <div style="width: 73%; height: 100%; background: var(--accent-orange); border-radius: 3px;"></div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-orange); font-size: 10px;">0.73</span>
+        </div>
+        <div class="insight-item">
+          <div class="insight-info">
+            <div class="insight-name" style="font-size: 11px;">parse ↔ pipeline</div>
+          </div>
+          <div style="width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+            <div style="width: 61%; height: 100%; background: var(--accent-yellow); border-radius: 3px;"></div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-yellow); font-size: 10px;">0.61</span>
+        </div>
+        <div class="insight-item">
+          <div class="insight-info">
+            <div class="insight-name" style="font-size: 11px;">db ↔ analysis</div>
+          </div>
+          <div style="width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+            <div style="width: 48%; height: 100%; background: var(--accent-green); border-radius: 3px;"></div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-green); font-size: 10px;">0.48</span>
+        </div>
+        <div class="insight-item">
+          <div class="insight-info">
+            <div class="insight-name" style="font-size: 11px;">mcp ↔ db</div>
+          </div>
+          <div style="width: 60px; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden;">
+            <div style="width: 42%; height: 100%; background: var(--accent-green); border-radius: 3px;"></div>
+          </div>
+          <span class="insight-score" style="color: var(--accent-green); font-size: 10px;">0.42</span>
+        </div>
+      </div>
+
+      <!-- Symbol Type Distribution -->
+      <div class="detail-section">
+        <div class="detail-section-title">Symbol Types</div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <div style="padding: 6px 12px; background: rgba(212,168,83,0.1); border: 1px solid rgba(212,168,83,0.2); border-radius: 6px; font-size: 11px;">
+            <span style="color: #D4A853; font-weight: 600; font-family: 'Fira Code', monospace;">892</span>
+            <span style="color: var(--text-muted); margin-left: 4px;">functions</span>
+          </div>
+          <div style="padding: 6px 12px; background: rgba(196,91,62,0.1); border: 1px solid rgba(196,91,62,0.2); border-radius: 6px; font-size: 11px;">
+            <span style="color: #C45B3E; font-weight: 600; font-family: 'Fira Code', monospace;">124</span>
+            <span style="color: var(--text-muted); margin-left: 4px;">classes</span>
+          </div>
+          <div style="padding: 6px 12px; background: rgba(126,191,142,0.1); border: 1px solid rgba(126,191,142,0.2); border-radius: 6px; font-size: 11px;">
+            <span style="color: #7EBF8E; font-weight: 600; font-family: 'Fira Code', monospace;">687</span>
+            <span style="color: var(--text-muted); margin-left: 4px;">methods</span>
+          </div>
+          <div style="padding: 6px 12px; background: rgba(155,142,196,0.1); border: 1px solid rgba(155,142,196,0.2); border-radius: 6px; font-size: 11px;">
+            <span style="color: #9B8EC4; font-weight: 600; font-family: 'Fira Code', monospace;">89</span>
+            <span style="color: var(--text-muted); margin-left: 4px;">interfaces</span>
+          </div>
+          <div style="padding: 6px 12px; background: rgba(100,116,139,0.1); border: 1px solid rgba(100,116,139,0.2); border-radius: 6px; font-size: 11px;">
+            <span style="color: var(--text-muted); font-weight: 600; font-family: 'Fira Code', monospace;">50</span>
+            <span style="color: var(--text-muted); margin-left: 4px;">other</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bottom-bar">
+    <div class="lang-labels">
+      <div class="lang-label"><span class="lang-dot" style="background: var(--accent-orange)"></span> Rust</div>
+      <div class="lang-label"><span class="lang-dot" style="background: var(--accent-yellow)"></span> JS</div>
+      <div class="lang-label"><span class="lang-dot" style="background: var(--accent-blue)"></span> TS</div>
+      <div class="lang-label"><span class="lang-dot" style="background: var(--accent-green)"></span> Python</div>
+    </div>
+    <div class="lang-bar">
+      <div class="lang-segment" style="flex: 78; background: var(--accent-orange);"></div>
+      <div class="lang-segment" style="flex: 12; background: var(--accent-yellow);"></div>
+      <div class="lang-segment" style="flex: 6; background: var(--accent-blue);"></div>
+      <div class="lang-segment" style="flex: 4; background: var(--accent-green);"></div>
+    </div>
+    <div class="bottom-stat">
+      Resolution: <span class="value">87.4%</span>
+    </div>
+    <div class="bottom-stat">
+      Indexed: <span class="value">2 min ago</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// Tab switching
+function switchView(viewId) {
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view-content > div').forEach(v => v.classList.remove('active'));
+
+  const tab = event.currentTarget;
+  tab.classList.add('active');
+  document.getElementById('view-' + viewId).classList.add('active');
+
+  if (viewId === 'graph') drawGraph();
+  if (viewId === 'matrix') drawDSM();
+}
+
+// Draw a styled graph on canvas
+function drawGraph() {
+  const canvas = document.getElementById('graphCanvas');
+  const container = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = container.clientWidth * dpr;
+  canvas.height = container.clientHeight * dpr;
+  canvas.style.width = container.clientWidth + 'px';
+  canvas.style.height = container.clientHeight + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  // Generate community-clustered nodes
+  const communities = [
+    { name: 'pipeline', color: '#A855F7', cx: w*0.35, cy: h*0.35, count: 18, radius: 100 },
+    { name: 'parse', color: '#22C55E', cx: w*0.65, cy: h*0.25, count: 12, radius: 75 },
+    { name: 'db', color: '#3B82F6', cx: w*0.25, cy: h*0.65, count: 10, radius: 70 },
+    { name: 'graph', color: '#F97316', cx: w*0.55, cy: h*0.6, count: 8, radius: 60 },
+    { name: 'mcp', color: '#06B6D4', cx: w*0.75, cy: h*0.55, count: 9, radius: 65 },
+    { name: 'analysis', color: '#EC4899', cx: w*0.5, cy: h*0.82, count: 6, radius: 50 },
+    { name: 'search', color: '#EAB308', cx: w*0.82, cy: h*0.78, count: 4, radius: 35 },
+    { name: 'dashboard', color: '#84CC16', cx: w*0.15, cy: h*0.4, count: 5, radius: 40 },
+  ];
+
+  const nodes = [];
+  const edges = [];
+
+  communities.forEach(comm => {
+    for (let i = 0; i < comm.count; i++) {
+      const angle = (i / comm.count) * Math.PI * 2 + Math.random() * 0.5;
+      const r = (Math.random() * 0.6 + 0.2) * comm.radius;
+      const size = 3 + Math.random() * 8;
+      nodes.push({
+        x: comm.cx + Math.cos(angle) * r,
+        y: comm.cy + Math.sin(angle) * r,
+        color: comm.color,
+        size: size,
+        community: comm.name,
+        isDead: Math.random() < 0.08,
+      });
+    }
+  });
+
+  // Generate edges (within and between communities)
+  for (let i = 0; i < nodes.length; i++) {
+    const edgeCount = Math.floor(Math.random() * 3) + 1;
+    for (let e = 0; e < edgeCount; e++) {
+      const isCross = Math.random() < 0.2;
+      let target;
+      if (isCross) {
+        target = Math.floor(Math.random() * nodes.length);
+      } else {
+        const sameComm = nodes.filter((n, idx) => n.community === nodes[i].community && idx !== i);
+        if (sameComm.length === 0) continue;
+        target = nodes.indexOf(sameComm[Math.floor(Math.random() * sameComm.length)]);
+      }
+      if (target !== i) {
+        edges.push({ from: i, to: target, cross: isCross });
+      }
+    }
+  }
+
+  // Draw edges
+  edges.forEach(edge => {
+    const from = nodes[edge.from];
+    const to = nodes[edge.to];
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.lineTo(to.x, to.y);
+    ctx.strokeStyle = edge.cross
+      ? 'rgba(249,115,22,0.12)'
+      : 'rgba(148,163,184,0.06)';
+    ctx.lineWidth = edge.cross ? 1 : 0.5;
+    ctx.stroke();
+  });
+
+  // Draw community labels
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  communities.forEach(comm => {
+    ctx.fillStyle = comm.color + '30';
+    ctx.beginPath();
+    ctx.arc(comm.cx, comm.cy, comm.radius + 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '600 11px Inter';
+    ctx.fillStyle = comm.color + '80';
+    ctx.fillText(comm.name + '/', comm.cx, comm.cy - comm.radius - 16);
+  });
+
+  // Draw nodes
+  nodes.forEach(node => {
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2);
+
+    if (node.isDead) {
+      ctx.fillStyle = 'rgba(239,68,68,0.4)';
+      ctx.strokeStyle = 'rgba(239,68,68,0.6)';
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+      // Draw X for dead code
+      ctx.beginPath();
+      ctx.moveTo(node.x - node.size * 0.4, node.y - node.size * 0.4);
+      ctx.lineTo(node.x + node.size * 0.4, node.y + node.size * 0.4);
+      ctx.moveTo(node.x + node.size * 0.4, node.y - node.size * 0.4);
+      ctx.lineTo(node.x - node.size * 0.4, node.y + node.size * 0.4);
+      ctx.strokeStyle = 'rgba(239,68,68,0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = node.color + '60';
+      ctx.fill();
+      ctx.strokeStyle = node.color + 'A0';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  });
+}
+
+// Draw DSM matrix
+function drawDSM() {
+  const modules = ['pipeline', 'parse', 'db', 'graph', 'mcp', 'analysis', 'search', 'dashboard'];
+  const matrix = [
+    [1.0, 0.3, 0.85, 0.73, 0.1, 0.2, 0.05, 0.15],
+    [0.3, 1.0, 0.15, 0.05, 0.0, 0.0, 0.0, 0.0],
+    [0.85, 0.15, 1.0, 0.2, 0.42, 0.48, 0.3, 0.1],
+    [0.73, 0.05, 0.2, 1.0, 0.1, 0.15, 0.0, 0.0],
+    [0.1, 0.0, 0.42, 0.1, 1.0, 0.05, 0.08, 0.0],
+    [0.2, 0.0, 0.48, 0.15, 0.05, 1.0, 0.0, 0.0],
+    [0.05, 0.0, 0.3, 0.0, 0.08, 0.0, 1.0, 0.0],
+    [0.15, 0.0, 0.1, 0.0, 0.0, 0.0, 0.0, 1.0],
+  ];
+
+  const container = document.getElementById('dsmMatrix');
+  container.innerHTML = '';
+
+  // Top labels
+  const topRow = document.createElement('div');
+  topRow.style.cssText = 'display: flex; margin-left: 90px; margin-bottom: 4px;';
+  modules.forEach(m => {
+    const label = document.createElement('div');
+    label.style.cssText = 'width: 36px; text-align: center; font-size: 9px; font-family: "Fira Code", monospace; color: #64748B; writing-mode: vertical-lr; transform: rotate(180deg); height: 60px;';
+    label.textContent = m;
+    topRow.appendChild(label);
+  });
+  container.appendChild(topRow);
+
+  matrix.forEach((row, i) => {
+    const rowEl = document.createElement('div');
+    rowEl.style.cssText = 'display: flex; align-items: center; gap: 2px; margin-bottom: 2px;';
+
+    const label = document.createElement('div');
+    label.style.cssText = 'width: 86px; text-align: right; padding-right: 8px; font-size: 10px; font-family: "Fira Code", monospace; color: #94A3B8; flex-shrink: 0;';
+    label.textContent = modules[i];
+    rowEl.appendChild(label);
+
+    row.forEach((val, j) => {
+      const cell = document.createElement('div');
+      cell.style.cssText = `width: 34px; height: 34px; border-radius: 4px; cursor: pointer; transition: outline 0.15s;`;
+
+      if (i === j) {
+        cell.style.background = 'rgba(59,130,246,0.15)';
+        cell.style.outline = '1px solid rgba(59,130,246,0.3)';
+      } else if (val > 0.7) {
+        cell.style.background = `rgba(239,68,68,${val * 0.5})`;
+      } else if (val > 0.4) {
+        cell.style.background = `rgba(249,115,22,${val * 0.5})`;
+      } else if (val > 0.1) {
+        cell.style.background = `rgba(234,179,8,${val * 0.4})`;
+      } else if (val > 0) {
+        cell.style.background = `rgba(148,163,184,${val * 0.3})`;
+      } else {
+        cell.style.background = 'rgba(148,163,184,0.03)';
+      }
+
+      cell.title = `${modules[i]} → ${modules[j]}: ${val.toFixed(2)}`;
+      cell.addEventListener('mouseenter', () => { cell.style.outline = '2px solid #3B82F6'; });
+      cell.addEventListener('mouseleave', () => {
+        cell.style.outline = i === j ? '1px solid rgba(59,130,246,0.3)' : 'none';
+      });
+
+      rowEl.appendChild(cell);
+    });
+
+    container.appendChild(rowEl);
+  });
+}
+
+// Issue tab switching
+document.querySelectorAll('.issue-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.issue-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+  });
+});
+
+// Issue selection
+document.querySelectorAll('.issue-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.issue-item').forEach(i => i.classList.remove('selected'));
+    item.classList.add('selected');
+  });
+});
+</script>
+
+</body>
+</html>

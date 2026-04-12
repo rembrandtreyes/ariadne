@@ -632,6 +632,23 @@ impl LanguageParser for TypeScriptParser {
         let root = tree.root_node();
         let mut result = ParseResult::default();
 
+        // Synthetic symbol that anchors module-level call edges.
+        // Calls made at file scope have caller_name = "<module>"; without a
+        // matching symbol in the DB they would be silently dropped in
+        // pipeline/parsing.rs. Marked is_entry_point in dead_code.rs so the
+        // BFS reachability analysis keeps all callee edges alive.
+        result.symbols.push(ParsedSymbol {
+            name: "<module>".to_string(),
+            qualified_name: "<module>".to_string(),
+            kind: SymbolKind::Module,
+            line_start: 0,
+            line_end: 0,
+            is_exported: false,
+            signature: String::new(),
+            decorators: Vec::new(),
+            parent_name: None,
+        });
+
         Self::extract_symbols(root, source, &mut result, None);
 
         Ok(result)

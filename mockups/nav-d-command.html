@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — Command Palette Navigation</title>
+<style>
+  :root {
+    --bg: #000000;
+    --surface: rgba(255,255,255,0.03);
+    --surface-2: rgba(255,255,255,0.06);
+    --surface-3: rgba(255,255,255,0.09);
+    --border: rgba(255,255,255,0.06);
+    --border-2: rgba(255,255,255,0.10);
+    --text-0: #FAFAF9;
+    --text-1: #D6D3D1;
+    --text-2: #A8A29E;
+    --text-3: #57534E;
+    --text-4: #2A2A2A;
+    --blue: #60A5FA;
+    --green: #4ADE80;
+    --yellow: #FBBF24;
+    --orange: #FB923C;
+    --red: #F87171;
+    --purple: #A78BFA;
+    --cyan: #22D3EE;
+    --pink: #F472B6;
+    --grid-color: rgba(255,255,255,0.03);
+    --glass-bg: rgba(12,12,14,0.65);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    height: 100vh;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+
+  /* ===== DOT GRID BACKGROUND ===== */
+  .dot-grid {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-image: radial-gradient(circle, var(--grid-color) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* ===== VOID CANVAS ===== */
+  .void-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    transition: opacity 0.3s ease, filter 0.3s ease;
+  }
+
+  .void-canvas.dimmed {
+    opacity: 0.3;
+    filter: blur(2px);
+  }
+
+  /* ===== SVG CONNECTIONS ===== */
+  .connections-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .connections-layer line {
+    stroke: rgba(99,102,241,0.2);
+    stroke-width: 1;
+    stroke-dasharray: 6 4;
+  }
+
+  .connections-layer line.active-connection {
+    stroke: rgba(99,102,241,0.6);
+    stroke-width: 2;
+    stroke-dasharray: none;
+    filter: drop-shadow(0 0 6px rgba(99,102,241,0.4));
+  }
+
+  /* ===== MODULE BOXES ===== */
+  .module-box {
+    position: absolute;
+    z-index: 2;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px) saturate(1.4);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    min-width: 160px;
+  }
+
+  .module-box:hover {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(12,12,14,0.8);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+
+  .module-box.focused {
+    border-color: rgba(99,102,241,0.5);
+    box-shadow: 0 0 0 1px rgba(99,102,241,0.3), 0 12px 40px rgba(99,102,241,0.15);
+  }
+
+  .module-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+
+  .module-lang {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .module-stats {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+  }
+
+  .module-stat {
+    color: var(--text-3);
+  }
+
+  .module-stat .val {
+    color: var(--text-2);
+    font-weight: 500;
+  }
+
+  .module-health {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .health-good { background: var(--green); box-shadow: 0 0 6px rgba(74,222,128,0.4); }
+  .health-warn { background: var(--yellow); box-shadow: 0 0 6px rgba(251,191,36,0.4); }
+  .health-bad { background: var(--red); box-shadow: 0 0 6px rgba(248,113,113,0.4); }
+
+  /* ===== FLOATING LOGO (top-left) ===== */
+  .float-logo {
+    position: fixed;
+    top: 20px;
+    left: 24px;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 4px 12px rgba(99,102,241,0.3);
+  }
+
+  .logo-mark svg { width: 16px; height: 16px; }
+
+  .logo-text {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.5px;
+  }
+
+  .health-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(74,222,128,0.08);
+    border: 1px solid rgba(74,222,128,0.15);
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  /* ===== FLOATING METRICS (top-right) ===== */
+  .float-metrics {
+    position: fixed;
+    top: 20px;
+    right: 24px;
+    z-index: 50;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .metric-pill {
+    padding: 5px 12px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .metric-pill .num {
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  .metric-pill .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .metric-pill .dot.dead { background: var(--orange); }
+  .metric-pill .dot.cycle { background: var(--red); }
+
+  .shortcut-hint {
+    padding: 5px 10px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    font-size: 11px;
+    color: var(--text-3);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .shortcut-hint kbd {
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-2);
+    font-family: inherit;
+  }
+
+  /* ===== MODE SWITCHER HUD (bottom-center) ===== */
+  .mode-hud {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    gap: 2px;
+    padding: 4px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(1.5);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    box-shadow: var(--glass-shadow);
+  }
+
+  .mode-btn {
+    padding: 8px 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-3);
+    border: none;
+    background: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    letter-spacing: -0.2px;
+  }
+
+  .mode-btn:hover {
+    color: var(--text-2);
+  }
+
+  .mode-btn.active {
+    color: var(--text-0);
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+
+  /* ===== DETAIL PANEL (right) ===== */
+  .detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 360px;
+    height: 100vh;
+    z-index: 40;
+    background: rgba(8,8,10,0.85);
+    backdrop-filter: blur(24px) saturate(1.5);
+    border-left: 1px solid var(--glass-border);
+    transform: translateX(100%);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow-y: auto;
+    padding: 28px 24px;
+  }
+
+  .detail-panel.open {
+    transform: translateX(0);
+  }
+
+  .detail-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-3);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+
+  .detail-close:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-1);
+  }
+
+  .detail-header {
+    margin-bottom: 24px;
+  }
+
+  .detail-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-0);
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+
+  .detail-subtitle {
+    font-size: 12px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .detail-section {
+    margin-bottom: 20px;
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+  }
+
+  .detail-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .detail-stat {
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+  }
+
+  .detail-stat-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-0);
+    letter-spacing: -0.5px;
+  }
+
+  .detail-stat-label {
+    font-size: 10px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+  }
+
+  .detail-fn-list {
+    list-style: none;
+  }
+
+  .detail-fn-item {
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.15s;
+  }
+
+  .detail-fn-item:hover {
+    background: rgba(255,255,255,0.03);
+  }
+
+  .detail-fn-name {
+    font-weight: 500;
+    color: var(--text-1);
+  }
+
+  .detail-fn-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+
+  .tag-dead { background: rgba(251,146,60,0.12); color: var(--orange); }
+  .tag-hot { background: rgba(248,113,113,0.12); color: var(--red); }
+  .tag-ok { background: rgba(74,222,128,0.08); color: var(--green); }
+
+  /* ===== COMMAND PALETTE OVERLAY ===== */
+  .palette-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 15vh;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .palette-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .palette-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+  }
+
+  .palette {
+    position: relative;
+    width: 620px;
+    max-height: 520px;
+    background: rgba(14,14,16,0.88);
+    backdrop-filter: blur(40px) saturate(1.8);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.04) inset,
+      0 24px 80px rgba(0,0,0,0.6),
+      0 0 120px rgba(99,102,241,0.05);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.96) translateY(-8px);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .palette-overlay.open .palette {
+    transform: scale(1) translateY(0);
+  }
+
+  /* Search Input */
+  .palette-search {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .palette-search-icon {
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+
+  .palette-search input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-0);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    font-weight: 400;
+    letter-spacing: -0.2px;
+  }
+
+  .palette-search input::placeholder {
+    color: var(--text-4);
+  }
+
+  .palette-esc {
+    font-size: 10px;
+    padding: 3px 7px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px;
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+
+  /* Tabs */
+  .palette-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .palette-tab {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-3);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+    position: relative;
+    transition: color 0.15s;
+  }
+
+  .palette-tab:hover {
+    color: var(--text-2);
+  }
+
+  .palette-tab.active {
+    color: var(--text-0);
+  }
+
+  .palette-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 14px;
+    right: 14px;
+    height: 1px;
+    background: var(--purple);
+    border-radius: 1px;
+  }
+
+  /* Content area */
+  .palette-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px 16px;
+  }
+
+  .palette-content::-webkit-scrollbar { width: 4px; }
+  .palette-content::-webkit-scrollbar-track { background: transparent; }
+  .palette-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+  /* Tab panels */
+  .tab-panel {
+    display: none;
+  }
+
+  .tab-panel.active {
+    display: block;
+  }
+
+  /* Overview tab */
+  .overview-health {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+
+  .overview-score {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(74,222,128,0.12), rgba(74,222,128,0.04));
+    border: 1px solid rgba(74,222,128,0.2);
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--green);
+    flex-shrink: 0;
+  }
+
+  .overview-meta {
+    flex: 1;
+  }
+
+  .overview-meta h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    margin-bottom: 2px;
+  }
+
+  .overview-meta p {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .overview-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .overview-stat-item {
+    text-align: center;
+    padding: 10px 8px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px;
+  }
+
+  .overview-stat-item .val {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-0);
+  }
+
+  .overview-stat-item .label {
+    font-size: 9px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .palette-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+    padding: 0 4px;
+  }
+
+  /* Palette list items (used across tabs) */
+  .palette-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+
+  .palette-item:hover {
+    background: rgba(255,255,255,0.04);
+  }
+
+  .palette-item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .palette-item-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .palette-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .palette-item-desc {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 1px;
+  }
+
+  .palette-item-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .palette-item-arrow {
+    color: var(--text-4);
+    flex-shrink: 0;
+    font-size: 14px;
+    transition: color 0.15s;
+  }
+
+  .palette-item:hover .palette-item-arrow {
+    color: var(--text-3);
+  }
+
+  /* Risk items */
+  .risk-score-bar {
+    width: 48px;
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .risk-score-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  /* Coupling strength bars */
+  .coupling-bar {
+    width: 60px;
+    height: 4px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .coupling-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--purple);
+  }
+
+  /* Dead code items */
+  .dead-icon {
+    background: rgba(251,146,60,0.1);
+    border: 1px solid rgba(251,146,60,0.15);
+    color: var(--orange);
+  }
+
+  /* Module icons by type */
+  .mod-icon-parse { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.15); color: var(--blue); }
+  .mod-icon-graph { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.15); color: var(--purple); }
+  .mod-icon-db { background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.15); color: var(--green); }
+  .mod-icon-mcp { background: rgba(244,114,182,0.1); border: 1px solid rgba(244,114,182,0.15); color: var(--pink); }
+  .mod-icon-pipe { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.15); color: var(--cyan); }
+  .mod-icon-search { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.15); color: var(--yellow); }
+  .mod-icon-analysis { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.15); color: var(--red); }
+  .mod-icon-dash { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.15); color: var(--blue); }
+  .mod-icon-config { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-2); }
+
+  /* Module list in overview */
+  .module-list-compact {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ===== ANIMATION HELPERS ===== */
+  @keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* ===== FOCUS RING ON MODULES ===== */
+  .module-box.highlight {
+    border-color: rgba(99,102,241,0.6) !important;
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.2), 0 0 30px rgba(99,102,241,0.1), 0 12px 40px rgba(0,0,0,0.4) !important;
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  /* Connection data flow animation */
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -16; }
+  }
+
+  .connections-layer line {
+    animation: dash-flow 1.5s linear infinite;
+  }
+
+  .connections-layer line.active-connection {
+    animation: none;
+  }
+
+  /* ===== SEARCH FILTERING ===== */
+  .palette-item.hidden {
+    display: none;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 720px) {
+    .palette {
+      width: calc(100vw - 32px);
+      max-height: 70vh;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- DOT GRID -->
+<div class="dot-grid"></div>
+
+<!-- ===== VOID CANVAS ===== -->
+<div class="void-canvas" id="voidCanvas">
+
+  <!-- SVG Connections -->
+  <svg class="connections-layer" id="connectionsLayer" width="100%" height="100%"></svg>
+
+  <!-- Module: pipeline -->
+  <div class="module-box" id="mod-pipeline" data-module="pipeline" style="left: 140px; top: 200px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">pipeline</div>
+    <div class="module-lang mono">14 phases</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">2.4k</span> lines</span>
+      <span class="module-stat"><span class="val mono">42</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: parse -->
+  <div class="module-box" id="mod-parse" data-module="parse" style="left: 420px; top: 120px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">parse</div>
+    <div class="module-lang mono">tree-sitter</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">3.8k</span> lines</span>
+      <span class="module-stat"><span class="val mono">67</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: graph -->
+  <div class="module-box" id="mod-graph" data-module="graph" style="left: 420px; top: 310px;">
+    <div class="module-health health-warn"></div>
+    <div class="module-name">graph</div>
+    <div class="module-lang mono">petgraph</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">1.9k</span> lines</span>
+      <span class="module-stat"><span class="val mono">31</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: db -->
+  <div class="module-box" id="mod-db" data-module="db" style="left: 720px; top: 180px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">db</div>
+    <div class="module-lang mono">rusqlite</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">1.2k</span> lines</span>
+      <span class="module-stat"><span class="val mono">28</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: mcp -->
+  <div class="module-box" id="mod-mcp" data-module="mcp" style="left: 720px; top: 370px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">mcp</div>
+    <div class="module-lang mono">rmcp / stdio</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">890</span> lines</span>
+      <span class="module-stat"><span class="val mono">18</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: analysis -->
+  <div class="module-box" id="mod-analysis" data-module="analysis" style="left: 980px; top: 250px;">
+    <div class="module-health health-bad"></div>
+    <div class="module-name">analysis</div>
+    <div class="module-lang mono">detection</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">2.1k</span> lines</span>
+      <span class="module-stat"><span class="val mono">35</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: search -->
+  <div class="module-box" id="mod-search" data-module="search" style="left: 240px; top: 440px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">search</div>
+    <div class="module-lang mono">fuzzy / fts</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">680</span> lines</span>
+      <span class="module-stat"><span class="val mono">12</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: dashboard -->
+  <div class="module-box" id="mod-dashboard" data-module="dashboard" style="left: 560px; top: 500px;">
+    <div class="module-health health-warn"></div>
+    <div class="module-name">dashboard</div>
+    <div class="module-lang mono">axum / rest</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">1.4k</span> lines</span>
+      <span class="module-stat"><span class="val mono">22</span> fns</span>
+    </div>
+  </div>
+
+  <!-- Module: config -->
+  <div class="module-box" id="mod-config" data-module="config" style="left: 920px; top: 490px;">
+    <div class="module-health health-good"></div>
+    <div class="module-name">config</div>
+    <div class="module-lang mono">workspace</div>
+    <div class="module-stats">
+      <span class="module-stat"><span class="val mono">420</span> lines</span>
+      <span class="module-stat"><span class="val mono">9</span> fns</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FLOATING LOGO ===== -->
+<div class="float-logo" id="floatLogo">
+  <div class="logo-mark">
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 2L3 5.5V10.5L8 14L13 10.5V5.5L8 2Z" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="8" cy="8" r="2" fill="white" opacity="0.8"/>
+    </svg>
+  </div>
+  <span class="logo-text">Ariadne</span>
+  <div class="health-badge mono">84</div>
+</div>
+
+<!-- ===== FLOATING METRICS ===== -->
+<div class="float-metrics" id="floatMetrics">
+  <div class="metric-pill">
+    <span class="dot dead"></span>
+    <span class="num mono">47</span> dead
+  </div>
+  <div class="metric-pill">
+    <span class="dot cycle"></span>
+    <span class="num mono">5</span> cycles
+  </div>
+  <div class="shortcut-hint">
+    <kbd>/</kbd> Signal
+  </div>
+</div>
+
+<!-- ===== MODE SWITCHER HUD ===== -->
+<div class="mode-hud" id="modeHud">
+  <button class="mode-btn active" data-mode="architecture">Architecture</button>
+  <button class="mode-btn" data-mode="risk">Risk</button>
+  <button class="mode-btn" data-mode="coupling">Coupling</button>
+</div>
+
+<!-- ===== DETAIL PANEL ===== -->
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-close" id="detailClose">&times;</div>
+  <div class="detail-header">
+    <div class="detail-title" id="detailTitle">Module</div>
+    <div class="detail-subtitle" id="detailSubtitle">RUST MODULE</div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Metrics</div>
+    <div class="detail-stat-grid">
+      <div class="detail-stat">
+        <div class="detail-stat-val mono" id="detailLines">--</div>
+        <div class="detail-stat-label">Lines</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-val mono" id="detailFns">--</div>
+        <div class="detail-stat-label">Functions</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-val mono" id="detailDeps">--</div>
+        <div class="detail-stat-label">Dependencies</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-val mono" id="detailHealth">--</div>
+        <div class="detail-stat-label">Health</div>
+      </div>
+    </div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-section-title">Functions</div>
+    <ul class="detail-fn-list" id="detailFnList"></ul>
+  </div>
+</div>
+
+<!-- ===== COMMAND PALETTE OVERLAY ===== -->
+<div class="palette-overlay" id="paletteOverlay">
+  <div class="palette-backdrop" id="paletteBackdrop"></div>
+  <div class="palette">
+    <!-- Search -->
+    <div class="palette-search">
+      <svg class="palette-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5"/>
+        <line x1="10.5" y1="10.5" x2="14" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <input type="text" id="paletteInput" placeholder="Search modules, functions, signals..." autocomplete="off" spellcheck="false">
+      <span class="palette-esc mono">ESC</span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="palette-tabs" id="paletteTabs">
+      <button class="palette-tab active" data-tab="overview">Overview</button>
+      <button class="palette-tab" data-tab="risks">Risks</button>
+      <button class="palette-tab" data-tab="deadcode">Dead Code</button>
+      <button class="palette-tab" data-tab="coupling">Coupling</button>
+    </div>
+
+    <!-- Content -->
+    <div class="palette-content">
+
+      <!-- OVERVIEW TAB -->
+      <div class="tab-panel active" id="tab-overview">
+        <div class="overview-health">
+          <div class="overview-score mono">84</div>
+          <div class="overview-meta">
+            <h3>Codebase Health</h3>
+            <p>14.8k lines across 9 modules, 264 functions indexed</p>
+          </div>
+        </div>
+
+        <div class="overview-stats">
+          <div class="overview-stat-item">
+            <div class="val mono">9</div>
+            <div class="label">Modules</div>
+          </div>
+          <div class="overview-stat-item">
+            <div class="val mono">264</div>
+            <div class="label">Functions</div>
+          </div>
+          <div class="overview-stat-item">
+            <div class="val mono">47</div>
+            <div class="label">Dead</div>
+          </div>
+          <div class="overview-stat-item">
+            <div class="val mono">5</div>
+            <div class="label">Cycles</div>
+          </div>
+        </div>
+
+        <div class="palette-section-title">Modules</div>
+        <div class="module-list-compact">
+          <div class="palette-item" data-target="pipeline">
+            <div class="palette-item-icon mod-icon-pipe mono">PI</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">pipeline</div>
+              <div class="palette-item-desc">14-phase indexing pipeline</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">92</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="parse">
+            <div class="palette-item-icon mod-icon-parse mono">PA</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">parse</div>
+              <div class="palette-item-desc">tree-sitter parsers (9 languages)</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">88</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="graph">
+            <div class="palette-item-icon mod-icon-graph mono">GR</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">graph</div>
+              <div class="palette-item-desc">in-memory call graph, blast radius</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(251,191,36,0.08);color:var(--yellow)">74</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="db">
+            <div class="palette-item-icon mod-icon-db mono">DB</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">db</div>
+              <div class="palette-item-desc">SQLite wrapper, schema, queries</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">90</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="mcp">
+            <div class="palette-item-icon mod-icon-mcp mono">MC</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">mcp</div>
+              <div class="palette-item-desc">MCP server, 10 tools, stdio transport</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">86</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="analysis">
+            <div class="palette-item-icon mod-icon-analysis mono">AN</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">analysis</div>
+              <div class="palette-item-desc">dead code, community, arch rules</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(248,113,113,0.08);color:var(--red)">62</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="search">
+            <div class="palette-item-icon mod-icon-search mono">SE</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">search</div>
+              <div class="palette-item-desc">full-text and fuzzy symbol search</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">94</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="dashboard">
+            <div class="palette-item-icon mod-icon-dash mono">DA</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">dashboard</div>
+              <div class="palette-item-desc">Axum REST API + static frontend</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(251,191,36,0.08);color:var(--yellow)">76</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+          <div class="palette-item" data-target="config">
+            <div class="palette-item-icon mod-icon-config mono">CO</div>
+            <div class="palette-item-body">
+              <div class="palette-item-name">config</div>
+              <div class="palette-item-desc">workspace config, language autodetection</div>
+            </div>
+            <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">96</div>
+            <span class="palette-item-arrow">&rsaquo;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RISKS TAB -->
+      <div class="tab-panel" id="tab-risks">
+        <div class="palette-section-title">Ranked by Risk Score</div>
+
+        <div class="palette-item" data-target="analysis">
+          <div class="palette-item-icon mod-icon-analysis mono">AN</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">analysis::detect_dead_code</div>
+            <div class="palette-item-desc">High churn + 12 dependents, no tests</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:92%;background:var(--red)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(248,113,113,0.1);color:var(--red)">92</div>
+        </div>
+
+        <div class="palette-item" data-target="graph">
+          <div class="palette-item-icon mod-icon-graph mono">GR</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">graph::blast_radius</div>
+            <div class="palette-item-desc">Circular dependency risk, 8 affected paths</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:85%;background:var(--red)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(248,113,113,0.1);color:var(--red)">85</div>
+        </div>
+
+        <div class="palette-item" data-target="pipeline">
+          <div class="palette-item-icon mod-icon-pipe mono">PI</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">pipeline::resolve_imports</div>
+            <div class="palette-item-desc">Complex phase, O(n^2) path resolution</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:78%;background:var(--orange)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(251,146,60,0.1);color:var(--orange)">78</div>
+        </div>
+
+        <div class="palette-item" data-target="dashboard">
+          <div class="palette-item-icon mod-icon-dash mono">DA</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">dashboard::render_graph</div>
+            <div class="palette-item-desc">Large DOM manipulation, memory pressure</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:71%;background:var(--orange)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(251,146,60,0.1);color:var(--orange)">71</div>
+        </div>
+
+        <div class="palette-item" data-target="parse">
+          <div class="palette-item-icon mod-icon-parse mono">PA</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">parse::parse_typescript</div>
+            <div class="palette-item-desc">Complex generics handling, edge cases</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:64%;background:var(--yellow)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(251,191,36,0.1);color:var(--yellow)">64</div>
+        </div>
+
+        <div class="palette-item" data-target="db">
+          <div class="palette-item-icon mod-icon-db mono">DB</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">db::batch_insert</div>
+            <div class="palette-item-desc">Transaction contention under load</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:52%;background:var(--yellow)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(251,191,36,0.1);color:var(--yellow)">52</div>
+        </div>
+
+        <div class="palette-item" data-target="mcp">
+          <div class="palette-item-icon mod-icon-mcp mono">MC</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">mcp::handle_request</div>
+            <div class="palette-item-desc">Missing timeout on long operations</div>
+          </div>
+          <div class="risk-score-bar"><div class="risk-score-fill" style="width:45%;background:var(--green)"></div></div>
+          <div class="palette-item-badge" style="background:rgba(74,222,128,0.08);color:var(--green)">45</div>
+        </div>
+      </div>
+
+      <!-- DEAD CODE TAB -->
+      <div class="tab-panel" id="tab-deadcode">
+        <div class="palette-section-title">47 Unreachable Functions</div>
+
+        <div class="palette-item" data-target="analysis">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">detect_communities_v1</div>
+            <div class="palette-item-desc">analysis/community.rs:142 -- replaced by v2</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="parse">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">parse_coffeescript</div>
+            <div class="palette-item-desc">parse/coffee.rs:1 -- language dropped</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="graph">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">old_cycle_detection</div>
+            <div class="palette-item-desc">graph/cycles.rs:89 -- superseded by tarjan</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="db">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">migrate_v1_schema</div>
+            <div class="palette-item-desc">db/migrations.rs:34 -- v1 no longer supported</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="pipeline">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">legacy_resolver</div>
+            <div class="palette-item-desc">pipeline/resolve.rs:201 -- replaced by tree walk</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="dashboard">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">render_svg_export</div>
+            <div class="palette-item-desc">dashboard/export.rs:78 -- feature removed</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="search">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">trigram_index</div>
+            <div class="palette-item-desc">search/index.rs:56 -- replaced by fts5</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="mcp">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">handle_sse_request</div>
+            <div class="palette-item-desc">mcp/transport.rs:112 -- SSE transport removed</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div class="palette-item" data-target="config">
+          <div class="palette-item-icon dead-icon mono">fn</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name mono" style="font-size:12px">load_yaml_config</div>
+            <div class="palette-item-desc">config/loader.rs:23 -- migrated to TOML</div>
+          </div>
+          <span class="palette-item-arrow">&rsaquo;</span>
+        </div>
+
+        <div style="padding:8px 12px; font-size:11px; color:var(--text-3); margin-top:4px;">
+          +38 more unreachable functions...
+        </div>
+      </div>
+
+      <!-- COUPLING TAB -->
+      <div class="tab-panel" id="tab-coupling">
+        <div class="palette-section-title">High Coupling Pairs</div>
+
+        <div class="palette-item" data-target="pipeline">
+          <div class="palette-item-icon mod-icon-pipe mono" style="font-size:10px">PI</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">pipeline <span style="color:var(--text-3);font-weight:400">&harr;</span> parse</div>
+            <div class="palette-item-desc">32 shared call sites, tight integration</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:94%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">94%</div>
+        </div>
+
+        <div class="palette-item" data-target="graph">
+          <div class="palette-item-icon mod-icon-graph mono" style="font-size:10px">GR</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">graph <span style="color:var(--text-3);font-weight:400">&harr;</span> db</div>
+            <div class="palette-item-desc">21 shared call sites, data flow dependency</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:82%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">82%</div>
+        </div>
+
+        <div class="palette-item" data-target="analysis">
+          <div class="palette-item-icon mod-icon-analysis mono" style="font-size:10px">AN</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">analysis <span style="color:var(--text-3);font-weight:400">&harr;</span> graph</div>
+            <div class="palette-item-desc">18 shared call sites, traversal dependency</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:76%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">76%</div>
+        </div>
+
+        <div class="palette-item" data-target="pipeline">
+          <div class="palette-item-icon mod-icon-pipe mono" style="font-size:10px">PI</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">pipeline <span style="color:var(--text-3);font-weight:400">&harr;</span> db</div>
+            <div class="palette-item-desc">15 shared call sites, storage flow</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:68%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">68%</div>
+        </div>
+
+        <div class="palette-item" data-target="mcp">
+          <div class="palette-item-icon mod-icon-mcp mono" style="font-size:10px">MC</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">mcp <span style="color:var(--text-3);font-weight:400">&harr;</span> db</div>
+            <div class="palette-item-desc">11 shared call sites, query dependency</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:55%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">55%</div>
+        </div>
+
+        <div class="palette-item" data-target="dashboard">
+          <div class="palette-item-icon mod-icon-dash mono" style="font-size:10px">DA</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">dashboard <span style="color:var(--text-3);font-weight:400">&harr;</span> graph</div>
+            <div class="palette-item-desc">8 shared call sites, visualization</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:42%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">42%</div>
+        </div>
+
+        <div class="palette-item" data-target="search">
+          <div class="palette-item-icon mod-icon-search mono" style="font-size:10px">SE</div>
+          <div class="palette-item-body">
+            <div class="palette-item-name">search <span style="color:var(--text-3);font-weight:400">&harr;</span> db</div>
+            <div class="palette-item-desc">6 shared call sites, index queries</div>
+          </div>
+          <div class="coupling-bar"><div class="coupling-fill" style="width:31%"></div></div>
+          <div class="palette-item-badge" style="background:rgba(167,139,250,0.1);color:var(--purple)">31%</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ===== DATA =====
+  const moduleData = {
+    pipeline: {
+      title: 'pipeline',
+      subtitle: '14-PHASE INDEXING PIPELINE',
+      lines: '2.4k', fns: '42', deps: '3', health: '92',
+      functions: [
+        { name: 'run_pipeline', tag: 'ok' },
+        { name: 'resolve_imports', tag: 'hot' },
+        { name: 'build_call_graph', tag: 'ok' },
+        { name: 'legacy_resolver', tag: 'dead' },
+        { name: 'emit_diagnostics', tag: 'ok' },
+        { name: 'normalize_paths', tag: 'ok' },
+      ]
+    },
+    parse: {
+      title: 'parse',
+      subtitle: 'TREE-SITTER PARSERS',
+      lines: '3.8k', fns: '67', deps: '1', health: '88',
+      functions: [
+        { name: 'parse_file', tag: 'ok' },
+        { name: 'parse_typescript', tag: 'hot' },
+        { name: 'parse_python', tag: 'ok' },
+        { name: 'parse_coffeescript', tag: 'dead' },
+        { name: 'extract_symbols', tag: 'ok' },
+        { name: 'detect_language', tag: 'ok' },
+      ]
+    },
+    graph: {
+      title: 'graph',
+      subtitle: 'IN-MEMORY CALL GRAPH',
+      lines: '1.9k', fns: '31', deps: '2', health: '74',
+      functions: [
+        { name: 'build_graph', tag: 'ok' },
+        { name: 'blast_radius', tag: 'hot' },
+        { name: 'detect_cycles', tag: 'ok' },
+        { name: 'old_cycle_detection', tag: 'dead' },
+        { name: 'find_call_chains', tag: 'ok' },
+        { name: 'compute_centrality', tag: 'ok' },
+      ]
+    },
+    db: {
+      title: 'db',
+      subtitle: 'SQLITE DATABASE LAYER',
+      lines: '1.2k', fns: '28', deps: '0', health: '90',
+      functions: [
+        { name: 'open_database', tag: 'ok' },
+        { name: 'batch_insert', tag: 'hot' },
+        { name: 'query_symbols', tag: 'ok' },
+        { name: 'migrate_v1_schema', tag: 'dead' },
+        { name: 'create_indexes', tag: 'ok' },
+      ]
+    },
+    mcp: {
+      title: 'mcp',
+      subtitle: 'MCP SERVER (STDIO)',
+      lines: '890', fns: '18', deps: '2', health: '86',
+      functions: [
+        { name: 'start_server', tag: 'ok' },
+        { name: 'handle_request', tag: 'ok' },
+        { name: 'handle_sse_request', tag: 'dead' },
+        { name: 'list_tools', tag: 'ok' },
+        { name: 'execute_tool', tag: 'ok' },
+      ]
+    },
+    analysis: {
+      title: 'analysis',
+      subtitle: 'CODE ANALYSIS ENGINE',
+      lines: '2.1k', fns: '35', deps: '3', health: '62',
+      functions: [
+        { name: 'detect_dead_code', tag: 'hot' },
+        { name: 'detect_communities_v1', tag: 'dead' },
+        { name: 'detect_communities', tag: 'ok' },
+        { name: 'check_arch_rules', tag: 'ok' },
+        { name: 'export_scip', tag: 'ok' },
+        { name: 'compute_complexity', tag: 'ok' },
+      ]
+    },
+    search: {
+      title: 'search',
+      subtitle: 'SYMBOL SEARCH ENGINE',
+      lines: '680', fns: '12', deps: '1', health: '94',
+      functions: [
+        { name: 'fuzzy_search', tag: 'ok' },
+        { name: 'full_text_search', tag: 'ok' },
+        { name: 'trigram_index', tag: 'dead' },
+        { name: 'rank_results', tag: 'ok' },
+      ]
+    },
+    dashboard: {
+      title: 'dashboard',
+      subtitle: 'AXUM REST + FRONTEND',
+      lines: '1.4k', fns: '22', deps: '4', health: '76',
+      functions: [
+        { name: 'start_server', tag: 'ok' },
+        { name: 'render_graph', tag: 'hot' },
+        { name: 'render_svg_export', tag: 'dead' },
+        { name: 'api_routes', tag: 'ok' },
+        { name: 'serve_static', tag: 'ok' },
+      ]
+    },
+    config: {
+      title: 'config',
+      subtitle: 'WORKSPACE CONFIGURATION',
+      lines: '420', fns: '9', deps: '0', health: '96',
+      functions: [
+        { name: 'load_config', tag: 'ok' },
+        { name: 'detect_languages', tag: 'ok' },
+        { name: 'load_yaml_config', tag: 'dead' },
+        { name: 'merge_defaults', tag: 'ok' },
+      ]
+    }
+  };
+
+  // Module connections (source -> targets) for SVG lines
+  const connections = [
+    ['mod-pipeline', 'mod-parse'],
+    ['mod-pipeline', 'mod-graph'],
+    ['mod-pipeline', 'mod-db'],
+    ['mod-graph', 'mod-db'],
+    ['mod-graph', 'mod-analysis'],
+    ['mod-mcp', 'mod-db'],
+    ['mod-mcp', 'mod-graph'],
+    ['mod-analysis', 'mod-db'],
+    ['mod-dashboard', 'mod-graph'],
+    ['mod-dashboard', 'mod-db'],
+    ['mod-search', 'mod-db'],
+    ['mod-config', 'mod-pipeline'],
+  ];
+
+  // ===== ELEMENTS =====
+  const voidCanvas = document.getElementById('voidCanvas');
+  const paletteOverlay = document.getElementById('paletteOverlay');
+  const paletteBackdrop = document.getElementById('paletteBackdrop');
+  const paletteInput = document.getElementById('paletteInput');
+  const paletteTabs = document.getElementById('paletteTabs');
+  const detailPanel = document.getElementById('detailPanel');
+  const detailClose = document.getElementById('detailClose');
+  const connectionsLayer = document.getElementById('connectionsLayer');
+  const modeHud = document.getElementById('modeHud');
+
+  let paletteOpen = false;
+  let currentFocused = null;
+
+  // ===== DRAW SVG CONNECTIONS =====
+  function drawConnections() {
+    connectionsLayer.innerHTML = '';
+    connections.forEach(([srcId, tgtId]) => {
+      const src = document.getElementById(srcId);
+      const tgt = document.getElementById(tgtId);
+      if (!src || !tgt) return;
+
+      const sr = src.getBoundingClientRect();
+      const tr = tgt.getBoundingClientRect();
+
+      const x1 = sr.left + sr.width / 2;
+      const y1 = sr.top + sr.height / 2;
+      const x2 = tr.left + tr.width / 2;
+      const y2 = tr.top + tr.height / 2;
+
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      line.dataset.src = srcId;
+      line.dataset.tgt = tgtId;
+      connectionsLayer.appendChild(line);
+    });
+  }
+
+  drawConnections();
+  window.addEventListener('resize', drawConnections);
+
+  // ===== PALETTE OPEN/CLOSE =====
+  function openPalette() {
+    paletteOpen = true;
+    paletteOverlay.classList.add('open');
+    voidCanvas.classList.add('dimmed');
+    paletteInput.value = '';
+    paletteInput.focus();
+    filterPaletteItems('');
+  }
+
+  function closePalette() {
+    paletteOpen = false;
+    paletteOverlay.classList.remove('open');
+    voidCanvas.classList.remove('dimmed');
+    paletteInput.blur();
+  }
+
+  // ===== KEYBOARD SHORTCUTS =====
+  document.addEventListener('keydown', function(e) {
+    // "/" to open palette (when not typing in input)
+    if (e.key === '/' && !paletteOpen && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      openPalette();
+      return;
+    }
+
+    // Cmd+K or Ctrl+K to open palette
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      if (paletteOpen) {
+        closePalette();
+      } else {
+        openPalette();
+      }
+      return;
+    }
+
+    // Escape to close palette or detail panel
+    if (e.key === 'Escape') {
+      if (paletteOpen) {
+        closePalette();
+      } else if (detailPanel.classList.contains('open')) {
+        closeDetail();
+      }
+      return;
+    }
+
+    // Tab switching within palette
+    if (paletteOpen && e.key === 'Tab') {
+      e.preventDefault();
+      const tabs = Array.from(paletteTabs.querySelectorAll('.palette-tab'));
+      const activeIdx = tabs.findIndex(t => t.classList.contains('active'));
+      const nextIdx = e.shiftKey
+        ? (activeIdx - 1 + tabs.length) % tabs.length
+        : (activeIdx + 1) % tabs.length;
+      switchTab(tabs[nextIdx].dataset.tab);
+    }
+  });
+
+  // Backdrop click closes palette
+  paletteBackdrop.addEventListener('click', closePalette);
+
+  // ===== PALETTE TABS =====
+  function switchTab(tabName) {
+    paletteTabs.querySelectorAll('.palette-tab').forEach(t => {
+      t.classList.toggle('active', t.dataset.tab === tabName);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'tab-' + tabName);
+    });
+  }
+
+  paletteTabs.addEventListener('click', function(e) {
+    const tab = e.target.closest('.palette-tab');
+    if (tab) switchTab(tab.dataset.tab);
+  });
+
+  // ===== SEARCH FILTERING =====
+  paletteInput.addEventListener('input', function(e) {
+    filterPaletteItems(e.target.value);
+  });
+
+  function filterPaletteItems(query) {
+    const q = query.toLowerCase().trim();
+    document.querySelectorAll('.tab-panel.active .palette-item').forEach(item => {
+      if (!q) {
+        item.classList.remove('hidden');
+        return;
+      }
+      const text = item.textContent.toLowerCase();
+      item.classList.toggle('hidden', !text.includes(q));
+    });
+  }
+
+  // ===== PALETTE ITEM CLICK -> FOCUS IN VOID =====
+  document.querySelectorAll('.palette-item[data-target]').forEach(item => {
+    item.addEventListener('click', function() {
+      const target = this.dataset.target;
+      closePalette();
+      focusModule(target);
+    });
+  });
+
+  // ===== FOCUS MODULE IN VOID =====
+  function focusModule(moduleName) {
+    // Remove previous focus
+    document.querySelectorAll('.module-box').forEach(m => {
+      m.classList.remove('focused', 'highlight');
+    });
+
+    const modEl = document.getElementById('mod-' + moduleName);
+    if (modEl) {
+      modEl.classList.add('focused', 'highlight');
+
+      // Highlight connections
+      connectionsLayer.querySelectorAll('line').forEach(line => {
+        const isSrc = line.dataset.src === 'mod-' + moduleName;
+        const isTgt = line.dataset.tgt === 'mod-' + moduleName;
+        line.classList.toggle('active-connection', isSrc || isTgt);
+      });
+
+      // Open detail panel
+      openDetail(moduleName);
+
+      // Remove highlight after 3 seconds
+      setTimeout(() => {
+        modEl.classList.remove('highlight');
+      }, 3000);
+    }
+  }
+
+  // ===== MODULE CLICK -> DETAIL PANEL =====
+  document.querySelectorAll('.module-box').forEach(mod => {
+    mod.addEventListener('click', function() {
+      const moduleName = this.dataset.module;
+
+      // Remove previous focus
+      document.querySelectorAll('.module-box').forEach(m => m.classList.remove('focused'));
+      this.classList.add('focused');
+
+      // Highlight connections
+      connectionsLayer.querySelectorAll('line').forEach(line => {
+        const isSrc = line.dataset.src === 'mod-' + moduleName;
+        const isTgt = line.dataset.tgt === 'mod-' + moduleName;
+        line.classList.toggle('active-connection', isSrc || isTgt);
+      });
+
+      openDetail(moduleName);
+    });
+  });
+
+  // ===== DETAIL PANEL =====
+  function openDetail(moduleName) {
+    const data = moduleData[moduleName];
+    if (!data) return;
+
+    document.getElementById('detailTitle').textContent = data.title;
+    document.getElementById('detailSubtitle').textContent = data.subtitle;
+    document.getElementById('detailLines').textContent = data.lines;
+    document.getElementById('detailFns').textContent = data.fns;
+    document.getElementById('detailDeps').textContent = data.deps;
+    document.getElementById('detailHealth').textContent = data.health;
+
+    const fnList = document.getElementById('detailFnList');
+    fnList.innerHTML = '';
+    data.functions.forEach(fn => {
+      const li = document.createElement('li');
+      li.className = 'detail-fn-item';
+      const tagClass = fn.tag === 'dead' ? 'tag-dead' : fn.tag === 'hot' ? 'tag-hot' : 'tag-ok';
+      const tagLabel = fn.tag === 'dead' ? 'dead' : fn.tag === 'hot' ? 'risk' : 'ok';
+      li.innerHTML = '<span class="detail-fn-name mono">' + fn.name + '</span>' +
+        '<span class="detail-fn-tag ' + tagClass + '">' + tagLabel + '</span>';
+      fnList.appendChild(li);
+    });
+
+    detailPanel.classList.add('open');
+    currentFocused = moduleName;
+  }
+
+  function closeDetail() {
+    detailPanel.classList.remove('open');
+    document.querySelectorAll('.module-box').forEach(m => m.classList.remove('focused'));
+    connectionsLayer.querySelectorAll('line').forEach(l => l.classList.remove('active-connection'));
+    currentFocused = null;
+  }
+
+  detailClose.addEventListener('click', closeDetail);
+
+  // Click outside module boxes and detail panel to close
+  voidCanvas.addEventListener('click', function(e) {
+    if (!e.target.closest('.module-box') && !e.target.closest('.detail-panel')) {
+      closeDetail();
+    }
+  });
+
+  // ===== MODE SWITCHER =====
+  modeHud.addEventListener('click', function(e) {
+    const btn = e.target.closest('.mode-btn');
+    if (!btn) return;
+    modeHud.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Visual mode feedback on modules
+    const mode = btn.dataset.mode;
+    document.querySelectorAll('.module-box').forEach(mod => {
+      const health = mod.querySelector('.module-health');
+      if (mode === 'risk') {
+        // Show risk-oriented colors
+        mod.style.borderColor = health.classList.contains('health-bad')
+          ? 'rgba(248,113,113,0.3)'
+          : health.classList.contains('health-warn')
+          ? 'rgba(251,191,36,0.2)'
+          : '';
+      } else if (mode === 'coupling') {
+        mod.style.borderColor = 'rgba(167,139,250,0.15)';
+      } else {
+        mod.style.borderColor = '';
+      }
+    });
+  });
+
+  // ===== SHORTCUT HINT CLICK =====
+  document.querySelector('.shortcut-hint').addEventListener('click', openPalette);
+
+})();
+</script>
+
+</body>
+</html>

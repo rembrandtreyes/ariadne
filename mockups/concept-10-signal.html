@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Signal — Intelligence Feed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Instrument+Serif&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #09090B;
+    --surface: #111113;
+    --surface-2: #19191C;
+    --border: #1E1E22;
+    --text-0: #FAFAF9;
+    --text-1: #D6D3D1;
+    --text-2: #A8A29E;
+    --text-3: #57534E;
+    --text-4: #3A3733;
+    --blue: #60A5FA;
+    --green: #4ADE80;
+    --yellow: #FDE047;
+    --orange: #FB923C;
+    --red: #F87171;
+    --purple: #C084FC;
+    --cyan: #22D3EE;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    min-height: 100vh;
+  }
+
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .serif { font-family: 'Instrument Serif', serif; }
+
+  /* ===== NAVIGATION ===== */
+  .nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    background: rgba(9,9,11,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nav-mark {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    display: grid;
+    place-items: center;
+  }
+
+  .nav-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.4px;
+  }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+    margin-left: 40px;
+  }
+
+  .nav-tab {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-3);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+    background: none;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .nav-tab:hover { color: var(--text-2); }
+  .nav-tab.active { color: var(--text-0); background: var(--surface-2); }
+
+  .nav-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .nav-search {
+    padding: 5px 12px 5px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-1);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    outline: none;
+    width: 200px;
+    position: relative;
+  }
+
+  .nav-stat {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-3);
+  }
+
+  .nav-stat strong {
+    color: var(--text-2);
+    font-weight: 500;
+  }
+
+  /* ===== MAIN CONTENT ===== */
+  .main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 80px 32px 80px;
+  }
+
+  /* ===== HERO SECTION ===== */
+  .hero {
+    padding: 40px 0 48px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .hero-eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-4);
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+
+  .hero-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 56px;
+    font-weight: 400;
+    color: var(--text-0);
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+  }
+
+  .hero-title .accent {
+    background: linear-gradient(135deg, #4ade80, #22d3ee);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-subtitle {
+    font-size: 16px;
+    color: var(--text-3);
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  /* Stats row */
+  .hero-stats {
+    display: flex;
+    gap: 32px;
+    margin-top: 32px;
+  }
+
+  .hs {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .hs-val {
+    font-size: 32px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .hs-unit {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  .hs-trend {
+    font-size: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-left: 4px;
+  }
+
+  /* ===== SECTIONS ===== */
+  .section {
+    margin-bottom: 56px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-4);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-4);
+    padding: 2px 6px;
+    background: var(--surface);
+    border-radius: 4px;
+  }
+
+  .section-action {
+    font-size: 11px;
+    color: var(--blue);
+    cursor: pointer;
+    text-decoration: none;
+    transition: opacity 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .section-action:hover { opacity: 0.7; }
+
+  /* ===== RISK REPORT CARDS ===== */
+  .risk-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .risk-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 12px 0 0 12px;
+  }
+
+  .risk-card:hover {
+    border-color: rgba(255,255,255,0.06);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+
+  .rc-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .rc-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-0);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.3px;
+  }
+
+  .rc-score {
+    font-size: 24px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: -0.5px;
+  }
+
+  .rc-path {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 12px;
+  }
+
+  .rc-desc {
+    font-size: 13px;
+    color: var(--text-2);
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+
+  .rc-metrics {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .rc-metric {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .rc-metric-val { color: var(--text-2); font-weight: 500; }
+
+  .rc-tags {
+    display: flex;
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .rc-tag {
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+  }
+
+  /* ===== MODULE OVERVIEW ===== */
+  .module-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .mod-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mod-card:hover {
+    border-color: rgba(255,255,255,0.06);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .mod-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .mod-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mod-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .mod-count {
+    font-size: 10px;
+    color: var(--text-4);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .mod-bar {
+    display: flex;
+    gap: 1px;
+    height: 6px;
+    margin-bottom: 8px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .mod-bar-seg {
+    height: 100%;
+    min-width: 2px;
+    border-radius: 1px;
+  }
+
+  .mod-meta {
+    display: flex;
+    gap: 8px;
+  }
+
+  .mod-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== COUPLING TABLE ===== */
+  .coupling-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .coupling-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .coupling-row:hover { background: var(--surface-2); }
+
+  .cr-pair {
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-1);
+    flex: 1;
+  }
+
+  .cr-pair .arrow { color: var(--text-4); margin: 0 4px; }
+
+  .cr-bar {
+    width: 100px;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .cr-bar-fill { height: 100%; border-radius: 2px; }
+
+  .cr-val {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .cr-type {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+
+  /* ===== DEAD CODE LIST ===== */
+  .dead-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+
+  .dead-item {
+    padding: 10px 12px;
+    background: var(--surface);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 2px solid rgba(248,113,113,0.15);
+  }
+
+  .dead-item:hover { background: var(--surface-2); }
+
+  .dead-name {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+
+  .dead-path {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-4);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    padding: 32px 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-4);
+  }
+
+  .footer-right {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero { animation: fadeUp 0.6s ease; }
+  .section { animation: fadeUp 0.5s ease backwards; }
+  .section:nth-child(2) { animation-delay: 0.1s; }
+  .section:nth-child(3) { animation-delay: 0.15s; }
+  .section:nth-child(4) { animation-delay: 0.2s; }
+  .section:nth-child(5) { animation-delay: 0.25s; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-brand">
+    <div class="nav-mark"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></div>
+    <span class="nav-name">Ariadne</span>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active">Signal</button>
+    <button class="nav-tab">Map</button>
+    <button class="nav-tab">Graph</button>
+    <button class="nav-tab">Explorer</button>
+  </div>
+  <div class="nav-right">
+    <span class="nav-stat"><strong>247</strong> files</span>
+    <span class="nav-stat"><strong>1,842</strong> symbols</span>
+    <span class="nav-stat"><strong>87.4%</strong> resolved</span>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">Codebase Intelligence Report</div>
+    <h1 class="hero-title">Your codebase scores <span class="accent">84</span></h1>
+    <p class="hero-subtitle">Ariadne analyzed 247 files across 4 languages. Found 67 issues — 5 critical, 8 high, 15 medium. Resolution rate is 87.4%, up from 84.1% last index.</p>
+    <div class="hero-stats">
+      <div class="hs">
+        <span class="hs-val" style="color: var(--red);">47</span>
+        <span class="hs-unit">dead functions</span>
+      </div>
+      <div class="hs">
+        <span class="hs-val" style="color: var(--orange);">5</span>
+        <span class="hs-unit">circular deps</span>
+      </div>
+      <div class="hs">
+        <span class="hs-val" style="color: var(--yellow);">3</span>
+        <span class="hs-unit">god objects</span>
+      </div>
+      <div class="hs">
+        <span class="hs-val" style="color: var(--purple);">12</span>
+        <span class="hs-unit">high-risk files</span>
+        <span class="hs-trend" style="background: rgba(248,113,113,0.08); color: var(--red);">+2</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CRITICAL RISKS -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Critical Risks
+        <span class="section-count">5</span>
+      </div>
+      <a class="section-action">View all risks →</a>
+    </div>
+
+    <div class="risk-card" style="--accent: var(--red);">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--red); border-radius: 12px 0 0 12px;"></div>
+      <div class="rc-top">
+        <div>
+          <div class="rc-title">call_resolution.rs</div>
+          <div class="rc-path">src/pipeline/call_resolution.rs</div>
+        </div>
+        <div class="rc-score" style="color: var(--red);">0.91</div>
+      </div>
+      <div class="rc-desc">Highest risk score in the codebase. This file has high churn, 34 incoming dependencies, and is coupled with 8 other files. Any change here has a blast radius of 34 downstream symbols.</div>
+      <div class="rc-metrics">
+        <span class="rc-metric">fan-in <span class="rc-metric-val">34</span></span>
+        <span class="rc-metric">fan-out <span class="rc-metric-val">18</span></span>
+        <span class="rc-metric">churn <span class="rc-metric-val" style="color: var(--red);">high</span></span>
+        <span class="rc-metric">coupled <span class="rc-metric-val">8 files</span></span>
+        <span class="rc-metric">blast <span class="rc-metric-val">34 sym</span></span>
+      </div>
+      <div class="rc-tags">
+        <span class="rc-tag" style="background: rgba(248,113,113,0.08); color: var(--red);">critical risk</span>
+        <span class="rc-tag" style="background: rgba(192,132,252,0.08); color: var(--purple);">bottleneck</span>
+        <span class="rc-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">in cycle</span>
+      </div>
+    </div>
+
+    <div class="risk-card">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--red); border-radius: 12px 0 0 12px;"></div>
+      <div class="rc-top">
+        <div>
+          <div class="rc-title">Database (db/mod.rs)</div>
+          <div class="rc-path">src/db/mod.rs — 127 total connections</div>
+        </div>
+        <div class="rc-score" style="color: var(--orange);">0.87</div>
+      </div>
+      <div class="rc-desc">God object with 127 connections. This struct is the dependency bottleneck of the entire codebase — every module except search depends on it directly.</div>
+      <div class="rc-metrics">
+        <span class="rc-metric">connections <span class="rc-metric-val" style="color: var(--yellow);">127</span></span>
+        <span class="rc-metric">dependents <span class="rc-metric-val">89</span></span>
+      </div>
+      <div class="rc-tags">
+        <span class="rc-tag" style="background: rgba(250,204,21,0.08); color: var(--yellow);">god object</span>
+        <span class="rc-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">in cycle</span>
+      </div>
+    </div>
+
+    <div class="risk-card">
+      <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--orange); border-radius: 12px 0 0 12px;"></div>
+      <div class="rc-top">
+        <div>
+          <div class="rc-title">pipeline ↔ db</div>
+          <div class="rc-path">Circular dependency — coupling strength 0.85</div>
+        </div>
+        <div class="rc-score" style="color: var(--orange);">.85</div>
+      </div>
+      <div class="rc-desc">The strongest coupling in the codebase. These modules change together 85% of the time, and they have a circular dependency. Breaking this cycle would significantly improve modularity.</div>
+      <div class="rc-tags">
+        <span class="rc-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+        <span class="rc-tag" style="background: rgba(248,113,113,0.08); color: var(--red);">high coupling</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODULE OVERVIEW -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Modules
+        <span class="section-count">12</span>
+      </div>
+      <a class="section-action">Open map →</a>
+    </div>
+
+    <div class="module-grid">
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--green)"></span> pipeline/</div>
+          <span class="mod-count">387 sym · 14 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--red); opacity: 0.6; flex: 2;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.35; flex: 4;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.25; flex: 3;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.15; flex: 5;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(251,146,60,0.06); color: var(--orange);">2 cycles</span>
+          <span class="mod-tag" style="background: rgba(192,132,252,0.06); color: var(--purple);">risk 0.71</span>
+        </div>
+      </div>
+
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--yellow)"></span> parse/</div>
+          <span class="mod-count">284 sym · 10 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.35; flex: 6;"></div>
+          <div class="mod-bar-seg" style="background: var(--red); opacity: 0.4; flex: 2;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.15; flex: 2;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(248,113,113,0.06); color: var(--red);">12 dead</span>
+        </div>
+      </div>
+
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--yellow)"></span> db/</div>
+          <span class="mod-count">198 sym · 4 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--red); opacity: 0.5; flex: 5;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.3; flex: 3;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.15; flex: 2;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(250,204,21,0.06); color: var(--yellow);">god object</span>
+          <span class="mod-tag" style="background: rgba(251,146,60,0.06); color: var(--orange);">cycle</span>
+        </div>
+      </div>
+
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--green)"></span> mcp/</div>
+          <span class="mod-count">156 sym · 6 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.3; flex: 10;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(74,222,128,0.06); color: var(--green);">healthy</span>
+        </div>
+      </div>
+
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--yellow)"></span> graph/</div>
+          <span class="mod-count">142 sym · 5 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--yellow); opacity: 0.4; flex: 4;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.25; flex: 4;"></div>
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.15; flex: 2;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(250,204,21,0.06); color: var(--yellow);">god object</span>
+        </div>
+      </div>
+
+      <div class="mod-card">
+        <div class="mod-top">
+          <div class="mod-name"><span class="mod-dot" style="background: var(--green)"></span> analysis/</div>
+          <span class="mod-count">118 sym · 5 files</span>
+        </div>
+        <div class="mod-bar">
+          <div class="mod-bar-seg" style="background: var(--green); opacity: 0.3; flex: 10;"></div>
+        </div>
+        <div class="mod-meta">
+          <span class="mod-tag" style="background: rgba(74,222,128,0.06); color: var(--green);">healthy</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COUPLING -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Strongest Coupling Pairs
+      </div>
+    </div>
+
+    <div class="coupling-list">
+      <div class="coupling-row">
+        <span class="cr-pair">pipeline <span class="arrow">↔</span> db</span>
+        <div class="cr-bar"><div class="cr-bar-fill" style="width: 85%; background: var(--red);"></div></div>
+        <span class="cr-val" style="color: var(--red);">.85</span>
+        <span class="cr-type" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+      </div>
+      <div class="coupling-row">
+        <span class="cr-pair">pipeline <span class="arrow">↔</span> graph</span>
+        <div class="cr-bar"><div class="cr-bar-fill" style="width: 73%; background: var(--orange);"></div></div>
+        <span class="cr-val" style="color: var(--orange);">.73</span>
+        <span class="cr-type" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+      </div>
+      <div class="coupling-row">
+        <span class="cr-pair">parse <span class="arrow">→</span> pipeline</span>
+        <div class="cr-bar"><div class="cr-bar-fill" style="width: 61%; background: var(--yellow);"></div></div>
+        <span class="cr-val">.61</span>
+        <span class="cr-type" style="background: rgba(74,222,128,0.06); color: var(--green);">ok</span>
+      </div>
+      <div class="coupling-row">
+        <span class="cr-pair">db <span class="arrow">↔</span> analysis</span>
+        <div class="cr-bar"><div class="cr-bar-fill" style="width: 48%; background: var(--yellow);"></div></div>
+        <span class="cr-val">.48</span>
+        <span class="cr-type" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+      </div>
+      <div class="coupling-row">
+        <span class="cr-pair">mcp <span class="arrow">→</span> db</span>
+        <div class="cr-bar"><div class="cr-bar-fill" style="width: 42%; background: var(--green);"></div></div>
+        <span class="cr-val">.42</span>
+        <span class="cr-type" style="background: rgba(74,222,128,0.06); color: var(--green);">ok</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEAD CODE -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>
+        Dead Code
+        <span class="section-count">47</span>
+      </div>
+      <a class="section-action">Export list →</a>
+    </div>
+
+    <div class="dead-list">
+      <div class="dead-item"><div class="dead-name">format_xml_output</div><div class="dead-path">output/formatters.rs:34</div></div>
+      <div class="dead-item"><div class="dead-name">format_csv_output</div><div class="dead-path">output/formatters.rs:67</div></div>
+      <div class="dead-item"><div class="dead-name">format_html_output</div><div class="dead-path">output/formatters.rs:98</div></div>
+      <div class="dead-item"><div class="dead-name">parse_legacy_config</div><div class="dead-path">config/mod.rs:112</div></div>
+      <div class="dead-item"><div class="dead-name">validate_ruby_ast</div><div class="dead-path">parse/ruby.rs:78</div></div>
+      <div class="dead-item"><div class="dead-name">validate_ruby_class</div><div class="dead-path">parse/ruby.rs:145</div></div>
+      <div class="dead-item"><div class="dead-name">old_blast_radius</div><div class="dead-path">graph/blast_radius.rs:202</div></div>
+      <div class="dead-item"><div class="dead-name">process_legacy_webhook</div><div class="dead-path">pipeline/api_resolution.rs:89</div></div>
+      <div class="dead-item"><div class="dead-name">emit_legacy_event</div><div class="dead-path">pipeline/api_resolution.rs:134</div></div>
+    </div>
+    <div style="text-align: center; margin-top: 12px; font-size: 11px; color: var(--text-4);">+ 38 more dead functions</div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>Ariadne — Universal Dependency Graph</span>
+    <span class="footer-right">Indexed 2 minutes ago · 247 files · 4 languages</span>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,188 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e5]: Ariadne
+    - textbox "Search symbols, files..." [ref=e7]
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - strong [ref=e10]: 1,247
+        - text: symbols
+      - generic [ref=e11]:
+        - strong [ref=e12]: "9"
+        - text: modules
+      - generic [ref=e13]:
+        - strong [ref=e14]: "84"
+        - text: health
+  - generic [ref=e16]:
+    - generic [ref=e17]:
+      - generic [ref=e18]: Codebase Intelligence
+      - generic [ref=e19]: Your codebase scores 84
+      - generic [ref=e20]: Ariadne analyzed 1,247 symbols across 9 modules. 3 areas need attention.
+      - generic [ref=e21]:
+        - generic [ref=e22]:
+          - generic [ref=e23]: "47"
+          - generic [ref=e24]: dead
+        - generic [ref=e25]:
+          - generic [ref=e26]: "5"
+          - generic [ref=e27]: cycles
+        - generic [ref=e28]:
+          - generic [ref=e29]: "3"
+          - generic [ref=e30]: gods
+        - generic [ref=e31]:
+          - generic [ref=e32]: "12"
+          - generic [ref=e33]: risky
+    - generic [ref=e34]:
+      - generic [ref=e36]:
+        - text: Critical Risks
+        - generic [ref=e37]: "2"
+      - generic [ref=e38] [cursor=pointer]:
+        - generic [ref=e39]:
+          - generic [ref=e40]: pipeline/resolver.rs
+          - generic [ref=e41]: "God object: 847 lines, 23 methods, 14 dependencies"
+        - generic [ref=e42]:
+          - generic [ref=e43]: "92"
+          - generic [ref=e44]: View in map →
+      - generic [ref=e45] [cursor=pointer]:
+        - generic [ref=e46]:
+          - generic [ref=e47]: db/queries.rs
+          - generic [ref=e48]: Cyclic dependency with pipeline::indexer, high churn
+        - generic [ref=e49]:
+          - generic [ref=e50]: "87"
+          - generic [ref=e51]: View in map →
+    - generic [ref=e52]:
+      - generic [ref=e54]:
+        - text: Modules
+        - generic [ref=e55]: "6"
+      - generic [ref=e56]:
+        - generic [ref=e57] [cursor=pointer]:
+          - generic [ref=e60]: pipeline/
+          - generic [ref=e62]:
+            - strong [ref=e63]: "312"
+            - text: symbols
+          - generic [ref=e66]:
+            - generic [ref=e67]: 14-phase
+            - generic [ref=e68]: core
+        - generic [ref=e69] [cursor=pointer]:
+          - generic [ref=e72]: parse/
+          - generic [ref=e74]:
+            - strong [ref=e75]: "248"
+            - text: symbols
+          - generic [ref=e78]:
+            - generic [ref=e79]: tree-sitter
+            - generic [ref=e80]: 9-lang
+        - generic [ref=e81] [cursor=pointer]:
+          - generic [ref=e84]: db/
+          - generic [ref=e86]:
+            - strong [ref=e87]: "156"
+            - text: symbols
+          - generic [ref=e90]:
+            - generic [ref=e91]: sqlite
+            - generic [ref=e92]: schema
+        - generic [ref=e93] [cursor=pointer]:
+          - generic [ref=e96]: graph/
+          - generic [ref=e98]:
+            - strong [ref=e99]: "189"
+            - text: symbols
+          - generic [ref=e102]:
+            - generic [ref=e103]: petgraph
+            - generic [ref=e104]: blast-radius
+        - generic [ref=e105] [cursor=pointer]:
+          - generic [ref=e108]: analysis/
+          - generic [ref=e110]:
+            - strong [ref=e111]: "134"
+            - text: symbols
+          - generic [ref=e114]:
+            - generic [ref=e115]: dead-code
+            - generic [ref=e116]: arch-rules
+        - generic [ref=e117] [cursor=pointer]:
+          - generic [ref=e120]: mcp/
+          - generic [ref=e122]:
+            - strong [ref=e123]: "98"
+            - text: symbols
+          - generic [ref=e126]:
+            - generic [ref=e127]: 10-tools
+            - generic [ref=e128]: stdio
+    - generic [ref=e129]:
+      - generic [ref=e131]:
+        - text: Coupling
+        - generic [ref=e132]: "3"
+      - generic [ref=e133] [cursor=pointer]:
+        - generic [ref=e134]:
+          - generic [ref=e135]: pipeline
+          - generic [ref=e136]: ↔
+          - generic [ref=e137]: db
+        - generic [ref=e140]: ".85"
+      - generic [ref=e141] [cursor=pointer]:
+        - generic [ref=e142]:
+          - generic [ref=e143]: pipeline
+          - generic [ref=e144]: ↔
+          - generic [ref=e145]: graph
+        - generic [ref=e148]: ".73"
+      - generic [ref=e149] [cursor=pointer]:
+        - generic [ref=e150]:
+          - generic [ref=e151]: parse
+          - generic [ref=e152]: →
+          - generic [ref=e153]: pipeline
+        - generic [ref=e156]: ".61"
+  - generic:
+    - generic:
+      - img
+      - generic:
+        - generic: pipeline/
+        - generic: 312 sym | 78%
+      - generic:
+        - generic: parse/
+        - generic: 248 sym | 91%
+      - generic:
+        - generic: db/
+        - generic: 156 sym | 65%
+      - generic:
+        - generic: graph/
+        - generic: 189 sym | 84%
+      - generic:
+        - generic: analysis/
+        - generic: 134 sym | 58%
+      - generic:
+        - generic: mcp/
+        - generic: 98 sym | 89%
+      - generic:
+        - generic:
+          - generic: pipeline/
+          - button "×"
+        - generic:
+          - generic: Health
+        - generic:
+          - generic: Stats
+          - generic:
+            - generic:
+              - generic: "312"
+              - generic: Symbols
+            - generic:
+              - generic: 78%
+              - generic: Health
+            - generic:
+              - generic: "14"
+              - generic: Files
+            - generic:
+              - generic: "5"
+              - generic: Deps
+        - generic:
+          - generic: Tags
+          - generic:
+            - generic: 14-phase
+            - generic: core
+        - generic:
+          - generic: Dependencies
+          - generic:
+            - generic:
+              - generic: db
+              - generic: ".85"
+            - generic:
+              - generic: graph
+              - generic: ".73"
+            - generic:
+              - generic: parse
+              - generic: ".61"
+        - generic:
+          - generic: Description
+          - generic: 14-phase indexing pipeline. Orchestrates parsing, resolution, and analysis passes over the codebase.
+  - generic: Click any card to drill into the architecture map. Esc to return.

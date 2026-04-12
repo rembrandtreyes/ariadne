@@ -1,0 +1,178 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e3]:
+      - img [ref=e5]
+      - generic [ref=e8]: Ariadne
+    - generic [ref=e9]:
+      - img
+      - textbox "Search symbols, modules..." [ref=e10]
+    - generic [ref=e11]:
+      - generic [ref=e12]:
+        - strong [ref=e13]: "247"
+        - text: files
+      - generic [ref=e14]:
+        - strong [ref=e15]: 1,842
+        - text: symbols
+      - generic [ref=e16]:
+        - strong [ref=e17]: 87.4%
+        - text: resolved
+  - generic [ref=e18]:
+    - generic [ref=e19]:
+      - img [ref=e21] [cursor=pointer]
+      - generic [ref=e23]:
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - img [ref=e26]
+            - generic [ref=e29]: "84"
+          - generic [ref=e30]:
+            - generic [ref=e31]: Codebase Health
+            - generic [ref=e32]: 67 issues found. 5 critical, 8 high.
+        - generic [ref=e33]:
+          - generic [ref=e34]:
+            - generic [ref=e35]: "47"
+            - generic [ref=e36]: dead
+          - generic [ref=e37]:
+            - generic [ref=e38]: "5"
+            - generic [ref=e39]: cycles
+          - generic [ref=e40]:
+            - generic [ref=e41]: "3"
+            - generic [ref=e42]: gods
+        - generic [ref=e43]:
+          - generic [ref=e44]:
+            - img [ref=e45]
+            - text: Risks
+            - generic [ref=e47]: "5"
+          - generic [ref=e48] [cursor=pointer]:
+            - generic [ref=e50]: call_resolution.rs
+            - generic [ref=e51]: "0.91"
+          - generic [ref=e52] [cursor=pointer]:
+            - generic [ref=e54]: db/mod.rs
+            - generic [ref=e55]: "0.87"
+          - generic [ref=e56] [cursor=pointer]:
+            - generic [ref=e58]: pipeline ↔ db
+            - generic [ref=e59]: ".85"
+          - generic [ref=e60] [cursor=pointer]:
+            - generic [ref=e62]: graph/mod.rs
+            - generic [ref=e63]: ".76"
+          - generic [ref=e64] [cursor=pointer]:
+            - generic [ref=e66]: parse/ruby.rs
+            - generic [ref=e67]: ".68"
+        - generic [ref=e68]:
+          - generic [ref=e69]:
+            - img [ref=e70]
+            - text: Modules
+            - generic [ref=e75]: "12"
+          - generic [ref=e78] [cursor=pointer]:
+            - generic [ref=e79]: pipeline/
+            - generic [ref=e80]: 387 sym · 14 files · 2 cycles
+          - generic [ref=e85] [cursor=pointer]:
+            - generic [ref=e86]: parse/
+            - generic [ref=e87]: 284 sym · 10 files · 12 dead
+          - generic [ref=e92] [cursor=pointer]:
+            - generic [ref=e93]: db/
+            - generic [ref=e94]: 198 sym · 4 files · god object
+          - generic [ref=e99] [cursor=pointer]:
+            - generic [ref=e100]: mcp/
+            - generic [ref=e101]: 156 sym · 6 files · healthy
+          - generic [ref=e106] [cursor=pointer]:
+            - generic [ref=e107]: graph/
+            - generic [ref=e108]: 142 sym · 5 files · god object
+          - generic [ref=e113] [cursor=pointer]:
+            - generic [ref=e114]: analysis/
+            - generic [ref=e115]: 118 sym · 5 files · healthy
+          - generic [ref=e120] [cursor=pointer]:
+            - generic [ref=e121]: search/
+            - generic [ref=e122]: 64 sym · 3 files · healthy
+          - generic [ref=e127] [cursor=pointer]:
+            - generic [ref=e128]: dashboard/
+            - generic [ref=e129]: 87 sym · 4 files · healthy
+          - generic [ref=e134] [cursor=pointer]:
+            - generic [ref=e135]: config/
+            - generic [ref=e136]: 34 sym · 2 files
+          - generic [ref=e141] [cursor=pointer]:
+            - generic [ref=e142]: output/
+            - generic [ref=e143]: 42 sym · 3 files · 8 dead
+          - generic [ref=e148] [cursor=pointer]:
+            - generic [ref=e149]: watch/
+            - generic [ref=e150]: 28 sym · 2 files
+          - generic [ref=e155] [cursor=pointer]:
+            - generic [ref=e156]: lsp/
+            - generic [ref=e157]: 56 sym · 3 files
+        - generic [ref=e160]:
+          - generic [ref=e161]:
+            - img [ref=e162]
+            - text: Coupling
+          - generic [ref=e165] [cursor=pointer]:
+            - generic [ref=e166]: pipeline ↔ db
+            - generic [ref=e167]: ".85"
+            - generic [ref=e168]: cycle
+          - generic [ref=e169] [cursor=pointer]:
+            - generic [ref=e170]: pipeline ↔ graph
+            - generic [ref=e171]: ".73"
+            - generic [ref=e172]: cycle
+          - generic [ref=e173] [cursor=pointer]:
+            - generic [ref=e174]: parse → pipeline
+            - generic [ref=e175]: ".61"
+            - generic [ref=e176]: ok
+          - generic [ref=e177] [cursor=pointer]:
+            - generic [ref=e178]: db ↔ analysis
+            - generic [ref=e179]: ".48"
+            - generic [ref=e180]: cycle
+          - generic [ref=e181] [cursor=pointer]:
+            - generic [ref=e182]: mcp → db
+            - generic [ref=e183]: ".42"
+            - generic [ref=e184]: ok
+    - generic [ref=e185]:
+      - generic: Interface
+      - generic: Core
+      - generic: Data
+      - img
+      - generic [ref=e187] [cursor=pointer]:
+        - generic [ref=e190]: main.rs
+        - generic [ref=e191]: CLI entry · 12 sym
+      - generic [ref=e193] [cursor=pointer]:
+        - generic [ref=e194]:
+          - generic [ref=e196]: mcp/
+          - generic [ref=e197]: "156"
+        - generic [ref=e205]: healthy
+      - generic [ref=e208] [cursor=pointer]:
+        - generic [ref=e210]: dash/
+        - generic [ref=e211]: "87"
+      - generic [ref=e213] [cursor=pointer]:
+        - generic [ref=e214]:
+          - generic [ref=e216]: pipeline/
+          - generic [ref=e217]: 387 · 14 files
+        - generic [ref=e226]:
+          - generic [ref=e227]: 2 cycles
+          - generic [ref=e228]: risk 0.71
+      - generic [ref=e230] [cursor=pointer]:
+        - generic [ref=e231]:
+          - generic [ref=e233]: parse/
+          - generic [ref=e234]: "284"
+        - generic [ref=e242]: 12 dead
+      - generic [ref=e244] [cursor=pointer]:
+        - generic [ref=e245]:
+          - generic [ref=e247]: graph/
+          - generic [ref=e248]: "142"
+        - generic [ref=e255]: god object
+      - generic [ref=e257] [cursor=pointer]:
+        - generic [ref=e258]:
+          - generic [ref=e260]: db/
+          - generic [ref=e261]: "198"
+        - generic [ref=e267]:
+          - generic [ref=e268]: god object
+          - generic [ref=e269]: cycle
+      - generic [ref=e271] [cursor=pointer]:
+        - generic [ref=e272]:
+          - generic [ref=e274]: analysis/
+          - generic [ref=e275]: "118"
+        - generic [ref=e281]: healthy
+      - generic [ref=e284] [cursor=pointer]:
+        - generic [ref=e286]: search/
+        - generic [ref=e287]: "64"
+      - generic [ref=e291] [cursor=pointer]: config/
+      - generic [ref=e293] [cursor=pointer]:
+        - generic [ref=e295]: output/
+        - generic [ref=e296]: 8 dead
+      - generic [ref=e300] [cursor=pointer]: watch/
+      - generic [ref=e304] [cursor=pointer]: lsp/

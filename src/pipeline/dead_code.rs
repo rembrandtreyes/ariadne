@@ -39,6 +39,15 @@ pub fn detect_dead_code(db: &Database, config: &RepoConfig) -> anyhow::Result<()
         [],
     )?;
 
+    // Mark synthetic <module> symbols as entry points. These are inserted by
+    // the JS/TS parsers to anchor module-level call edges (calls made at file
+    // scope with caller_name = "<module>"). They must be reachable so the BFS
+    // follows the call edges they own into actual callees.
+    conn.execute(
+        "UPDATE symbols SET is_entry_point = 1 WHERE name = '<module>'",
+        [],
+    )?;
+
     // Mark class methods as entry points — they're called via instance
     // references (obj.method()) which static analysis can't trace without
     // type inference. Uses qualified_name prefix matching against known classes.

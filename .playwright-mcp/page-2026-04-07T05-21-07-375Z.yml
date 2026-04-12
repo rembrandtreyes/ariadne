@@ -1,0 +1,98 @@
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e5]: Ariadne
+    - generic [ref=e6]: SIGNAL
+  - generic [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]: CODEBASE HEALTH REPORT
+      - generic [ref=e11]: Your codebase scores
+      - generic [ref=e12]: "84"
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]: "47"
+          - generic [ref=e16]: dead symbols
+        - generic [ref=e17]:
+          - generic [ref=e18]: "5"
+          - generic [ref=e19]: cycles
+        - generic [ref=e20]:
+          - generic [ref=e21]: "3"
+          - generic [ref=e22]: god objects
+        - generic [ref=e23]:
+          - generic [ref=e24]: "12"
+          - generic [ref=e25]: risky files
+      - generic [ref=e26]:
+        - generic [ref=e27]: Scroll to explore
+        - img [ref=e28]
+    - generic [ref=e30]:
+      - generic [ref=e31]: CRITICAL RISKS
+      - generic [ref=e32]:
+        - generic [ref=e33]:
+          - img [ref=e34]
+          - generic [ref=e37]: "0.91"
+        - generic [ref=e38]:
+          - generic [ref=e39]: call_resolution.rs
+          - generic [ref=e40]: High churn, dense coupling, 847 lines. Changed 23 times in 30 days.
+        - generic [ref=e41]: CRITICAL
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - img [ref=e44]
+          - generic [ref=e47]: "0.87"
+        - generic [ref=e48]:
+          - generic [ref=e49]: Database god object
+          - generic [ref=e50]: 67 public methods, 12 responsibilities. Violation of single-responsibility principle.
+        - generic [ref=e51]: HIGH
+      - generic [ref=e52]:
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e57]: "0.85"
+        - generic [ref=e58]:
+          - generic [ref=e59]: pipeline ⇄ db cycle
+          - generic [ref=e60]: Circular dependency between pipeline and database modules. 3 call chains involved.
+        - generic [ref=e61]: HIGH
+    - generic [ref=e62]:
+      - generic [ref=e63]: MODULE HEALTH
+      - generic [ref=e64]:
+        - generic [ref=e65]:
+          - generic [ref=e66]: pipeline
+          - generic [ref=e67]: 142 symbols · 91%
+        - generic [ref=e69]:
+          - generic [ref=e70]: parse
+          - generic [ref=e71]: 238 symbols · 88%
+        - generic [ref=e73]:
+          - generic [ref=e74]: db
+          - generic [ref=e75]: 67 symbols · 72%
+        - generic [ref=e77]:
+          - generic [ref=e78]: graph
+          - generic [ref=e79]: 94 symbols · 85%
+        - generic [ref=e81]:
+          - generic [ref=e82]: analysis
+          - generic [ref=e83]: 56 symbols · 79%
+        - generic [ref=e85]:
+          - generic [ref=e86]: mcp
+          - generic [ref=e87]: 31 symbols · 94%
+    - generic [ref=e91]: SCROLL UP TO RETURN TO SIGNAL
+  - generic:
+    - img
+  - generic:
+    - generic:
+      - generic: pipeline
+      - generic: 142 sym · 91%
+    - generic:
+      - generic: parse
+      - generic: 238 sym · 88%
+    - generic:
+      - generic: db
+      - generic: 67 sym · 72%
+    - generic:
+      - generic: graph
+      - generic: 94 sym · 85%
+    - generic:
+      - generic: analysis
+      - generic: 56 sym · 79%
+    - generic:
+      - generic: mcp
+      - generic: 31 sym · 94%
+  - generic [ref=e92]:
+    - button "×" [ref=e93] [cursor=pointer]
+    - generic [ref=e95]: METRICS
+    - generic [ref=e96]: DEPENDENCIES

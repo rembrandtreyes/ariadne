@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Nebula — Architecture Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06080D;
+    --bg-dot: #0E1219;
+    --surface: #0D1117;
+    --surface-2: #161B22;
+    --surface-3: #1C2129;
+    --border: #21262D;
+    --border-light: #30363D;
+    --text-0: #F0F6FC;
+    --text-1: #C9D1D9;
+    --text-2: #8B949E;
+    --text-3: #484F58;
+    --blue: #58A6FF;
+    --blue-dim: #1F6FEB;
+    --green: #3FB950;
+    --green-dim: #238636;
+    --yellow: #D29922;
+    --orange: #DB6D28;
+    --red: #F85149;
+    --purple: #BC8CFF;
+    --cyan: #39D2C0;
+    --pink: #F778BA;
+    --glow-blue: rgba(88,166,255,0.08);
+    --glow-red: rgba(248,81,73,0.08);
+    --glow-green: rgba(63,185,80,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    height: 100vh;
+    overflow: hidden;
+    cursor: default;
+  }
+
+  .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== DOT GRID BACKGROUND ===== */
+  .dot-grid {
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.5px);
+    background-size: 24px 24px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ===== CANVAS ===== */
+  .canvas {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  /* ===== FLOATING HEADER ===== */
+  .top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background: rgba(6,8,13,0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 200;
+    gap: 16px;
+  }
+
+  .tb-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .tb-logo-mark {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--blue-dim), var(--purple));
+    display: grid;
+    place-items: center;
+  }
+
+  .tb-logo-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.3px;
+  }
+
+  .tb-sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+  }
+
+  .tb-search {
+    position: relative;
+    flex: 1;
+    max-width: 380px;
+  }
+
+  .tb-search input {
+    width: 100%;
+    padding: 5px 10px 5px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-1);
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .tb-search input::placeholder { color: var(--text-3); }
+  .tb-search input:focus { border-color: var(--blue-dim); }
+
+  .tb-search svg {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-3);
+  }
+
+  .tb-kbd {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: var(--text-3);
+    background: var(--bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .tb-mode {
+    display: flex;
+    gap: 1px;
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--border);
+  }
+
+  .tb-mode-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-3);
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .tb-mode-btn:hover { color: var(--text-2); }
+  .tb-mode-btn.active { color: var(--text-0); background: var(--surface-2); }
+
+  .tb-metrics {
+    display: flex;
+    gap: 14px;
+    margin-left: auto;
+  }
+
+  .tb-metric {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+  }
+
+  .tb-metric-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+
+  .tb-metric-val {
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    font-size: 11px;
+  }
+
+  .tb-metric-lbl {
+    color: var(--text-3);
+    font-size: 10px;
+  }
+
+  /* ===== MODULE NODES ===== */
+  .module {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    z-index: 10;
+    min-width: 180px;
+  }
+
+  .module::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 12px;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .module:hover {
+    border-color: var(--blue-dim);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px var(--blue-dim);
+  }
+
+  .module:hover::before { opacity: 1; }
+
+  .module.glow-green::before { background: radial-gradient(ellipse at center, var(--glow-green), transparent 70%); }
+  .module.glow-blue::before { background: radial-gradient(ellipse at center, var(--glow-blue), transparent 70%); }
+  .module.glow-red::before { background: radial-gradient(ellipse at center, var(--glow-red), transparent 70%); }
+
+  .module.selected {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 1px var(--blue), 0 8px 32px rgba(88,166,255,0.1);
+  }
+
+  .mod-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .mod-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-0);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mod-health {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .mod-stats {
+    font-size: 10px;
+    color: var(--text-3);
+    font-family: 'Fira Code', monospace;
+    font-weight: 400;
+  }
+
+  .mod-files {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+  }
+
+  .mod-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    transition: background 0.15s;
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-2);
+  }
+
+  .mod-file:hover { background: var(--surface-2); }
+
+  .mod-file-bar {
+    width: 3px;
+    height: 12px;
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+
+  .mod-file-name { flex: 1; }
+
+  .mod-file-badge {
+    font-size: 8px;
+    padding: 0 4px;
+    border-radius: 3px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .mod-issues {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .mod-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+  }
+
+  /* ===== SVG CONNECTIONS ===== */
+  .connections-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .conn-line {
+    fill: none;
+    stroke-width: 1.5;
+    opacity: 0.25;
+    transition: opacity 0.3s, stroke-width 0.3s;
+  }
+
+  .conn-line.highlight {
+    opacity: 0.7;
+    stroke-width: 2.5;
+  }
+
+  .conn-line.cycle {
+    stroke-dasharray: 6 4;
+  }
+
+  .conn-arrow {
+    transition: opacity 0.3s;
+    opacity: 0.3;
+  }
+
+  .conn-arrow.highlight { opacity: 0.8; }
+
+  .conn-label {
+    font-size: 9px;
+    font-family: 'Fira Code', monospace;
+    fill: var(--text-3);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .conn-label.highlight { opacity: 1; }
+
+  /* ===== RIGHT PANEL ===== */
+  .detail-panel {
+    position: fixed;
+    right: -400px;
+    top: 48px;
+    bottom: 0;
+    width: 380px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 100;
+    transition: right 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-panel.open { right: 0; }
+
+  .dp-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .dp-head-info { flex: 1; }
+
+  .dp-module-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-0);
+    margin-bottom: 2px;
+  }
+
+  .dp-module-path {
+    font-size: 11px;
+    color: var(--text-3);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .dp-close {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-3);
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .dp-close:hover { color: var(--text-1); border-color: var(--blue-dim); }
+
+  .dp-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  .dp-body::-webkit-scrollbar { width: 4px; }
+  .dp-body::-webkit-scrollbar-track { background: transparent; }
+  .dp-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .dp-section { margin-bottom: 20px; }
+
+  .dp-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dp-kv-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .dp-kv {
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .dp-kv-val {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+    line-height: 1.1;
+  }
+
+  .dp-kv-lbl {
+    font-size: 9px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+  }
+
+  /* Dependency flow mini-graph */
+  .dp-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dp-flow-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  .dp-flow-item:hover { background: var(--surface-2); }
+
+  .dp-flow-dir {
+    font-size: 9px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-3);
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .dp-flow-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .dp-flow-fill {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute;
+    top: 0;
+  }
+
+  .dp-flow-name {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-2);
+    width: 80px;
+    flex-shrink: 0;
+  }
+
+  .dp-flow-val {
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-3);
+    width: 30px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* File list in detail */
+  .dp-file-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    cursor: pointer;
+    margin-bottom: 1px;
+  }
+
+  .dp-file-item:hover { background: var(--surface-2); }
+
+  .dp-file-dot {
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .dp-file-name {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-1);
+    flex: 1;
+  }
+
+  .dp-file-stat {
+    font-size: 9px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-3);
+  }
+
+  .dp-file-risk {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  /* ===== FLOATING LEGEND ===== */
+  .legend {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    gap: 14px;
+    padding: 8px 14px;
+    background: rgba(6,8,13,0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 10px;
+    color: var(--text-3);
+    z-index: 100;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend-line {
+    width: 16px;
+    height: 2px;
+    border-radius: 1px;
+  }
+
+  .legend-line.dashed {
+    background: none;
+    border-top: 2px dashed;
+  }
+
+  /* ===== MINIMAP ===== */
+  .minimap {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    width: 160px;
+    height: 100px;
+    background: rgba(6,8,13,0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 100;
+    padding: 6px;
+    overflow: hidden;
+  }
+
+  .minimap-viewport {
+    border: 1px solid var(--blue-dim);
+    border-radius: 2px;
+    position: absolute;
+    transition: all 0.3s;
+  }
+
+  .minimap-dot {
+    position: absolute;
+    border-radius: 2px;
+    opacity: 0.5;
+  }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .module { animation: fadeUp 0.4s ease backwards; }
+  .module:nth-child(2) { animation-delay: 0.05s; }
+  .module:nth-child(3) { animation-delay: 0.1s; }
+  .module:nth-child(4) { animation-delay: 0.15s; }
+  .module:nth-child(5) { animation-delay: 0.2s; }
+  .module:nth-child(6) { animation-delay: 0.25s; }
+  .module:nth-child(7) { animation-delay: 0.3s; }
+  .module:nth-child(8) { animation-delay: 0.35s; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.25; }
+    50% { opacity: 0.5; }
+  }
+
+  .pulse-slow { animation: pulse 3s ease infinite; }
+</style>
+</head>
+<body>
+
+<div class="dot-grid"></div>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="tb-logo">
+    <div class="tb-logo-mark">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+    </div>
+    <span class="tb-logo-name">Ariadne</span>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-search">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" placeholder="Jump to symbol or file..." />
+    <span class="tb-kbd">/</span>
+  </div>
+
+  <div class="tb-mode">
+    <button class="tb-mode-btn active">Architecture</button>
+    <button class="tb-mode-btn">Risk</button>
+    <button class="tb-mode-btn">Coupling</button>
+    <button class="tb-mode-btn">Dependencies</button>
+  </div>
+
+  <div class="tb-metrics">
+    <div class="tb-metric">
+      <span class="tb-metric-dot" style="background: var(--green)"></span>
+      <span class="tb-metric-val" style="color: var(--green)">84</span>
+      <span class="tb-metric-lbl">health</span>
+    </div>
+    <div class="tb-metric">
+      <span class="tb-metric-val" style="color: var(--text-1)">1,842</span>
+      <span class="tb-metric-lbl">symbols</span>
+    </div>
+    <div class="tb-metric">
+      <span class="tb-metric-val" style="color: var(--red)">47</span>
+      <span class="tb-metric-lbl">dead</span>
+    </div>
+    <div class="tb-metric">
+      <span class="tb-metric-val" style="color: var(--orange)">5</span>
+      <span class="tb-metric-lbl">cycles</span>
+    </div>
+    <div class="tb-metric">
+      <span class="tb-metric-val" style="color: var(--text-2)">87.4%</span>
+      <span class="tb-metric-lbl">resolved</span>
+    </div>
+  </div>
+</div>
+
+<!-- CANVAS -->
+<div class="canvas">
+
+  <!-- SVG CONNECTIONS -->
+  <svg class="connections-svg" id="connSvg">
+    <defs>
+      <marker id="arrow-blue" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0 0, 10 3.5, 0 7" fill="var(--blue)" opacity="0.4"/>
+      </marker>
+      <marker id="arrow-orange" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0 0, 10 3.5, 0 7" fill="var(--orange)" opacity="0.6"/>
+      </marker>
+      <marker id="arrow-green" viewBox="0 0 10 7" refX="9" refY="3.5" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+        <polygon points="0 0, 10 3.5, 0 7" fill="var(--green)" opacity="0.4"/>
+      </marker>
+    </defs>
+
+    <!-- pipeline → db (heavy, coupling 0.85) -->
+    <path class="conn-line" d="M 410,280 C 410,380 280,380 280,480" stroke="var(--red)" stroke-width="2.5" opacity="0.3" marker-end="url(#arrow-blue)"/>
+    <text class="conn-label" x="330" y="385" fill="var(--red)">0.85</text>
+
+    <!-- pipeline → graph (coupling 0.73, CYCLE) -->
+    <path class="conn-line cycle" d="M 500,300 C 580,360 650,360 700,420" stroke="var(--orange)" stroke-width="2" opacity="0.35" marker-end="url(#arrow-orange)"/>
+    <text class="conn-label" x="610" y="355" fill="var(--orange)">cycle</text>
+
+    <!-- pipeline → parse -->
+    <path class="conn-line" d="M 340,200 C 300,160 240,160 180,190" stroke="var(--blue)" marker-end="url(#arrow-blue)"/>
+
+    <!-- db → analysis (cycle) -->
+    <path class="conn-line cycle" d="M 320,560 C 400,600 500,600 580,560" stroke="var(--orange)" stroke-width="1.5" opacity="0.3" marker-end="url(#arrow-orange)"/>
+
+    <!-- mcp → db -->
+    <path class="conn-line" d="M 850,280 C 700,350 400,400 300,480" stroke="var(--blue)" marker-end="url(#arrow-blue)"/>
+
+    <!-- analysis → graph -->
+    <path class="conn-line" d="M 620,520 C 660,480 680,460 700,440" stroke="var(--green)" marker-end="url(#arrow-green)"/>
+
+    <!-- search → db -->
+    <path class="conn-line" d="M 900,520 C 700,560 400,560 310,540" stroke="var(--blue)" opacity="0.15" marker-end="url(#arrow-blue)"/>
+
+    <!-- dashboard → db -->
+    <path class="conn-line" d="M 100,480 C 140,500 200,510 260,510" stroke="var(--blue)" opacity="0.15" marker-end="url(#arrow-blue)"/>
+
+    <!-- CLI → pipeline -->
+    <path class="conn-line" d="M 130,140 C 200,160 280,180 340,200" stroke="var(--cyan)" opacity="0.15" marker-end="url(#arrow-blue)"/>
+  </svg>
+
+  <!-- ENTRY LAYER LABEL -->
+  <div style="position: absolute; top: 66px; left: 20px; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-3); opacity: 0.5;">Entry Points</div>
+
+  <!-- CLI -->
+  <div class="module glow-blue" style="left: 50px; top: 90px; min-width: 140px;" onclick="selectModule(this, 'cli')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--cyan)"></span>
+        main.rs
+      </div>
+    </div>
+    <div class="mod-stats">CLI · 12 symbols</div>
+  </div>
+
+  <!-- MCP SERVER -->
+  <div class="module glow-green" style="left: 790px; top: 90px; min-width: 200px;" onclick="selectModule(this, 'mcp')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--green)"></span>
+        mcp/
+      </div>
+      <div class="mod-stats">156 sym</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">tools/mod.rs</span><span class="mod-file-stat">40</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">tools/symbol.rs</span><span class="mod-file-stat">32</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">tools/impact.rs</span><span class="mod-file-stat">28</span></div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(63,185,80,0.1); color: var(--green);">healthy</span>
+    </div>
+  </div>
+
+  <!-- CORE LAYER LABEL -->
+  <div style="position: absolute; top: 170px; left: 20px; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-3); opacity: 0.5;">Core Logic</div>
+
+  <!-- PIPELINE (largest, most important) -->
+  <div class="module glow-blue selected" style="left: 310px; top: 190px; min-width: 240px;" onclick="selectModule(this, 'pipeline')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--green)"></span>
+        pipeline/
+      </div>
+      <div class="mod-stats">387 sym · 14 files</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file">
+        <div class="mod-file-bar" style="background: var(--red)"></div>
+        <span class="mod-file-name">call_resolution.rs</span>
+        <span class="mod-file-badge" style="background: rgba(248,81,73,0.15); color: var(--red);">0.91</span>
+      </div>
+      <div class="mod-file">
+        <div class="mod-file-bar" style="background: var(--green)"></div>
+        <span class="mod-file-name">parsing.rs</span>
+        <span class="mod-file-stat">48</span>
+      </div>
+      <div class="mod-file">
+        <div class="mod-file-bar" style="background: var(--green)"></div>
+        <span class="mod-file-name">structure.rs</span>
+        <span class="mod-file-stat">28</span>
+      </div>
+      <div class="mod-file" style="color: var(--text-3); font-style: italic;">
+        <div class="mod-file-bar" style="background: var(--border)"></div>
+        <span class="mod-file-name">+11 more files</span>
+      </div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(219,109,40,0.1); color: var(--orange);">2 cycles</span>
+      <span class="mod-tag" style="background: rgba(188,140,255,0.1); color: var(--purple);">risk: 0.71</span>
+    </div>
+  </div>
+
+  <!-- PARSE -->
+  <div class="module glow-green" style="left: 60px; top: 200px; min-width: 200px;" onclick="selectModule(this, 'parse')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--yellow)"></span>
+        parse/
+      </div>
+      <div class="mod-stats">284 sym · 10 files</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">python.rs</span><span class="mod-file-stat">42</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">javascript.rs</span><span class="mod-file-stat">40</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--red)"></div><span class="mod-file-name">ruby.rs</span><span class="mod-file-badge" style="background: rgba(248,81,73,0.15); color: var(--red);">5 dead</span></div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(248,81,73,0.1); color: var(--red);">12 dead</span>
+    </div>
+  </div>
+
+  <!-- GRAPH -->
+  <div class="module glow-red" style="left: 640px; top: 380px; min-width: 200px;" onclick="selectModule(this, 'graph')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--yellow)"></span>
+        graph/
+      </div>
+      <div class="mod-stats">142 sym · 5 files</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file">
+        <div class="mod-file-bar" style="background: var(--yellow)"></div>
+        <span class="mod-file-name">mod.rs</span>
+        <span class="mod-file-badge" style="background: rgba(210,153,34,0.15); color: var(--yellow);">god obj</span>
+      </div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">blast_radius.rs</span><span class="mod-file-stat">34</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">circular.rs</span><span class="mod-file-stat">24</span></div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(210,153,34,0.1); color: var(--yellow);">god object</span>
+    </div>
+  </div>
+
+  <!-- DATA LAYER LABEL -->
+  <div style="position: absolute; top: 445px; left: 20px; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-3); opacity: 0.5;">Data Layer</div>
+
+  <!-- DB -->
+  <div class="module glow-red" style="left: 220px; top: 470px; min-width: 200px;" onclick="selectModule(this, 'db')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--yellow)"></span>
+        db/
+      </div>
+      <div class="mod-stats">198 sym · 4 files</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file">
+        <div class="mod-file-bar" style="background: var(--red)"></div>
+        <span class="mod-file-name">query.rs</span>
+        <span class="mod-file-badge" style="background: rgba(210,153,34,0.15); color: var(--yellow);">god obj</span>
+      </div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">schema.rs</span><span class="mod-file-stat">52</span></div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(210,153,34,0.1); color: var(--yellow);">god object</span>
+      <span class="mod-tag" style="background: rgba(219,109,40,0.1); color: var(--orange);">1 cycle</span>
+    </div>
+  </div>
+
+  <!-- ANALYSIS -->
+  <div class="module glow-green" style="left: 520px; top: 520px; min-width: 180px;" onclick="selectModule(this, 'analysis')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--green)"></span>
+        analysis/
+      </div>
+      <div class="mod-stats">118 sym · 5 files</div>
+    </div>
+    <div class="mod-files">
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">affected_tests.rs</span></div>
+      <div class="mod-file"><div class="mod-file-bar" style="background: var(--green)"></div><span class="mod-file-name">boundaries.rs</span></div>
+    </div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(63,185,80,0.1); color: var(--green);">healthy</span>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="module glow-green" style="left: 30px; top: 440px; min-width: 150px;" onclick="selectModule(this, 'dashboard')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--green)"></span>
+        dashboard/
+      </div>
+    </div>
+    <div class="mod-stats">87 sym · 3 files</div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="module glow-green" style="left: 830px; top: 460px; min-width: 150px;" onclick="selectModule(this, 'search')">
+    <div class="mod-header">
+      <div class="mod-name">
+        <span class="mod-health" style="background: var(--green)"></span>
+        search/
+      </div>
+    </div>
+    <div class="mod-stats">64 sym · 2 files</div>
+    <div class="mod-issues">
+      <span class="mod-tag" style="background: rgba(63,185,80,0.1); color: var(--green);">healthy</span>
+    </div>
+  </div>
+
+  <!-- Small modules cluster -->
+  <div class="module" style="left: 830px; top: 560px; min-width: 120px; padding: 10px 12px;">
+    <div class="mod-name" style="font-size: 11px;">
+      <span class="mod-health" style="background: var(--green); width: 5px; height: 5px;"></span>
+      config/
+    </div>
+    <div class="mod-stats" style="font-size: 9px;">48 sym</div>
+  </div>
+
+  <div class="module" style="left: 970px; top: 560px; min-width: 100px; padding: 10px 12px;">
+    <div class="mod-name" style="font-size: 11px;">
+      <span class="mod-health" style="background: var(--red); width: 5px; height: 5px;"></span>
+      output/
+    </div>
+    <div class="mod-stats" style="font-size: 9px;">42 sym</div>
+    <div class="mod-issues"><span class="mod-tag" style="font-size: 8px; background: rgba(248,81,73,0.1); color: var(--red);">8 dead</span></div>
+  </div>
+
+  <div class="module" style="left: 970px; top: 460px; min-width: 100px; padding: 10px 12px;">
+    <div class="mod-name" style="font-size: 11px;">
+      <span class="mod-health" style="background: var(--green); width: 5px; height: 5px;"></span>
+      watch/
+    </div>
+    <div class="mod-stats" style="font-size: 9px;">31 sym</div>
+  </div>
+
+  <div class="module" style="left: 970px; top: 380px; min-width: 100px; padding: 10px 12px;">
+    <div class="mod-name" style="font-size: 11px;">
+      <span class="mod-health" style="background: var(--green); width: 5px; height: 5px;"></span>
+      lsp/
+    </div>
+    <div class="mod-stats" style="font-size: 9px;">28 sym</div>
+  </div>
+</div>
+
+<!-- DETAIL PANEL -->
+<div class="detail-panel open" id="detailPanel">
+  <div class="dp-head">
+    <div class="dp-head-info">
+      <div class="dp-module-name">pipeline/</div>
+      <div class="dp-module-path">src/pipeline · 14 files</div>
+    </div>
+    <button class="dp-close" onclick="closePanel()">×</button>
+  </div>
+  <div class="dp-body">
+    <div class="dp-section">
+      <div class="dp-section-title">Overview</div>
+      <div class="dp-kv-grid">
+        <div class="dp-kv"><div class="dp-kv-val" style="color: var(--text-0)">387</div><div class="dp-kv-lbl">Symbols</div></div>
+        <div class="dp-kv"><div class="dp-kv-val" style="color: var(--green)">0.78</div><div class="dp-kv-lbl">Health</div></div>
+        <div class="dp-kv"><div class="dp-kv-val" style="color: var(--purple)">0.71</div><div class="dp-kv-lbl">Risk</div></div>
+        <div class="dp-kv"><div class="dp-kv-val" style="color: var(--orange)">2</div><div class="dp-kv-lbl">Cycles</div></div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">Dependencies</div>
+      <div class="dp-flow">
+        <div class="dp-flow-item">
+          <span class="dp-flow-dir">→</span>
+          <span class="dp-flow-name">db/</span>
+          <div class="dp-flow-bar"><div class="dp-flow-fill" style="width: 85%; background: var(--red); left: 0;"></div></div>
+          <span class="dp-flow-val" style="color: var(--red);">.85</span>
+        </div>
+        <div class="dp-flow-item">
+          <span class="dp-flow-dir">↔</span>
+          <span class="dp-flow-name">graph/</span>
+          <div class="dp-flow-bar"><div class="dp-flow-fill" style="width: 73%; background: var(--orange); left: 0;"></div></div>
+          <span class="dp-flow-val" style="color: var(--orange);">.73</span>
+        </div>
+        <div class="dp-flow-item">
+          <span class="dp-flow-dir">←</span>
+          <span class="dp-flow-name">parse/</span>
+          <div class="dp-flow-bar"><div class="dp-flow-fill" style="width: 61%; background: var(--yellow); left: 0;"></div></div>
+          <span class="dp-flow-val">.61</span>
+        </div>
+        <div class="dp-flow-item">
+          <span class="dp-flow-dir">→</span>
+          <span class="dp-flow-name">config/</span>
+          <div class="dp-flow-bar"><div class="dp-flow-fill" style="width: 25%; background: var(--green); left: 0;"></div></div>
+          <span class="dp-flow-val">.25</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">Files by Risk</div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--red)"></div>
+        <span class="dp-file-name">call_resolution.rs</span>
+        <span class="dp-file-stat">34 sym</span>
+        <span class="dp-file-risk" style="background: rgba(248,81,73,0.15); color: var(--red);">0.91</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--orange)"></div>
+        <span class="dp-file-name">parsing.rs</span>
+        <span class="dp-file-stat">48 sym</span>
+        <span class="dp-file-risk" style="background: rgba(219,109,40,0.15); color: var(--orange);">0.67</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--yellow)"></div>
+        <span class="dp-file-name">structure.rs</span>
+        <span class="dp-file-stat">28 sym</span>
+        <span class="dp-file-risk" style="background: rgba(210,153,34,0.15); color: var(--yellow);">0.48</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--green)"></div>
+        <span class="dp-file-name">import_resolution.rs</span>
+        <span class="dp-file-stat">22 sym</span>
+        <span class="dp-file-risk" style="background: rgba(63,185,80,0.1); color: var(--green);">0.22</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--green)"></div>
+        <span class="dp-file-name">community.rs</span>
+        <span class="dp-file-stat">20 sym</span>
+        <span class="dp-file-risk" style="background: rgba(63,185,80,0.1); color: var(--green);">0.18</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--green)"></div>
+        <span class="dp-file-name">dead_code.rs</span>
+        <span class="dp-file-stat">18 sym</span>
+        <span class="dp-file-risk" style="background: rgba(63,185,80,0.1); color: var(--green);">0.15</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--green)"></div>
+        <span class="dp-file-name">heritage.rs</span>
+        <span class="dp-file-stat">16 sym</span>
+        <span class="dp-file-risk" style="background: rgba(63,185,80,0.1); color: var(--green);">0.12</span>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">Hottest Symbols</div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--purple)"></div>
+        <span class="dp-file-name">resolve_calls</span>
+        <span class="dp-file-risk" style="background: rgba(188,140,255,0.1); color: var(--purple);">51 conn</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--purple)"></div>
+        <span class="dp-file-name">run_pipeline</span>
+        <span class="dp-file-risk" style="background: rgba(188,140,255,0.1); color: var(--purple);">38 conn</span>
+      </div>
+      <div class="dp-file-item">
+        <div class="dp-file-dot" style="background: var(--cyan)"></div>
+        <span class="dp-file-name">extract_symbols</span>
+        <span class="dp-file-risk" style="background: rgba(57,210,192,0.1); color: var(--cyan);">24 conn</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-line" style="background: var(--blue);"></div> dependency</div>
+  <div class="legend-item"><div class="legend-line" style="background: var(--red);"></div> high coupling</div>
+  <div class="legend-item"><div class="legend-line dashed" style="border-color: var(--orange);"></div> cycle</div>
+  <div class="legend-item"><div style="width: 6px; height: 6px; border-radius: 50%; background: var(--green);"></div> healthy</div>
+  <div class="legend-item"><div style="width: 6px; height: 6px; border-radius: 50%; background: var(--yellow);"></div> moderate</div>
+  <div class="legend-item"><div style="width: 6px; height: 6px; border-radius: 50%; background: var(--red);"></div> at risk</div>
+</div>
+
+<script>
+function selectModule(el, name) {
+  document.querySelectorAll('.module').forEach(m => m.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closePanel() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.module').forEach(m => m.classList.remove('selected'));
+}
+
+// Mode switching
+document.querySelectorAll('.tb-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tb-mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closePanel();
+  if (e.key === '/') { e.preventDefault(); document.querySelector('.tb-search input').focus(); }
+});
+
+// Hover highlighting for connections
+document.querySelectorAll('.module').forEach(mod => {
+  mod.addEventListener('mouseenter', () => {
+    document.querySelectorAll('.conn-line').forEach(l => l.classList.add('dimmed'));
+    document.querySelectorAll('.conn-label').forEach(l => l.classList.add('dimmed'));
+  });
+  mod.addEventListener('mouseleave', () => {
+    document.querySelectorAll('.conn-line').forEach(l => l.classList.remove('dimmed'));
+    document.querySelectorAll('.conn-label').forEach(l => l.classList.remove('dimmed'));
+  });
+});
+</script>
+
+</body>
+</html>

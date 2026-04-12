@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — Tab Navigation Prototype</title>
+<style>
+  :root {
+    --bg: #09090B;
+    --bg-deep: #000;
+    --surface: #111113;
+    --surface-2: #19191C;
+    --border: #1E1E22;
+    --border-light: #2A2A2E;
+    --text-0: #FAFAF9;
+    --text-1: #D6D3D1;
+    --text-2: #A8A29E;
+    --text-3: #57534E;
+    --text-4: #3A3733;
+    --blue: #60A5FA;
+    --green: #4ADE80;
+    --green-dim: #22C55E;
+    --yellow: #FDE047;
+    --orange: #FB923C;
+    --red: #F87171;
+    --purple: #C084FC;
+    --cyan: #22D3EE;
+    --pink: #F472B6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+  .serif { font-family: 'Georgia', 'Times New Roman', serif; }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 28px;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(24px) saturate(1.4);
+    border-bottom: 1px solid var(--border);
+    z-index: 200;
+  }
+
+  .topbar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    min-width: 140px;
+  }
+
+  .topbar-mark {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    display: grid;
+    place-items: center;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+  }
+
+  .topbar-mark svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: white;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+
+  .topbar-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.3px;
+  }
+
+  /* Tab buttons */
+  .topbar-tabs {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--surface);
+    border-radius: 10px;
+    padding: 3px;
+    border: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    padding: 6px 20px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    letter-spacing: -0.2px;
+    font-family: inherit;
+    position: relative;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-2);
+  }
+
+  .tab-btn.active {
+    background: var(--surface-2);
+    color: var(--text-0);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04);
+  }
+
+  .tab-btn .tab-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  .tab-signal .tab-dot { background: var(--green); box-shadow: 0 0 6px rgba(74, 222, 128, 0.4); }
+  .tab-void .tab-dot { background: var(--purple); box-shadow: 0 0 6px rgba(192, 132, 252, 0.4); }
+
+  /* Stats */
+  .topbar-stats {
+    font-size: 12px;
+    color: var(--text-3);
+    flex-shrink: 0;
+    min-width: 140px;
+    text-align: right;
+    letter-spacing: 0.2px;
+  }
+
+  .topbar-stats span {
+    color: var(--text-2);
+  }
+
+  /* Search overlay */
+  .search-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(8px);
+    z-index: 500;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 120px;
+  }
+
+  .search-overlay.open {
+    display: flex;
+  }
+
+  .search-box {
+    width: 520px;
+    background: var(--surface);
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    padding: 16px 20px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  }
+
+  .search-box input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-0);
+    font-size: 16px;
+    font-family: inherit;
+  }
+
+  .search-box input::placeholder {
+    color: var(--text-4);
+  }
+
+  .search-hint {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--text-4);
+    display: flex;
+    gap: 16px;
+  }
+
+  .search-hint kbd {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    font-family: inherit;
+    color: var(--text-3);
+  }
+
+  /* ===== VIEW CONTAINER ===== */
+  .views {
+    margin-top: 52px;
+    height: calc(100vh - 52px);
+    position: relative;
+  }
+
+  .view {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .view.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ===== SIGNAL VIEW ===== */
+  .signal-view {
+    overflow-y: auto;
+    padding: 48px 64px 80px;
+  }
+
+  .signal-view::-webkit-scrollbar { width: 6px; }
+  .signal-view::-webkit-scrollbar-track { background: transparent; }
+  .signal-view::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .signal-inner {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  /* Hero */
+  .signal-hero {
+    margin-bottom: 40px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .signal-hero h1 {
+    font-size: 42px;
+    font-weight: 400;
+    color: var(--text-2);
+    letter-spacing: -1px;
+    line-height: 1.2;
+  }
+
+  .signal-hero h1 .score {
+    font-weight: 700;
+    background: linear-gradient(135deg, #4ADE80, #22D3EE);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .signal-summary {
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--text-3);
+    letter-spacing: 0.3px;
+  }
+
+  .signal-summary span {
+    color: var(--text-2);
+  }
+
+  /* Stats row */
+  .signal-stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 48px;
+  }
+
+  .stat-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    flex: 1;
+  }
+
+  .stat-chip .stat-num {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  .stat-chip .stat-label {
+    font-size: 12px;
+    color: var(--text-3);
+    letter-spacing: 0.2px;
+  }
+
+  .stat-chip.dead .stat-num { color: var(--red); }
+  .stat-chip.cycles .stat-num { color: var(--orange); }
+  .stat-chip.gods .stat-num { color: var(--yellow); }
+  .stat-chip.risky .stat-num { color: var(--purple); }
+
+  /* Section headings */
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-3);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Risk cards */
+  .risk-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 48px;
+  }
+
+  .risk-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .risk-card:hover {
+    border-color: var(--border-light);
+    background: var(--surface-2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .risk-score {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--red);
+    min-width: 48px;
+    text-align: center;
+    letter-spacing: -0.5px;
+  }
+
+  .risk-info {
+    flex: 1;
+  }
+
+  .risk-file {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-0);
+    margin-bottom: 4px;
+  }
+
+  .risk-desc {
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.5;
+  }
+
+  .risk-arrow {
+    color: var(--text-4);
+    font-size: 14px;
+    transition: transform 0.15s ease;
+  }
+
+  .risk-card:hover .risk-arrow {
+    transform: translateX(3px);
+    color: var(--text-3);
+  }
+
+  /* Module grid */
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .module-card {
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .module-card:hover {
+    border-color: var(--border-light);
+    background: var(--surface-2);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .module-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .module-card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.2px;
+  }
+
+  .module-card-count {
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  .module-health-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+
+  .module-health-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+  }
+
+  .module-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .module-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+    color: var(--text-3);
+    border: 1px solid var(--border);
+    letter-spacing: 0.2px;
+  }
+
+  /* ===== VOID VIEW ===== */
+  .void-view {
+    background: var(--bg-deep);
+    overflow: hidden;
+  }
+
+  /* Dot grid */
+  .void-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px);
+    background-size: 20px 20px;
+    z-index: 0;
+  }
+
+  /* Ambient glow */
+  .void-ambient {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 600px 400px at 30% 40%, rgba(99, 102, 241, 0.04), transparent),
+      radial-gradient(ellipse 500px 350px at 70% 60%, rgba(168, 85, 247, 0.03), transparent);
+  }
+
+  /* SVG dependency lines */
+  .void-svg {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .dep-line {
+    fill: none;
+    stroke-width: 1.5;
+    opacity: 0.4;
+    transition: opacity 0.2s ease;
+  }
+
+  .dep-normal {
+    stroke: var(--blue);
+    opacity: 0.35;
+  }
+
+  .dep-cycle {
+    stroke: var(--orange);
+    stroke-dasharray: 6 4;
+    opacity: 0.5;
+  }
+
+  /* Module boxes */
+  .void-module {
+    position: absolute;
+    z-index: 10;
+    background: rgba(25, 25, 28, 0.92);
+    backdrop-filter: blur(16px) saturate(1.3);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 14px;
+    padding: 18px 20px;
+    min-width: 180px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
+  }
+
+  .void-module:hover {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(30, 30, 34, 0.95);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  }
+
+  .void-module.highlighted {
+    border-color: rgba(192, 132, 252, 0.4);
+    box-shadow: 0 0 24px rgba(192, 132, 252, 0.15), 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .void-module-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .void-module-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .void-module-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.2px;
+  }
+
+  .void-module-meta {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-bottom: 10px;
+    letter-spacing: 0.2px;
+  }
+
+  .void-sparkline {
+    display: flex;
+    gap: 2px;
+    align-items: flex-end;
+    height: 20px;
+  }
+
+  .void-spark-bar {
+    width: 4px;
+    border-radius: 1px;
+    transition: height 0.3s ease;
+  }
+
+  /* Layer labels */
+  .void-layer-label {
+    position: absolute;
+    z-index: 5;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-4);
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
+
+  /* Bottom HUD */
+  .void-hud {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    gap: 2px;
+    background: rgba(17, 17, 19, 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .hud-btn {
+    padding: 7px 18px;
+    border-radius: 7px;
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    letter-spacing: 0.2px;
+  }
+
+  .hud-btn:hover {
+    color: var(--text-2);
+  }
+
+  .hud-btn.active {
+    background: var(--surface-2);
+    color: var(--text-0);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  /* Detail panel */
+  .detail-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 380px;
+    z-index: 100;
+    background: rgba(17, 17, 19, 0.88);
+    backdrop-filter: blur(24px) saturate(1.4);
+    border-left: 1px solid var(--border);
+    padding: 28px 24px;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: -8px 0 32px rgba(0,0,0,0.3);
+  }
+
+  .detail-panel.open {
+    transform: translateX(0);
+  }
+
+  .detail-panel::-webkit-scrollbar { width: 4px; }
+  .detail-panel::-webkit-scrollbar-track { background: transparent; }
+  .detail-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .detail-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-3);
+    font-size: 14px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.15s ease;
+  }
+
+  .detail-close:hover {
+    background: var(--surface-2);
+    color: var(--text-1);
+  }
+
+  .detail-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-0);
+    margin-bottom: 4px;
+    letter-spacing: -0.3px;
+  }
+
+  .detail-subtitle {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-bottom: 24px;
+  }
+
+  .detail-section {
+    margin-bottom: 24px;
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-4);
+    margin-bottom: 10px;
+  }
+
+  .detail-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .detail-stat {
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .detail-stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.3px;
+  }
+
+  .detail-stat-label {
+    font-size: 10px;
+    color: var(--text-3);
+    margin-top: 2px;
+    letter-spacing: 0.3px;
+  }
+
+  .detail-file-list {
+    list-style: none;
+  }
+
+  .detail-file-item {
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.1s ease;
+  }
+
+  .detail-file-item:hover {
+    background: rgba(255,255,255,0.03);
+  }
+
+  .detail-file-lines {
+    font-size: 10px;
+    color: var(--text-4);
+  }
+
+  .detail-dep-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-2);
+    transition: background 0.1s ease;
+  }
+
+  .detail-dep-item:hover {
+    background: rgba(255,255,255,0.03);
+  }
+
+  .detail-dep-arrow {
+    color: var(--text-4);
+    font-size: 10px;
+  }
+
+  .detail-dep-type {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: auto;
+  }
+
+  .detail-dep-type.imports {
+    background: rgba(96, 165, 250, 0.1);
+    color: var(--blue);
+  }
+
+  .detail-dep-type.cycle {
+    background: rgba(251, 146, 60, 0.1);
+    color: var(--orange);
+  }
+
+  /* Keyboard hint */
+  .keyboard-hints {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 300;
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text-4);
+  }
+
+  .keyboard-hints kbd {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    color: var(--text-3);
+    font-family: inherit;
+    margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <div class="topbar-mark">
+      <svg viewBox="0 0 14 14"><path d="M7 2 L12 7 L7 12 L2 7 Z"/></svg>
+    </div>
+    <div class="topbar-name">Ariadne</div>
+  </div>
+
+  <div class="topbar-tabs">
+    <button class="tab-btn tab-signal active" onclick="switchTab('signal')">
+      <span class="tab-dot"></span>Signal
+    </button>
+    <button class="tab-btn tab-void" onclick="switchTab('void')">
+      <span class="tab-dot"></span>Void
+    </button>
+  </div>
+
+  <div class="topbar-stats mono">
+    <span>1,842</span> sym &middot; <span>247</span> files
+  </div>
+</header>
+
+<!-- Search Overlay -->
+<div class="search-overlay" id="searchOverlay">
+  <div class="search-box">
+    <input type="text" placeholder="Search symbols, files, modules..." id="searchInput" autofocus>
+    <div class="search-hint">
+      <span><kbd>Esc</kbd> close</span>
+      <span><kbd>Tab</kbd> filter type</span>
+      <span><kbd>Enter</kbd> navigate</span>
+    </div>
+  </div>
+</div>
+
+<!-- Views -->
+<div class="views">
+
+  <!-- SIGNAL VIEW -->
+  <div class="view signal-view active" id="signalView">
+    <div class="signal-inner">
+
+      <!-- Hero -->
+      <div class="signal-hero">
+        <h1 class="serif">Your codebase scores <span class="score">84</span></h1>
+        <p class="signal-summary">
+          <span>247</span> files &middot; <span>4</span> languages &middot; <span>67</span> issues found
+        </p>
+      </div>
+
+      <!-- Stats -->
+      <div class="signal-stats">
+        <div class="stat-chip dead">
+          <div class="stat-num">47</div>
+          <div class="stat-label">dead symbols</div>
+        </div>
+        <div class="stat-chip cycles">
+          <div class="stat-num">5</div>
+          <div class="stat-label">cycles</div>
+        </div>
+        <div class="stat-chip gods">
+          <div class="stat-num">3</div>
+          <div class="stat-label">god modules</div>
+        </div>
+        <div class="stat-chip risky">
+          <div class="stat-num">12</div>
+          <div class="stat-label">risky files</div>
+        </div>
+      </div>
+
+      <!-- Critical Risks -->
+      <div class="section-title">Critical Risks</div>
+      <div class="risk-cards">
+        <div class="risk-card" data-module="pipeline" onclick="navigateToModule('pipeline')">
+          <div class="risk-score mono">92</div>
+          <div class="risk-info">
+            <div class="risk-file mono">pipeline/resolve.rs</div>
+            <div class="risk-desc">High cyclomatic complexity (47), 12 dependencies, changed 23 times in 30 days. Central bottleneck in resolve phase.</div>
+          </div>
+          <div class="risk-arrow">&rarr;</div>
+        </div>
+        <div class="risk-card" data-module="graph" onclick="navigateToModule('graph')">
+          <div class="risk-score mono">87</div>
+          <div class="risk-info">
+            <div class="risk-file mono">graph/blast_radius.rs</div>
+            <div class="risk-desc">Circular dependency with analysis/dead_code.rs. 8 callers, 340 lines, no test coverage for edge cases.</div>
+          </div>
+          <div class="risk-arrow">&rarr;</div>
+        </div>
+      </div>
+
+      <!-- Modules -->
+      <div class="section-title">Modules</div>
+      <div class="module-grid">
+        <div class="module-card" onclick="navigateToModule('pipeline')">
+          <div class="module-card-header">
+            <div class="module-card-name">pipeline/</div>
+            <div class="module-card-count mono">412 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:72%; background: linear-gradient(90deg, var(--orange), var(--yellow));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">14 phases</span>
+            <span class="module-tag">3 risky</span>
+          </div>
+        </div>
+        <div class="module-card" onclick="navigateToModule('parse')">
+          <div class="module-card-header">
+            <div class="module-card-name">parse/</div>
+            <div class="module-card-count mono">286 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:91%; background: linear-gradient(90deg, var(--green), var(--cyan));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">9 languages</span>
+            <span class="module-tag">tree-sitter</span>
+          </div>
+        </div>
+        <div class="module-card" onclick="navigateToModule('db')">
+          <div class="module-card-header">
+            <div class="module-card-name">db/</div>
+            <div class="module-card-count mono">148 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:85%; background: linear-gradient(90deg, var(--green-dim), var(--green));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">SQLite</span>
+            <span class="module-tag">schema</span>
+          </div>
+        </div>
+        <div class="module-card" onclick="navigateToModule('mcp')">
+          <div class="module-card-header">
+            <div class="module-card-name">mcp/</div>
+            <div class="module-card-count mono">94 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:78%; background: linear-gradient(90deg, var(--yellow), var(--green));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">10 tools</span>
+            <span class="module-tag">stdio</span>
+          </div>
+        </div>
+        <div class="module-card" onclick="navigateToModule('graph')">
+          <div class="module-card-header">
+            <div class="module-card-name">graph/</div>
+            <div class="module-card-count mono">203 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:65%; background: linear-gradient(90deg, var(--red), var(--orange));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">petgraph</span>
+            <span class="module-tag">1 cycle</span>
+          </div>
+        </div>
+        <div class="module-card" onclick="navigateToModule('analysis')">
+          <div class="module-card-header">
+            <div class="module-card-name">analysis/</div>
+            <div class="module-card-count mono">176 sym</div>
+          </div>
+          <div class="module-health-bar">
+            <div class="module-health-fill" style="width:82%; background: linear-gradient(90deg, var(--green-dim), var(--green));"></div>
+          </div>
+          <div class="module-tags">
+            <span class="module-tag">dead code</span>
+            <span class="module-tag">arch rules</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VOID VIEW -->
+  <div class="view void-view" id="voidView">
+    <div class="void-grid"></div>
+    <div class="void-ambient"></div>
+
+    <!-- SVG dependency lines -->
+    <svg class="void-svg" id="voidSvg">
+      <!-- pipeline -> parse -->
+      <path class="dep-line dep-normal" d="M 340,220 C 400,220 420,300 480,310"/>
+      <!-- pipeline -> db -->
+      <path class="dep-line dep-normal" d="M 280,250 C 280,350 340,420 380,440"/>
+      <!-- parse -> db -->
+      <path class="dep-line dep-normal" d="M 560,340 C 560,400 500,430 460,440"/>
+      <!-- mcp -> pipeline -->
+      <path class="dep-line dep-normal" d="M 760,200 C 680,200 400,200 340,210"/>
+      <!-- mcp -> graph -->
+      <path class="dep-line dep-normal" d="M 780,230 C 780,300 780,340 760,370"/>
+      <!-- graph -> analysis (cycle) -->
+      <path class="dep-line dep-cycle" d="M 720,410 C 640,430 560,500 520,530"/>
+      <!-- analysis -> graph (cycle return) -->
+      <path class="dep-line dep-cycle" d="M 480,510 C 550,470 640,420 700,390"/>
+      <!-- pipeline -> graph -->
+      <path class="dep-line dep-normal" d="M 340,230 C 450,260 600,330 700,370"/>
+    </svg>
+
+    <!-- Layer labels -->
+    <div class="void-layer-label" style="left: 24px; top: 140px;">Interface</div>
+    <div class="void-layer-label" style="left: 24px; top: 310px;">Core</div>
+    <div class="void-layer-label" style="left: 24px; top: 470px;">Data</div>
+
+    <!-- Module boxes -->
+    <div class="void-module" id="void-mcp" data-module="mcp" style="left: 680px; top: 140px;" onclick="openDetail('mcp')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--cyan);"></div>
+        <div class="void-module-name">mcp/</div>
+      </div>
+      <div class="void-module-meta mono">94 symbols &middot; 6 files</div>
+      <div class="void-sparkline" data-vals="4,7,5,8,3,6,9,5,7,4"></div>
+    </div>
+
+    <div class="void-module" id="void-pipeline" data-module="pipeline" style="left: 180px; top: 170px;" onclick="openDetail('pipeline')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--orange);"></div>
+        <div class="void-module-name">pipeline/</div>
+      </div>
+      <div class="void-module-meta mono">412 symbols &middot; 18 files</div>
+      <div class="void-sparkline" data-vals="8,6,9,12,7,10,5,8,11,6"></div>
+    </div>
+
+    <div class="void-module" id="void-parse" data-module="parse" style="left: 420px; top: 270px;" onclick="openDetail('parse')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--green);"></div>
+        <div class="void-module-name">parse/</div>
+      </div>
+      <div class="void-module-meta mono">286 symbols &middot; 12 files</div>
+      <div class="void-sparkline" data-vals="3,5,4,6,5,7,4,6,3,5"></div>
+    </div>
+
+    <div class="void-module" id="void-graph" data-module="graph" style="left: 640px; top: 340px;" onclick="openDetail('graph')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--red);"></div>
+        <div class="void-module-name">graph/</div>
+      </div>
+      <div class="void-module-meta mono">203 symbols &middot; 8 files</div>
+      <div class="void-sparkline" data-vals="6,9,11,8,10,7,12,9,8,10"></div>
+    </div>
+
+    <div class="void-module" id="void-db" data-module="db" style="left: 300px; top: 420px;" onclick="openDetail('db')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--blue);"></div>
+        <div class="void-module-name">db/</div>
+      </div>
+      <div class="void-module-meta mono">148 symbols &middot; 5 files</div>
+      <div class="void-sparkline" data-vals="3,4,3,5,4,3,4,5,3,4"></div>
+    </div>
+
+    <div class="void-module" id="void-analysis" data-module="analysis" style="left: 400px; top: 490px;" onclick="openDetail('analysis')">
+      <div class="void-module-header">
+        <div class="void-module-dot" style="background: var(--purple);"></div>
+        <div class="void-module-name">analysis/</div>
+      </div>
+      <div class="void-module-meta mono">176 symbols &middot; 7 files</div>
+      <div class="void-sparkline" data-vals="5,4,6,5,7,4,5,6,4,5"></div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel" id="detailPanel">
+      <button class="detail-close" onclick="closeDetail()">&times;</button>
+      <div class="detail-title" id="detailTitle">pipeline/</div>
+      <div class="detail-subtitle" id="detailSubtitle">Core indexing pipeline &middot; 14 phases</div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Overview</div>
+        <div class="detail-stat-grid" id="detailStats">
+          <div class="detail-stat">
+            <div class="detail-stat-value" id="detailSymbols">412</div>
+            <div class="detail-stat-label">Symbols</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-value" id="detailFiles">18</div>
+            <div class="detail-stat-label">Files</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-value" id="detailHealth">72%</div>
+            <div class="detail-stat-label">Health</div>
+          </div>
+          <div class="detail-stat">
+            <div class="detail-stat-value" id="detailComplexity">High</div>
+            <div class="detail-stat-label">Complexity</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Files</div>
+        <ul class="detail-file-list" id="detailFileList">
+        </ul>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-section-title">Dependencies</div>
+        <div id="detailDeps"></div>
+      </div>
+    </div>
+
+    <!-- Bottom HUD -->
+    <div class="void-hud">
+      <button class="hud-btn active" onclick="setHudMode(this, 'architecture')">Architecture</button>
+      <button class="hud-btn" onclick="setHudMode(this, 'risk')">Risk</button>
+      <button class="hud-btn" onclick="setHudMode(this, 'coupling')">Coupling</button>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard hints -->
+<div class="keyboard-hints">
+  <span><kbd>/</kbd> search</span>
+  <span><kbd>Esc</kbd> close</span>
+</div>
+
+<script>
+// ===== MODULE DATA =====
+const moduleData = {
+  pipeline: {
+    title: 'pipeline/',
+    subtitle: 'Core indexing pipeline \u00b7 14 phases',
+    symbols: 412, files: 18, health: '72%', complexity: 'High',
+    fileList: [
+      { name: 'mod.rs', lines: 245 },
+      { name: 'resolve.rs', lines: 340 },
+      { name: 'parse_phase.rs', lines: 189 },
+      { name: 'analyze.rs', lines: 276 },
+      { name: 'output.rs', lines: 134 },
+      { name: 'types.rs', lines: 98 },
+    ],
+    deps: [
+      { name: 'parse/', type: 'imports' },
+      { name: 'db/', type: 'imports' },
+      { name: 'graph/', type: 'imports' },
+      { name: 'config/', type: 'imports' },
+    ]
+  },
+  parse: {
+    title: 'parse/',
+    subtitle: 'Tree-sitter parsers \u00b7 9 languages',
+    symbols: 286, files: 12, health: '91%', complexity: 'Medium',
+    fileList: [
+      { name: 'mod.rs', lines: 156 },
+      { name: 'rust.rs', lines: 312 },
+      { name: 'typescript.rs', lines: 287 },
+      { name: 'python.rs', lines: 264 },
+      { name: 'go.rs', lines: 198 },
+      { name: 'java.rs', lines: 231 },
+    ],
+    deps: [
+      { name: 'db/', type: 'imports' },
+    ]
+  },
+  db: {
+    title: 'db/',
+    subtitle: 'SQLite database layer \u00b7 schema + queries',
+    symbols: 148, files: 5, health: '85%', complexity: 'Low',
+    fileList: [
+      { name: 'mod.rs', lines: 120 },
+      { name: 'schema.rs', lines: 187 },
+      { name: 'queries.rs', lines: 256 },
+      { name: 'migrations.rs', lines: 94 },
+      { name: 'types.rs', lines: 67 },
+    ],
+    deps: []
+  },
+  mcp: {
+    title: 'mcp/',
+    subtitle: 'MCP server \u00b7 10 tools \u00b7 stdio transport',
+    symbols: 94, files: 6, health: '78%', complexity: 'Medium',
+    fileList: [
+      { name: 'mod.rs', lines: 89 },
+      { name: 'tools.rs', lines: 234 },
+      { name: 'handlers.rs', lines: 312 },
+      { name: 'types.rs', lines: 67 },
+      { name: 'transport.rs', lines: 145 },
+      { name: 'schema.rs', lines: 78 },
+    ],
+    deps: [
+      { name: 'pipeline/', type: 'imports' },
+      { name: 'graph/', type: 'imports' },
+      { name: 'db/', type: 'imports' },
+      { name: 'search/', type: 'imports' },
+    ]
+  },
+  graph: {
+    title: 'graph/',
+    subtitle: 'In-memory call graph \u00b7 petgraph',
+    symbols: 203, files: 8, health: '65%', complexity: 'High',
+    fileList: [
+      { name: 'mod.rs', lines: 178 },
+      { name: 'blast_radius.rs', lines: 340 },
+      { name: 'call_chains.rs', lines: 267 },
+      { name: 'circular.rs', lines: 198 },
+      { name: 'metrics.rs', lines: 145 },
+      { name: 'types.rs', lines: 89 },
+    ],
+    deps: [
+      { name: 'db/', type: 'imports' },
+      { name: 'analysis/', type: 'cycle' },
+    ]
+  },
+  analysis: {
+    title: 'analysis/',
+    subtitle: 'Dead code, arch rules, communities',
+    symbols: 176, files: 7, health: '82%', complexity: 'Medium',
+    fileList: [
+      { name: 'mod.rs', lines: 112 },
+      { name: 'dead_code.rs', lines: 287 },
+      { name: 'community.rs', lines: 198 },
+      { name: 'arch_rules.rs', lines: 234 },
+      { name: 'scip_export.rs', lines: 167 },
+      { name: 'metrics.rs', lines: 123 },
+    ],
+    deps: [
+      { name: 'graph/', type: 'cycle' },
+      { name: 'db/', type: 'imports' },
+    ]
+  },
+};
+
+// ===== TAB SWITCHING =====
+function switchTab(tab) {
+  // Update buttons
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelector('.tab-' + tab).classList.add('active');
+
+  // Update views
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(tab + 'View').classList.add('active');
+
+  // Close detail panel when switching away from void
+  if (tab === 'signal') {
+    closeDetail();
+  }
+}
+
+// ===== NAVIGATE FROM SIGNAL TO VOID =====
+function navigateToModule(moduleName) {
+  // Clear any previous highlights
+  document.querySelectorAll('.void-module').forEach(m => m.classList.remove('highlighted'));
+
+  // Switch to void tab
+  switchTab('void');
+
+  // Highlight the target module after a tiny delay for the transition
+  requestAnimationFrame(() => {
+    const target = document.getElementById('void-' + moduleName);
+    if (target) {
+      target.classList.add('highlighted');
+      // Open detail panel too
+      openDetail(moduleName);
+    }
+  });
+}
+
+// ===== DETAIL PANEL =====
+function openDetail(moduleName) {
+  const data = moduleData[moduleName];
+  if (!data) return;
+
+  // Clear highlights and set new one
+  document.querySelectorAll('.void-module').forEach(m => m.classList.remove('highlighted'));
+  const target = document.getElementById('void-' + moduleName);
+  if (target) target.classList.add('highlighted');
+
+  // Populate panel
+  document.getElementById('detailTitle').textContent = data.title;
+  document.getElementById('detailSubtitle').textContent = data.subtitle;
+  document.getElementById('detailSymbols').textContent = data.symbols;
+  document.getElementById('detailFiles').textContent = data.files;
+  document.getElementById('detailHealth').textContent = data.health;
+  document.getElementById('detailComplexity').textContent = data.complexity;
+
+  // File list
+  const fileList = document.getElementById('detailFileList');
+  fileList.innerHTML = data.fileList.map(f =>
+    '<li class="detail-file-item"><span class="mono">' + f.name + '</span><span class="detail-file-lines mono">' + f.lines + ' lines</span></li>'
+  ).join('');
+
+  // Dependencies
+  const deps = document.getElementById('detailDeps');
+  if (data.deps.length === 0) {
+    deps.innerHTML = '<div style="font-size:12px;color:var(--text-4);padding:8px 10px;">No outgoing dependencies</div>';
+  } else {
+    deps.innerHTML = data.deps.map(d =>
+      '<div class="detail-dep-item">' +
+        '<span class="detail-dep-arrow">\u2192</span>' +
+        '<span class="mono">' + d.name + '</span>' +
+        '<span class="detail-dep-type ' + d.type + '">' + d.type + '</span>' +
+      '</div>'
+    ).join('');
+  }
+
+  // Show panel
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.querySelectorAll('.void-module').forEach(m => m.classList.remove('highlighted'));
+}
+
+// ===== HUD MODE =====
+function setHudMode(btn, mode) {
+  document.querySelectorAll('.hud-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ===== SEARCH =====
+function openSearch() {
+  document.getElementById('searchOverlay').classList.add('open');
+  requestAnimationFrame(() => {
+    document.getElementById('searchInput').focus();
+  });
+}
+
+function closeSearch() {
+  document.getElementById('searchOverlay').classList.remove('open');
+  document.getElementById('searchInput').value = '';
+}
+
+// ===== SPARKLINES =====
+function renderSparklines() {
+  document.querySelectorAll('.void-sparkline').forEach(el => {
+    const vals = el.dataset.vals.split(',').map(Number);
+    const max = Math.max(...vals);
+    const colors = {
+      'mcp': 'var(--cyan)',
+      'pipeline': 'var(--orange)',
+      'parse': 'var(--green)',
+      'graph': 'var(--red)',
+      'db': 'var(--blue)',
+      'analysis': 'var(--purple)',
+    };
+    const parent = el.closest('.void-module');
+    const moduleName = parent ? parent.dataset.module : '';
+    const color = colors[moduleName] || 'var(--text-3)';
+
+    el.innerHTML = vals.map(v => {
+      const h = Math.max(3, (v / max) * 18);
+      return '<div class="void-spark-bar" style="height:' + h + 'px;background:' + color + ';opacity:' + (0.3 + (v / max) * 0.5) + ';"></div>';
+    }).join('');
+  });
+}
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', function(e) {
+  // "/" to open search
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
+    const overlay = document.getElementById('searchOverlay');
+    if (!overlay.classList.contains('open')) {
+      e.preventDefault();
+      openSearch();
+    }
+  }
+
+  // Escape to close things
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('searchOverlay');
+    if (overlay.classList.contains('open')) {
+      closeSearch();
+    } else {
+      closeDetail();
+    }
+  }
+
+  // 1/2 for tab switching
+  if ((e.key === '1' || e.key === '2') && !e.ctrlKey && !e.metaKey) {
+    const overlay = document.getElementById('searchOverlay');
+    if (!overlay.classList.contains('open')) {
+      const target = document.activeElement;
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+        if (e.key === '1') switchTab('signal');
+        if (e.key === '2') switchTab('void');
+      }
+    }
+  }
+});
+
+// Click outside search to close
+document.getElementById('searchOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSearch();
+});
+
+// ===== INIT =====
+renderSparklines();
+</script>
+</body>
+</html>

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Triage — Concept Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0B0F19;
+    --bg-secondary: #111827;
+    --bg-card: #1A1F2E;
+    --bg-card-hover: #222842;
+    --bg-elevated: #252B3B;
+    --border: #2A3149;
+    --border-subtle: #1E2538;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-yellow: #EAB308;
+    --accent-orange: #F97316;
+    --accent-red: #EF4444;
+    --accent-purple: #A855F7;
+    --accent-cyan: #06B6D4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  code, .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== HEADER ===== */
+  .header {
+    display: flex;
+    align-items: center;
+    padding: 12px 24px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .logo-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-text { font-size: 15px; font-weight: 600; }
+
+  .header-center {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    justify-content: center;
+  }
+
+  .health-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: rgba(34,197,94,0.1);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 20px;
+  }
+
+  .health-score {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+    color: var(--accent-green);
+  }
+
+  .health-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .search-compact {
+    position: relative;
+  }
+
+  .search-compact input {
+    width: 200px;
+    padding: 6px 10px 6px 30px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+  }
+
+  .search-compact svg {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+
+  .stat-chips {
+    display: flex;
+    gap: 6px;
+  }
+
+  .stat-chip {
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ===== KANBAN BOARD ===== */
+  .board {
+    flex: 1;
+    display: flex;
+    gap: 16px;
+    padding: 20px 24px;
+    overflow-x: auto;
+  }
+
+  .column {
+    flex: 1;
+    min-width: 280px;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .col-header {
+    padding: 14px 16px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .col-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .col-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .col-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .col-count {
+    font-size: 11px;
+    font-family: 'Fira Code', monospace;
+    color: var(--text-muted);
+    background: var(--bg-card);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .col-cards {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .col-cards::-webkit-scrollbar { width: 4px; }
+  .col-cards::-webkit-scrollbar-track { background: transparent; }
+  .col-cards::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ===== CARDS ===== */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .card:hover {
+    border-color: var(--accent-blue);
+    background: var(--bg-card-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+
+  .card-severity {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    border-radius: 8px 0 0 8px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    padding-left: 6px;
+  }
+
+  .card-type {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .ct-dead { background: rgba(239,68,68,0.15); color: var(--accent-red); }
+  .ct-cycle { background: rgba(249,115,22,0.15); color: var(--accent-orange); }
+  .ct-god { background: rgba(234,179,8,0.15); color: var(--accent-yellow); }
+  .ct-risk { background: rgba(168,85,247,0.15); color: var(--accent-purple); }
+  .ct-coupling { background: rgba(6,182,212,0.15); color: var(--accent-cyan); }
+  .ct-smell { background: rgba(236,72,153,0.15); color: #EC4899; }
+
+  .card-impact {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    padding-left: 6px;
+  }
+
+  .card-path {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    margin-bottom: 8px;
+    padding-left: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-metrics {
+    display: flex;
+    gap: 8px;
+    padding-left: 6px;
+    flex-wrap: wrap;
+  }
+
+  .card-metric {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .card-metric .cm-val {
+    font-family: 'Fira Code', monospace;
+    font-weight: 500;
+  }
+
+  .card-detail {
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-left: 6px;
+  }
+
+  .card-detail .cd-label {
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    font-size: 9px;
+  }
+
+  .card-action {
+    margin-top: 8px;
+    padding-left: 6px;
+    display: flex;
+    gap: 6px;
+  }
+
+  .ca-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .ca-btn:hover { border-color: var(--accent-blue); color: var(--text-primary); }
+
+  .ca-btn.primary {
+    background: rgba(59,130,246,0.15);
+    border-color: rgba(59,130,246,0.3);
+    color: var(--accent-blue);
+  }
+
+  /* ===== EXPANDED CARD (DETAIL) ===== */
+  .card.expanded {
+    border-color: var(--accent-blue);
+    background: var(--bg-card-hover);
+  }
+
+  /* ===== BOTTOM STATUS ===== */
+  .bottom-status {
+    padding: 8px 24px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .bs-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .bs-val {
+    font-family: 'Fira Code', monospace;
+    color: var(--text-secondary);
+  }
+
+  .lang-strip {
+    flex: 1;
+    display: flex;
+    height: 3px;
+    border-radius: 2px;
+    overflow: hidden;
+    gap: 1px;
+  }
+
+  .lang-seg { height: 100%; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">
+    <div class="logo-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+    </div>
+    <span class="logo-text">Ariadne</span>
+  </div>
+
+  <div class="header-center">
+    <div class="health-pill">
+      <span class="health-score">84</span>
+      <div>
+        <div style="font-size: 11px; font-weight: 500; color: var(--accent-green);">Health</div>
+        <div class="health-label">+3 since last index</div>
+      </div>
+    </div>
+
+    <div class="stat-chips">
+      <span class="stat-chip" style="background: rgba(239,68,68,0.1); color: var(--accent-red);">47 dead</span>
+      <span class="stat-chip" style="background: rgba(249,115,22,0.1); color: var(--accent-orange);">5 cycles</span>
+      <span class="stat-chip" style="background: rgba(234,179,8,0.1); color: var(--accent-yellow);">3 gods</span>
+      <span class="stat-chip" style="background: rgba(168,85,247,0.1); color: var(--accent-purple);">12 high-risk</span>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="search-compact">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" placeholder="Search..." />
+    </div>
+  </div>
+</header>
+
+<!-- KANBAN BOARD -->
+<div class="board">
+
+  <!-- CRITICAL COLUMN -->
+  <div class="column">
+    <div class="col-header">
+      <div class="col-title-wrap">
+        <span class="col-dot" style="background: var(--accent-red);"></span>
+        <span class="col-title" style="color: var(--accent-red);">Critical</span>
+      </div>
+      <span class="col-count">5</span>
+    </div>
+    <div class="col-cards">
+
+      <div class="card expanded">
+        <div class="card-severity" style="background: var(--accent-red);"></div>
+        <div class="card-header">
+          <span class="card-type ct-risk">high risk</span>
+          <span class="card-impact">blast: 34 symbols</span>
+        </div>
+        <div class="card-title">call_resolution.rs</div>
+        <div class="card-path">src/pipeline/call_resolution.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-red);">0.91</span></span>
+          <span class="card-metric">fan-in: <span class="cm-val">34</span></span>
+          <span class="card-metric">churn: <span class="cm-val" style="color: var(--accent-orange);">high</span></span>
+          <span class="card-metric">coupled: <span class="cm-val">8 files</span></span>
+        </div>
+        <div class="card-detail">
+          <span class="cd-label">Why critical:</span> Highest risk score in codebase. Any change here impacts 34 downstream symbols across 8 coupled files. High churn rate amplifies risk.
+        </div>
+        <div class="card-action">
+          <button class="ca-btn primary">View Blast Radius</button>
+          <button class="ca-btn">Show Callers</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-red);"></div>
+        <div class="card-header">
+          <span class="card-type ct-god">god object</span>
+          <span class="card-impact">127 connections</span>
+        </div>
+        <div class="card-title">Database (db/mod.rs)</div>
+        <div class="card-path">src/db/mod.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">connections: <span class="cm-val" style="color: var(--accent-yellow);">127</span></span>
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-red);">0.87</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-red);"></div>
+        <div class="card-header">
+          <span class="card-type ct-god">god object</span>
+          <span class="card-impact">89 connections</span>
+        </div>
+        <div class="card-title">CallGraph (graph/mod.rs)</div>
+        <div class="card-path">src/graph/mod.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">connections: <span class="cm-val" style="color: var(--accent-yellow);">89</span></span>
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-orange);">0.70</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-red);"></div>
+        <div class="card-header">
+          <span class="card-type ct-cycle">cycle</span>
+          <span class="card-impact">coupling: 0.85</span>
+        </div>
+        <div class="card-title">pipeline ↔ db</div>
+        <div class="card-path">src/pipeline/ ↔ src/db/</div>
+        <div class="card-metrics">
+          <span class="card-metric">strength: <span class="cm-val" style="color: var(--accent-red);">0.85</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-red);"></div>
+        <div class="card-header">
+          <span class="card-type ct-risk">high risk</span>
+          <span class="card-impact">blast: 28 symbols</span>
+        </div>
+        <div class="card-title">query.rs</div>
+        <div class="card-path">src/db/query.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-red);">0.87</span></span>
+          <span class="card-metric">fan-in: <span class="cm-val">89</span></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- HIGH COLUMN -->
+  <div class="column">
+    <div class="col-header">
+      <div class="col-title-wrap">
+        <span class="col-dot" style="background: var(--accent-orange);"></span>
+        <span class="col-title" style="color: var(--accent-orange);">High</span>
+      </div>
+      <span class="col-count">8</span>
+    </div>
+    <div class="col-cards">
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-cycle">cycle</span>
+        </div>
+        <div class="card-title">pipeline ↔ graph</div>
+        <div class="card-path">src/pipeline/ ↔ src/graph/</div>
+        <div class="card-metrics">
+          <span class="card-metric">coupling: <span class="cm-val" style="color: var(--accent-orange);">0.73</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-god">god object</span>
+          <span class="card-impact">64 connections</span>
+        </div>
+        <div class="card-title">PipelineRunner</div>
+        <div class="card-path">src/pipeline/mod.rs:156</div>
+        <div class="card-metrics">
+          <span class="card-metric">connections: <span class="cm-val" style="color: var(--accent-yellow);">64</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-dead">dead code cluster</span>
+          <span class="card-impact">8 functions</span>
+        </div>
+        <div class="card-title">output/formatters.rs</div>
+        <div class="card-path">src/output/formatters.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">dead: <span class="cm-val" style="color: var(--accent-red);">8 of 28</span></span>
+          <span class="card-metric">29% dead</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-cycle">cycle</span>
+        </div>
+        <div class="card-title">db::query ↔ analysis</div>
+        <div class="card-path">src/db/ ↔ src/analysis/</div>
+        <div class="card-metrics">
+          <span class="card-metric">coupling: <span class="cm-val" style="color: var(--accent-yellow);">0.48</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-smell">code smell</span>
+        </div>
+        <div class="card-title">resolve_calls (shotgun surgery)</div>
+        <div class="card-path">src/pipeline/call_resolution.rs:23</div>
+        <div class="card-metrics">
+          <span class="card-metric">fan-out: <span class="cm-val" style="color: var(--accent-orange);">18</span></span>
+          <span class="card-metric">coupled: <span class="cm-val">5 files</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-orange);"></div>
+        <div class="card-header">
+          <span class="card-type ct-coupling">high coupling</span>
+        </div>
+        <div class="card-title">pipeline/parsing.rs ↔ db/query.rs</div>
+        <div class="card-path">Git co-change frequency: 85%</div>
+        <div class="card-metrics">
+          <span class="card-metric">co-changes: <span class="cm-val">42</span></span>
+          <span class="card-metric">strength: <span class="cm-val" style="color: var(--accent-orange);">0.85</span></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MEDIUM COLUMN -->
+  <div class="column">
+    <div class="col-header">
+      <div class="col-title-wrap">
+        <span class="col-dot" style="background: var(--accent-yellow);"></span>
+        <span class="col-title" style="color: var(--accent-yellow);">Medium</span>
+      </div>
+      <span class="col-count">15</span>
+    </div>
+    <div class="col-cards">
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-dead">dead code cluster</span>
+          <span class="card-impact">5 functions</span>
+        </div>
+        <div class="card-title">parse/ruby.rs</div>
+        <div class="card-path">src/parse/ruby.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">dead: <span class="cm-val" style="color: var(--accent-red);">5 of 24</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-dead">dead code cluster</span>
+          <span class="card-impact">5 functions</span>
+        </div>
+        <div class="card-title">config/mod.rs</div>
+        <div class="card-path">src/config/mod.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">dead: <span class="cm-val" style="color: var(--accent-orange);">5 of 30</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-dead">dead code</span>
+        </div>
+        <div class="card-title">parse/php.rs</div>
+        <div class="card-path">src/parse/php.rs — 4 dead functions</div>
+        <div class="card-metrics">
+          <span class="card-metric">dead: <span class="cm-val">4 of 20</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-cycle">cycle</span>
+        </div>
+        <div class="card-title">parse ↔ pipeline::structure</div>
+        <div class="card-path">src/parse/ ↔ src/pipeline/</div>
+        <div class="card-metrics">
+          <span class="card-metric">coupling: <span class="cm-val">0.35</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-smell">bottleneck</span>
+        </div>
+        <div class="card-title">LanguageParser::parse</div>
+        <div class="card-path">src/parse/mod.rs:34</div>
+        <div class="card-metrics">
+          <span class="card-metric">fan-in: <span class="cm-val" style="color: var(--accent-yellow);">44</span></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-severity" style="background: var(--accent-yellow);"></div>
+        <div class="card-header">
+          <span class="card-type ct-risk">elevated risk</span>
+        </div>
+        <div class="card-title">api_resolution.rs</div>
+        <div class="card-path">src/pipeline/api_resolution.rs</div>
+        <div class="card-metrics">
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-yellow);">0.55</span></span>
+          <span class="card-metric">2 dead functions</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LOW / CLEAN COLUMN -->
+  <div class="column">
+    <div class="col-header">
+      <div class="col-title-wrap">
+        <span class="col-dot" style="background: var(--accent-green);"></span>
+        <span class="col-title" style="color: var(--accent-green);">Clean</span>
+      </div>
+      <span class="col-count">8 modules</span>
+    </div>
+    <div class="col-cards">
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+          <span class="card-impact" style="color: var(--accent-green);">0 issues</span>
+        </div>
+        <div class="card-title">mcp/</div>
+        <div class="card-path">156 symbols · 6 files · health: 0.88</div>
+        <div class="card-metrics">
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-green);">0.20</span></span>
+          <span class="card-metric">modularity: <span class="cm-val" style="color: var(--accent-green);">high</span></span>
+        </div>
+      </div>
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+        </div>
+        <div class="card-title">analysis/</div>
+        <div class="card-path">118 symbols · 5 files · health: 0.85</div>
+        <div class="card-metrics">
+          <span class="card-metric">risk: <span class="cm-val" style="color: var(--accent-green);">0.25</span></span>
+        </div>
+      </div>
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+        </div>
+        <div class="card-title">search/</div>
+        <div class="card-path">64 symbols · 2 files · health: 0.90</div>
+      </div>
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+        </div>
+        <div class="card-title">dashboard/</div>
+        <div class="card-path">87 symbols · 3 files · health: 0.82</div>
+      </div>
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+        </div>
+        <div class="card-title">watch/</div>
+        <div class="card-path">31 symbols · health: 0.88</div>
+      </div>
+
+      <div class="card" style="border-color: rgba(34,197,94,0.15);">
+        <div class="card-severity" style="background: var(--accent-green);"></div>
+        <div class="card-header">
+          <span class="card-type" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">clean</span>
+        </div>
+        <div class="card-title">lsp/</div>
+        <div class="card-path">28 symbols · health: 0.90</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM STATUS -->
+<div class="bottom-status">
+  <span class="bs-item">
+    <span class="bs-val">247</span> files
+  </span>
+  <span class="bs-item">
+    <span class="bs-val">1,842</span> symbols
+  </span>
+  <span class="bs-item">
+    <span class="bs-val">87.4%</span> resolved
+  </span>
+  <div class="lang-strip">
+    <div class="lang-seg" style="flex: 78; background: var(--accent-orange);"></div>
+    <div class="lang-seg" style="flex: 12; background: var(--accent-yellow);"></div>
+    <div class="lang-seg" style="flex: 6; background: var(--accent-blue);"></div>
+    <div class="lang-seg" style="flex: 4; background: var(--accent-green);"></div>
+  </div>
+  <span class="bs-item">Indexed <span class="bs-val">2 min ago</span></span>
+</div>
+
+<script>
+// Card click to expand/collapse detail
+document.querySelectorAll('.card').forEach(card => {
+  card.addEventListener('click', () => {
+    const wasExpanded = card.classList.contains('expanded');
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('expanded'));
+    if (!wasExpanded) card.classList.add('expanded');
+  });
+});
+</script>
+
+</body>
+</html>

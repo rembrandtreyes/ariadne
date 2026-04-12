@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Atlas — Concept Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0B0F19;
+    --bg-secondary: #111827;
+    --bg-card: #1A1F2E;
+    --bg-card-hover: #222842;
+    --bg-elevated: #252B3B;
+    --border: #2A3149;
+    --border-subtle: #1E2538;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-yellow: #EAB308;
+    --accent-orange: #F97316;
+    --accent-red: #EF4444;
+    --accent-purple: #A855F7;
+    --accent-cyan: #06B6D4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  code, .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== FLOATING HEADER ===== */
+  .floating-header {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+
+  .fh-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .fh-logo-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .fh-logo-text { font-size: 14px; font-weight: 600; }
+
+  .fh-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  .fh-search {
+    position: relative;
+    width: 280px;
+  }
+
+  .fh-search input {
+    width: 100%;
+    padding: 6px 10px 6px 30px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+  }
+
+  .fh-search input:focus { border-color: var(--accent-blue); }
+
+  .fh-search svg {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+  }
+
+  .fh-search .kbd {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    padding: 1px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    font-family: 'Fira Code', monospace;
+  }
+
+  .fh-color-mode {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    padding: 2px;
+    border: 1px solid var(--border);
+  }
+
+  .color-option {
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .color-option:hover { color: var(--text-secondary); }
+  .color-option.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+  /* ===== FLOATING STATS ===== */
+  .floating-stats {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+  }
+
+  .stat-pill {
+    padding: 6px 12px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .stat-pill .sp-value {
+    font-family: 'Fira Code', monospace;
+    font-weight: 600;
+  }
+
+  .stat-pill .sp-label {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  /* ===== BREADCRUMB ===== */
+  .atlas-breadcrumb {
+    position: fixed;
+    top: 68px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(17,24,39,0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .bc-item {
+    color: var(--accent-blue);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .bc-item:hover { color: var(--accent-cyan); text-decoration: underline; }
+  .bc-sep { color: var(--text-muted); font-size: 10px; }
+  .bc-current { color: var(--text-primary); font-weight: 500; }
+
+  /* ===== MAIN TREEMAP ===== */
+  .atlas-canvas {
+    width: 100%;
+    height: 100%;
+    padding: 80px 16px 16px;
+    display: grid;
+    gap: 3px;
+    grid-template-columns: 3fr 2fr 1.5fr 1fr;
+    grid-template-rows: 2.5fr 2fr 1.5fr 1fr;
+  }
+
+  .atlas-cell {
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .atlas-cell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    pointer-events: none;
+    transition: border-color 0.25s;
+  }
+
+  .atlas-cell:hover::before { border-color: var(--accent-blue); }
+
+  .atlas-cell:hover {
+    transform: scale(1.005);
+    z-index: 2;
+    box-shadow: 0 0 40px rgba(0,0,0,0.4);
+  }
+
+  .cell-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .cell-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+  }
+
+  .cell-health-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .cell-subtitle {
+    font-size: 10px;
+    font-family: 'Fira Code', monospace;
+    color: rgba(255,255,255,0.4);
+    margin-bottom: 8px;
+  }
+
+  .cell-inner-grid {
+    flex: 1;
+    display: grid;
+    gap: 2px;
+    margin-top: auto;
+  }
+
+  .inner-block {
+    border-radius: 3px;
+    min-height: 8px;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .inner-block:hover {
+    outline: 1px solid rgba(255,255,255,0.3);
+    z-index: 1;
+  }
+
+  .inner-block.dead {
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 3px,
+      rgba(239,68,68,0.15) 3px,
+      rgba(239,68,68,0.15) 6px
+    ) !important;
+  }
+
+  .cell-footer {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .cell-tag {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    background: rgba(0,0,0,0.3);
+  }
+
+  .tag-dead { color: var(--accent-red); }
+  .tag-cycle { color: var(--accent-orange); }
+  .tag-god { color: var(--accent-yellow); }
+  .tag-healthy { color: var(--accent-green); }
+  .tag-risk { color: var(--accent-purple); }
+
+  /* ===== FLOATING DETAIL PANEL ===== */
+  .detail-panel {
+    position: fixed;
+    right: -380px;
+    top: 80px;
+    bottom: 16px;
+    width: 360px;
+    background: rgba(17,24,39,0.95);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    z-index: 200;
+    transition: right 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: -8px 0 32px rgba(0,0,0,0.3);
+  }
+
+  .detail-panel.open { right: 16px; }
+
+  .dp-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .dp-title { font-size: 15px; font-weight: 600; }
+  .dp-subtitle { font-size: 11px; color: var(--text-muted); font-family: 'Fira Code', monospace; }
+
+  .dp-close {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
+  }
+
+  .dp-close:hover { color: var(--text-primary); border-color: var(--accent-blue); }
+
+  .dp-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  .dp-content::-webkit-scrollbar { width: 4px; }
+  .dp-content::-webkit-scrollbar-track { background: transparent; }
+  .dp-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .dp-section {
+    margin-bottom: 20px;
+  }
+
+  .dp-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .dp-stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .dp-stat {
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .dp-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .dp-stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .dp-file-list { list-style: none; }
+
+  .dp-file {
+    padding: 8px 10px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+  }
+
+  .dp-file:hover { background: var(--bg-card); }
+
+  .dp-file-icon {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dp-file-name {
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .dp-file-badge {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+    flex-shrink: 0;
+  }
+
+  .dp-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .dp-bar-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 60px;
+    text-align: right;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .dp-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--bg-primary);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .dp-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+
+  /* ===== FLOATING MINIMAP ===== */
+  .minimap {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    width: 180px;
+    height: 120px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 100;
+    padding: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .minimap-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .minimap-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 2px;
+    height: calc(100% - 20px);
+  }
+
+  .minimap-cell {
+    border-radius: 2px;
+    opacity: 0.6;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .minimap-cell:hover { opacity: 1; }
+  .minimap-cell.current { opacity: 1; outline: 1px solid var(--accent-blue); }
+
+  /* ===== FLOATING LEGEND ===== */
+  .atlas-legend {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 10px;
+    color: var(--text-muted);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+
+  .legend-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .legend-group-title {
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .legend-swatch {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .legend-block {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* ===== HELP HINT ===== */
+  .help-hint {
+    position: fixed;
+    bottom: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 90;
+    padding: 6px 16px;
+    background: rgba(17,24,39,0.8);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: opacity 0.3s;
+  }
+
+  .hint-key {
+    font-family: 'Fira Code', monospace;
+    background: var(--bg-card);
+    padding: 1px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<!-- FLOATING HEADER -->
+<div class="floating-header">
+  <div class="fh-logo">
+    <div class="fh-logo-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+      </svg>
+    </div>
+    <span class="fh-logo-text">Ariadne</span>
+  </div>
+
+  <div class="fh-divider"></div>
+
+  <div class="fh-search">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input type="text" placeholder="Search symbols..." />
+    <span class="kbd">/</span>
+  </div>
+
+  <div class="fh-divider"></div>
+
+  <div class="fh-color-mode">
+    <button class="color-option active" onclick="setColorMode(this, 'health')">Health</button>
+    <button class="color-option" onclick="setColorMode(this, 'risk')">Risk</button>
+    <button class="color-option" onclick="setColorMode(this, 'churn')">Churn</button>
+    <button class="color-option" onclick="setColorMode(this, 'coupling')">Coupling</button>
+  </div>
+</div>
+
+<!-- FLOATING STATS -->
+<div class="floating-stats">
+  <div class="stat-pill">
+    <span class="sp-value" style="color: var(--accent-green)">84</span>
+    <span class="sp-label">health</span>
+  </div>
+  <div class="stat-pill">
+    <span class="sp-value" style="color: var(--accent-red)">47</span>
+    <span class="sp-label">dead</span>
+  </div>
+  <div class="stat-pill">
+    <span class="sp-value" style="color: var(--accent-orange)">5</span>
+    <span class="sp-label">cycles</span>
+  </div>
+  <div class="stat-pill">
+    <span class="sp-value" style="color: var(--text-primary)">1,842</span>
+    <span class="sp-label">symbols</span>
+  </div>
+</div>
+
+<!-- BREADCRUMB -->
+<div class="atlas-breadcrumb">
+  <span class="bc-item" onclick="zoomOut()">ariadne</span>
+  <span class="bc-sep">/</span>
+  <span class="bc-current">src</span>
+</div>
+
+<!-- MAIN TREEMAP -->
+<div class="atlas-canvas" id="atlasCanvas">
+  <!-- Row 1 -->
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2e1a, #243424); grid-row: 1 / 3;" onclick="openPanel('pipeline')">
+    <div class="cell-header">
+      <span class="cell-name">pipeline/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">387 symbols &middot; 14 files &middot; 72% internal</div>
+    <div class="cell-inner-grid" style="grid-template-columns: repeat(7, 1fr); grid-template-rows: repeat(2, 1fr);">
+      <div class="inner-block" style="background: rgba(34,197,94,0.25); grid-column: span 2;" title="parsing.rs - 48 symbols"></div>
+      <div class="inner-block" style="background: rgba(249,115,22,0.3);" title="call_resolution.rs - 34 symbols (high risk)"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="structure.rs - 28 symbols"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="import_resolution.rs - 22 symbols"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="community.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.12);" title="dead_code.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="heritage.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.12);" title="coupling.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.1);" title="discovery.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.1);" title="api_resolution.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.08);" title="git_history.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.08);" title="service_topology.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.06);" title="flow.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.06);" title="search_index.rs"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-cycle">2 cycles</span>
+      <span class="cell-tag tag-risk">risk: 0.71</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2e1c, #243826);" onclick="openPanel('parse')">
+    <div class="cell-header">
+      <span class="cell-name">parse/</span>
+      <span class="cell-health-dot" style="background: var(--accent-yellow)"></span>
+    </div>
+    <div class="cell-subtitle">284 symbols &middot; 10 files</div>
+    <div class="cell-inner-grid" style="grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(2, 1fr);">
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="python.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="javascript.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.18);" title="typescript.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="rust.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="go.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.12);" title="java.rs"></div>
+      <div class="inner-block dead" style="background: rgba(239,68,68,0.15);" title="ruby.rs - 5 dead"></div>
+      <div class="inner-block dead" style="background: rgba(239,68,68,0.12);" title="php.rs - 4 dead"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.08);" title="csharp.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="mod.rs"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-dead">12 dead</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #2e2a1a, #383424);" onclick="openPanel('db')">
+    <div class="cell-header">
+      <span class="cell-name">db/</span>
+      <span class="cell-health-dot" style="background: var(--accent-yellow)"></span>
+    </div>
+    <div class="cell-subtitle">198 symbols &middot; 4 files</div>
+    <div class="cell-inner-grid" style="grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr;">
+      <div class="inner-block" style="background: rgba(234,179,8,0.25);" title="query.rs - 89 symbols (god object)"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.2);" title="schema.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="mod.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.1);" title="migrations.rs"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-god">god object</span>
+      <span class="cell-tag tag-cycle">1 cycle</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2030, #242a38);" onclick="openPanel('mcp')">
+    <div class="cell-header">
+      <span class="cell-name">mcp/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">156 symbols</div>
+    <div class="cell-inner-grid" style="grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);">
+      <div class="inner-block" style="background: rgba(6,182,212,0.2);" title="tools/mod.rs"></div>
+      <div class="inner-block" style="background: rgba(6,182,212,0.18);" title="tools/symbol.rs"></div>
+      <div class="inner-block" style="background: rgba(6,182,212,0.15);" title="tools/impact.rs"></div>
+      <div class="inner-block" style="background: rgba(6,182,212,0.12);" title="tools/graph.rs"></div>
+      <div class="inner-block" style="background: rgba(6,182,212,0.1);" title="tools/quality.rs"></div>
+      <div class="inner-block" style="background: rgba(6,182,212,0.08);" title="mod.rs"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-healthy">healthy</span>
+    </div>
+  </div>
+
+  <!-- Row 2 (pipeline continues from row 1) -->
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #2e241a, #382e22);" onclick="openPanel('graph')">
+    <div class="cell-header">
+      <span class="cell-name">graph/</span>
+      <span class="cell-health-dot" style="background: var(--accent-yellow)"></span>
+    </div>
+    <div class="cell-subtitle">142 symbols &middot; 5 files</div>
+    <div class="cell-inner-grid" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1fr;">
+      <div class="inner-block" style="background: rgba(234,179,8,0.25);" title="mod.rs - CallGraph (89 conn)"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);" title="blast_radius.rs"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.12);" title="circular.rs"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-god">god object</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2e1e, #243828);" onclick="openPanel('analysis')">
+    <div class="cell-header">
+      <span class="cell-name">analysis/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">118 symbols</div>
+    <div class="cell-inner-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="inner-block" style="background: rgba(34,197,94,0.18);"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.15);"></div>
+      <div class="inner-block" style="background: rgba(34,197,94,0.12);"></div>
+    </div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-healthy">healthy</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2830, #243238);" onclick="openPanel('dashboard')">
+    <div class="cell-header">
+      <span class="cell-name">dashboard/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">87 symbols</div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-healthy">healthy</span>
+    </div>
+  </div>
+
+  <!-- Row 3 -->
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2830, #243238);">
+    <div class="cell-header">
+      <span class="cell-name">search/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">64 symbols &middot; 2 files</div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-healthy">healthy</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #2e1a1a, #381e1e);">
+    <div class="cell-header">
+      <span class="cell-name">config/</span>
+      <span class="cell-health-dot" style="background: var(--accent-orange)"></span>
+    </div>
+    <div class="cell-subtitle">48 symbols</div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-dead">5 dead</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #2e1a1a, #381e1e);">
+    <div class="cell-header">
+      <span class="cell-name">output/</span>
+      <span class="cell-health-dot" style="background: var(--accent-red)"></span>
+    </div>
+    <div class="cell-subtitle">42 symbols</div>
+    <div class="cell-footer">
+      <span class="cell-tag tag-dead">8 dead</span>
+    </div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2e1e, #243828);">
+    <div class="cell-header">
+      <span class="cell-name">watch/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">31 syms</div>
+  </div>
+
+  <!-- Row 4 -->
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2830, #243238);">
+    <div class="cell-header">
+      <span class="cell-name">lsp/</span>
+      <span class="cell-health-dot" style="background: var(--accent-green)"></span>
+    </div>
+    <div class="cell-subtitle">28 syms</div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a2830, #243238);">
+    <div class="cell-header">
+      <span class="cell-name">plugins/</span>
+    </div>
+    <div class="cell-subtitle">18 syms</div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a1a2e, #242438);">
+    <div class="cell-header">
+      <span class="cell-name">main.rs</span>
+    </div>
+    <div class="cell-subtitle">12 syms</div>
+  </div>
+
+  <div class="atlas-cell" style="background: linear-gradient(135deg, #1a1a2e, #242438);">
+    <div class="cell-header">
+      <span class="cell-name">lib.rs</span>
+    </div>
+    <div class="cell-subtitle">8 syms</div>
+  </div>
+</div>
+
+<!-- FLOATING DETAIL PANEL -->
+<div class="detail-panel" id="detailPanel">
+  <div class="dp-header">
+    <div>
+      <div class="dp-title" id="dpTitle">pipeline/</div>
+      <div class="dp-subtitle" id="dpSubtitle">14 files &middot; 387 symbols</div>
+    </div>
+    <button class="dp-close" onclick="closePanel()">&times;</button>
+  </div>
+
+  <div class="dp-content">
+    <div class="dp-section">
+      <div class="dp-section-title">Overview</div>
+      <div class="dp-stat-grid">
+        <div class="dp-stat">
+          <div class="dp-stat-value" style="color: var(--accent-green)">387</div>
+          <div class="dp-stat-label">Symbols</div>
+        </div>
+        <div class="dp-stat">
+          <div class="dp-stat-value" style="color: var(--accent-blue)">72%</div>
+          <div class="dp-stat-label">Internal Calls</div>
+        </div>
+        <div class="dp-stat">
+          <div class="dp-stat-value" style="color: var(--accent-orange)">0.71</div>
+          <div class="dp-stat-label">Risk Score</div>
+        </div>
+        <div class="dp-stat">
+          <div class="dp-stat-value" style="color: var(--accent-red)">2</div>
+          <div class="dp-stat-label">Cycles</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">Files (by risk)</div>
+      <ul class="dp-file-list">
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-red)"></span>
+          <span class="dp-file-name">call_resolution.rs</span>
+          <span class="dp-file-badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red);">0.91</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-orange)"></span>
+          <span class="dp-file-name">parsing.rs</span>
+          <span class="dp-file-badge" style="background: rgba(249,115,22,0.15); color: var(--accent-orange);">0.67</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-yellow)"></span>
+          <span class="dp-file-name">structure.rs</span>
+          <span class="dp-file-badge" style="background: rgba(234,179,8,0.15); color: var(--accent-yellow);">0.48</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-green)"></span>
+          <span class="dp-file-name">import_resolution.rs</span>
+          <span class="dp-file-badge" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">0.22</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-green)"></span>
+          <span class="dp-file-name">community.rs</span>
+          <span class="dp-file-badge" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">0.18</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-green)"></span>
+          <span class="dp-file-name">dead_code.rs</span>
+          <span class="dp-file-badge" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">0.15</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-green)"></span>
+          <span class="dp-file-name">heritage.rs</span>
+          <span class="dp-file-badge" style="background: rgba(34,197,94,0.15); color: var(--accent-green);">0.12</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">External Dependencies</div>
+      <div class="dp-bar">
+        <span class="dp-bar-label">db/</span>
+        <div class="dp-bar-track"><div class="dp-bar-fill" style="width: 85%; background: var(--accent-red);"></div></div>
+      </div>
+      <div class="dp-bar">
+        <span class="dp-bar-label">graph/</span>
+        <div class="dp-bar-track"><div class="dp-bar-fill" style="width: 73%; background: var(--accent-orange);"></div></div>
+      </div>
+      <div class="dp-bar">
+        <span class="dp-bar-label">parse/</span>
+        <div class="dp-bar-track"><div class="dp-bar-fill" style="width: 61%; background: var(--accent-yellow);"></div></div>
+      </div>
+      <div class="dp-bar">
+        <span class="dp-bar-label">config/</span>
+        <div class="dp-bar-track"><div class="dp-bar-fill" style="width: 25%; background: var(--accent-green);"></div></div>
+      </div>
+      <div class="dp-bar">
+        <span class="dp-bar-label">search/</span>
+        <div class="dp-bar-track"><div class="dp-bar-fill" style="width: 12%; background: var(--accent-green);"></div></div>
+      </div>
+    </div>
+
+    <div class="dp-section">
+      <div class="dp-section-title">Hottest Symbols</div>
+      <ul class="dp-file-list">
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-purple)"></span>
+          <span class="dp-file-name">resolve_calls</span>
+          <span class="dp-file-badge" style="background: rgba(168,85,247,0.15); color: var(--accent-purple);">51 conn</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-purple)"></span>
+          <span class="dp-file-name">run_pipeline</span>
+          <span class="dp-file-badge" style="background: rgba(168,85,247,0.15); color: var(--accent-purple);">38 conn</span>
+        </li>
+        <li class="dp-file">
+          <span class="dp-file-icon" style="background: var(--accent-cyan)"></span>
+          <span class="dp-file-name">extract_symbols</span>
+          <span class="dp-file-badge" style="background: rgba(6,182,212,0.15); color: var(--accent-cyan);">24 conn</span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- MINIMAP -->
+<div class="minimap">
+  <div class="minimap-label">Overview</div>
+  <div class="minimap-grid">
+    <div class="minimap-cell current" style="background: rgba(34,197,94,0.3); grid-column: span 2; grid-row: span 2;"></div>
+    <div class="minimap-cell" style="background: rgba(34,197,94,0.25);"></div>
+    <div class="minimap-cell" style="background: rgba(234,179,8,0.25);"></div>
+    <div class="minimap-cell" style="background: rgba(6,182,212,0.2);"></div>
+    <div class="minimap-cell" style="background: rgba(234,179,8,0.2);"></div>
+    <div class="minimap-cell" style="background: rgba(34,197,94,0.2);"></div>
+    <div class="minimap-cell" style="background: rgba(34,197,94,0.15);"></div>
+    <div class="minimap-cell" style="background: rgba(34,197,94,0.15);"></div>
+    <div class="minimap-cell" style="background: rgba(239,68,68,0.15);"></div>
+    <div class="minimap-cell" style="background: rgba(239,68,68,0.12);"></div>
+    <div class="minimap-cell" style="background: rgba(34,197,94,0.1);"></div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="atlas-legend">
+  <div class="legend-group">
+    <span class="legend-group-title">Health:</span>
+    <div class="legend-swatch"><div class="legend-block" style="background: rgba(34,197,94,0.3);"></div> Good</div>
+    <div class="legend-swatch"><div class="legend-block" style="background: rgba(234,179,8,0.3);"></div> Fair</div>
+    <div class="legend-swatch"><div class="legend-block" style="background: rgba(249,115,22,0.3);"></div> Poor</div>
+    <div class="legend-swatch"><div class="legend-block" style="background: rgba(239,68,68,0.3);"></div> Bad</div>
+  </div>
+  <div class="legend-group">
+    <span class="legend-group-title">Patterns:</span>
+    <div class="legend-swatch"><div class="legend-block dead" style="background: rgba(239,68,68,0.15); width: 20px;"></div> Dead code</div>
+  </div>
+  <div class="legend-group">
+    <span class="legend-group-title">Size = symbol count</span>
+  </div>
+</div>
+
+<!-- HELP HINT -->
+<div class="help-hint">
+  <span><span class="hint-key">Click</span> module to inspect</span>
+  <span><span class="hint-key">Double-click</span> to zoom in</span>
+  <span><span class="hint-key">Esc</span> zoom out</span>
+  <span><span class="hint-key">/</span> search</span>
+</div>
+
+<script>
+function openPanel(module) {
+  const panel = document.getElementById('detailPanel');
+  panel.classList.add('open');
+
+  const titles = {
+    pipeline: { name: 'pipeline/', sub: '14 files · 387 symbols' },
+    parse: { name: 'parse/', sub: '10 files · 284 symbols' },
+    db: { name: 'db/', sub: '4 files · 198 symbols' },
+    graph: { name: 'graph/', sub: '5 files · 142 symbols' },
+    mcp: { name: 'mcp/', sub: '6 files · 156 symbols' },
+    analysis: { name: 'analysis/', sub: '5 files · 118 symbols' },
+    dashboard: { name: 'dashboard/', sub: '3 files · 87 symbols' },
+  };
+
+  const info = titles[module] || { name: module + '/', sub: '' };
+  document.getElementById('dpTitle').textContent = info.name;
+  document.getElementById('dpSubtitle').textContent = info.sub;
+}
+
+function closePanel() {
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+function setColorMode(btn, mode) {
+  document.querySelectorAll('.color-option').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function zoomOut() {
+  // In a real implementation, this would zoom out one level
+}
+
+// Close panel with Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePanel();
+  if (e.key === '/') {
+    e.preventDefault();
+    document.querySelector('.fh-search input').focus();
+  }
+});
+</script>
+
+</body>
+</html>

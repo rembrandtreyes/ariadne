@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne — Signal + Void</title>
+<style>
+  :root {
+    --bg: #000;
+    --bg-alt: #09090B;
+    --surface: #111113;
+    --surface-2: #19191C;
+    --border: #1E1E22;
+    --text-0: #FAFAF9;
+    --text-1: #D6D3D1;
+    --text-2: #A8A29E;
+    --text-3: #57534E;
+    --text-4: #3A3733;
+    --blue: #60A5FA;
+    --green: #4ADE80;
+    --yellow: #FDE047;
+    --orange: #FB923C;
+    --red: #F87171;
+    --purple: #C084FC;
+    --cyan: #22D3EE;
+    --panel-width: 360px;
+    --panel-collapsed: 40px;
+    --topbar-h: 48px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace; }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    z-index: 500;
+  }
+
+  .tb-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .tb-mark {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    display: grid;
+    place-items: center;
+  }
+
+  .tb-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-0);
+    letter-spacing: -0.4px;
+  }
+
+  .tb-search {
+    margin-left: 32px;
+    padding: 6px 12px 6px 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-2);
+    font-size: 12px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    outline: none;
+    width: 260px;
+    transition: border-color 0.2s;
+  }
+
+  .tb-search:focus { border-color: rgba(99,102,241,0.4); }
+  .tb-search::placeholder { color: var(--text-4); }
+
+  .tb-search-wrap {
+    position: relative;
+  }
+
+  .tb-search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-4);
+    pointer-events: none;
+  }
+
+  .tb-stats {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .tb-stat {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: var(--text-4);
+  }
+
+  .tb-stat strong {
+    color: var(--text-2);
+    font-weight: 500;
+  }
+
+  /* ===== LAYOUT CONTAINER ===== */
+  .layout {
+    display: flex;
+    height: 100vh;
+    padding-top: var(--topbar-h);
+  }
+
+  /* ===== SIGNAL PANEL (left) ===== */
+  .signal-panel {
+    width: var(--panel-width);
+    min-width: var(--panel-collapsed);
+    height: calc(100vh - var(--topbar-h));
+    background: var(--bg-alt);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .signal-panel.collapsed {
+    width: var(--panel-collapsed);
+  }
+
+  /* Collapsed icon strip */
+  .signal-collapsed-strip {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 4px;
+    width: var(--panel-collapsed);
+  }
+
+  .signal-panel.collapsed .signal-collapsed-strip { display: flex; }
+  .signal-panel.collapsed .signal-body { display: none; }
+
+  .sc-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-3);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .sc-btn:hover {
+    color: var(--text-1);
+    border-color: rgba(255,255,255,0.1);
+    background: var(--surface-2);
+  }
+
+  /* Signal body (scrollable content) */
+  .signal-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+  }
+
+  .signal-body::-webkit-scrollbar { width: 3px; }
+  .signal-body::-webkit-scrollbar-track { background: transparent; }
+  .signal-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 2px; }
+
+  /* Health ring */
+  .sig-health {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+  }
+
+  .health-ring {
+    position: relative;
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+  }
+
+  .health-ring svg {
+    width: 52px;
+    height: 52px;
+    transform: rotate(-90deg);
+  }
+
+  .health-ring-bg {
+    fill: none;
+    stroke: var(--surface-2);
+    stroke-width: 4;
+  }
+
+  .health-ring-fg {
+    fill: none;
+    stroke: var(--green);
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 138.2;
+    stroke-dashoffset: 22.1;
+    transition: stroke-dashoffset 0.6s ease;
+  }
+
+  .health-ring-val {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: var(--text-0);
+  }
+
+  .sig-health-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sig-health-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-4);
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .sig-health-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    line-height: 1.4;
+  }
+
+  /* Compact stats row */
+  .sig-stats {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .sig-stat {
+    flex: 1;
+    padding: 8px 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    text-align: center;
+    cursor: default;
+  }
+
+  .sig-stat-val {
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    line-height: 1;
+  }
+
+  .sig-stat-lbl {
+    font-size: 9px;
+    color: var(--text-4);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+  }
+
+  /* Sections */
+  .sig-section {
+    margin-bottom: 20px;
+  }
+
+  .sig-section-head {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-4);
+    margin-bottom: 8px;
+    padding: 0 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sig-section-count {
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 9px;
+    color: var(--text-4);
+    padding: 1px 5px;
+    background: var(--surface);
+    border-radius: 3px;
+  }
+
+  /* Risk items */
+  .sig-risk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 1px;
+  }
+
+  .sig-risk:hover { background: var(--surface); }
+  .sig-risk.active { background: var(--surface-2); border: 1px solid rgba(99,102,241,0.2); }
+
+  .sig-risk-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sig-risk-name {
+    font-size: 12px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: var(--text-1);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sig-risk-score {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* Module items */
+  .sig-mod {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 2px;
+  }
+
+  .sig-mod:hover { background: var(--surface); }
+  .sig-mod.active { background: var(--surface-2); border: 1px solid rgba(99,102,241,0.2); }
+
+  .sig-mod-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sig-mod-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sig-mod-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-0);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sig-mod-meta {
+    font-size: 10px;
+    color: var(--text-4);
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    margin-top: 1px;
+  }
+
+  .sig-mod-bar {
+    width: 60px;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .sig-mod-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+
+  /* Coupling items */
+  .sig-coupling {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 1px;
+  }
+
+  .sig-coupling:hover { background: var(--surface); }
+
+  .sig-coupling-pair {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: var(--text-2);
+    flex: 1;
+  }
+
+  .sig-coupling-arrow { color: var(--text-4); margin: 0 2px; }
+
+  .sig-coupling-val {
+    font-size: 11px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .sig-coupling-tag {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  /* ===== TOGGLE BUTTON ===== */
+  .panel-toggle {
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: none;
+    border-radius: 0 6px 6px 0;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    z-index: 200;
+    color: var(--text-4);
+    transition: all 0.15s;
+  }
+
+  .panel-toggle:hover {
+    background: var(--surface-2);
+    color: var(--text-2);
+  }
+
+  .panel-toggle svg {
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .signal-panel.collapsed .panel-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  /* ===== VOID CANVAS (right) ===== */
+  .void-canvas {
+    flex: 1;
+    height: calc(100vh - var(--topbar-h));
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  /* Dot grid */
+  .void-canvas::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+  }
+
+  /* Ambient orbs */
+  .ambient-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.06;
+    animation: drift 20s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, -20px) scale(1.1); }
+    66% { transform: translate(-20px, 30px) scale(0.95); }
+  }
+
+  /* Layer labels */
+  .void-layer {
+    position: absolute;
+    left: 16px;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #1a1a1e;
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* SVG edges */
+  .edge-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .edge-path {
+    fill: none;
+    stroke-linecap: round;
+  }
+
+  /* Architecture nodes */
+  .arch-node {
+    position: absolute;
+    background: rgba(12,12,14,0.55);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 20;
+    overflow: visible;
+  }
+
+  .arch-node::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 12px;
+    padding: 1px;
+    background: linear-gradient(135deg, transparent, transparent);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .arch-node:hover {
+    transform: translateY(-2px) scale(1.01);
+    border-color: rgba(255,255,255,0.08);
+    box-shadow: 0 16px 32px rgba(0,0,0,0.4), 0 0 50px var(--node-glow, rgba(99,102,241,0.04));
+  }
+
+  .arch-node:hover::before {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--node-accent, #6366f1), transparent 60%);
+  }
+
+  .arch-node.active {
+    border-color: rgba(99,102,241,0.3);
+    box-shadow: 0 0 0 1px var(--node-accent, #6366f1), 0 16px 32px rgba(0,0,0,0.4), 0 0 60px var(--node-glow, rgba(99,102,241,0.08));
+  }
+
+  .arch-node.active::before {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--node-accent, #6366f1), transparent 60%);
+  }
+
+  .an-inner { padding: 10px 14px; }
+
+  .an-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .an-status {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px var(--status-color, #4ade80);
+  }
+
+  .an-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fafafa;
+    letter-spacing: -0.3px;
+  }
+
+  .an-count {
+    font-size: 9px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    color: #3f3f46;
+    margin-left: auto;
+  }
+
+  .an-subtitle {
+    font-size: 9px;
+    color: #3f3f46;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    margin-bottom: 6px;
+  }
+
+  .an-sparkline {
+    display: flex;
+    gap: 1px;
+    height: 16px;
+    margin-bottom: 6px;
+  }
+
+  .an-spark {
+    flex: 1;
+    border-radius: 2px;
+    min-width: 3px;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+
+  .an-spark:hover {
+    filter: brightness(1.4);
+    transform: scaleY(1.15);
+  }
+
+  .an-pills {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+
+  .an-pill {
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-weight: 500;
+  }
+
+  /* ===== SELECTION HIGHLIGHT ANIMATION ===== */
+  @keyframes selectPulse {
+    0% { box-shadow: 0 0 0 2px var(--node-accent, #6366f1), 0 0 20px var(--node-glow, rgba(99,102,241,0.1)); }
+    50% { box-shadow: 0 0 0 4px var(--node-accent, #6366f1), 0 0 40px var(--node-glow, rgba(99,102,241,0.2)); }
+    100% { box-shadow: 0 0 0 2px var(--node-accent, #6366f1), 0 0 20px var(--node-glow, rgba(99,102,241,0.1)); }
+  }
+
+  .arch-node.highlight {
+    animation: selectPulse 1.5s ease-in-out 1;
+  }
+
+  /* Signal item highlight */
+  @keyframes sigHighlight {
+    0% { background: rgba(99,102,241,0.15); }
+    100% { background: var(--surface-2); }
+  }
+
+  .sig-mod.highlight-anim, .sig-risk.highlight-anim {
+    animation: sigHighlight 1s ease forwards;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="tb-brand">
+    <div class="tb-mark">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+      </svg>
+    </div>
+    <span class="tb-name">Ariadne</span>
+  </div>
+  <div class="tb-search-wrap">
+    <svg class="tb-search-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input class="tb-search" type="text" placeholder="Search symbols, modules..." />
+  </div>
+  <div class="tb-stats">
+    <span class="tb-stat"><strong>247</strong> files</span>
+    <span class="tb-stat"><strong>1,842</strong> symbols</span>
+    <span class="tb-stat"><strong>87.4%</strong> resolved</span>
+  </div>
+</div>
+
+<!-- LAYOUT -->
+<div class="layout">
+
+  <!-- SIGNAL PANEL -->
+  <div class="signal-panel" id="signalPanel">
+
+    <!-- Collapsed strip -->
+    <div class="signal-collapsed-strip">
+      <button class="sc-btn" title="Search" onclick="togglePanel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      </button>
+      <button class="sc-btn" title="Expand Signal" onclick="togglePanel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+      </button>
+      <div style="width: 20px; height: 1px; background: var(--border); margin: 4px 0;"></div>
+      <button class="sc-btn" title="Health: 84" style="color: var(--green);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+      </button>
+      <button class="sc-btn" title="47 dead" style="color: var(--red);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>
+      </button>
+      <button class="sc-btn" title="5 cycles" style="color: var(--orange);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.2M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+      </button>
+    </div>
+
+    <!-- Toggle handle on divider -->
+    <div class="panel-toggle" onclick="togglePanel()">
+      <svg width="8" height="12" viewBox="0 0 8 12" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M6 1L1 6l5 5"/>
+      </svg>
+    </div>
+
+    <!-- Signal body -->
+    <div class="signal-body" id="signalBody">
+
+      <!-- Health ring -->
+      <div class="sig-health">
+        <div class="health-ring">
+          <svg viewBox="0 0 52 52">
+            <circle class="health-ring-bg" cx="26" cy="26" r="22"/>
+            <circle class="health-ring-fg" cx="26" cy="26" r="22"/>
+          </svg>
+          <div class="health-ring-val">84</div>
+        </div>
+        <div class="sig-health-info">
+          <div class="sig-health-label">Codebase Health</div>
+          <div class="sig-health-sub">67 issues found. 5 critical, 8 high.</div>
+        </div>
+      </div>
+
+      <!-- Compact stats -->
+      <div class="sig-stats">
+        <div class="sig-stat">
+          <div class="sig-stat-val" style="color: var(--red);">47</div>
+          <div class="sig-stat-lbl">dead</div>
+        </div>
+        <div class="sig-stat">
+          <div class="sig-stat-val" style="color: var(--orange);">5</div>
+          <div class="sig-stat-lbl">cycles</div>
+        </div>
+        <div class="sig-stat">
+          <div class="sig-stat-val" style="color: var(--yellow);">3</div>
+          <div class="sig-stat-lbl">gods</div>
+        </div>
+      </div>
+
+      <!-- Risks -->
+      <div class="sig-section">
+        <div class="sig-section-head">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Risks
+          <span class="sig-section-count">5</span>
+        </div>
+        <div class="sig-risk" data-module="pipeline" onclick="selectFromSignal('pipeline', this)">
+          <div class="sig-risk-dot" style="background: var(--red);"></div>
+          <span class="sig-risk-name mono">call_resolution.rs</span>
+          <span class="sig-risk-score" style="color: var(--red);">0.91</span>
+        </div>
+        <div class="sig-risk" data-module="db" onclick="selectFromSignal('db', this)">
+          <div class="sig-risk-dot" style="background: var(--red);"></div>
+          <span class="sig-risk-name mono">db/mod.rs</span>
+          <span class="sig-risk-score" style="color: var(--orange);">0.87</span>
+        </div>
+        <div class="sig-risk" data-module="pipeline" onclick="selectFromSignal('pipeline', this)">
+          <div class="sig-risk-dot" style="background: var(--orange);"></div>
+          <span class="sig-risk-name mono">pipeline <span style="color:var(--text-4)">&#8596;</span> db</span>
+          <span class="sig-risk-score" style="color: var(--orange);">.85</span>
+        </div>
+        <div class="sig-risk" data-module="graph" onclick="selectFromSignal('graph', this)">
+          <div class="sig-risk-dot" style="background: var(--yellow);"></div>
+          <span class="sig-risk-name mono">graph/mod.rs</span>
+          <span class="sig-risk-score" style="color: var(--yellow);">.76</span>
+        </div>
+        <div class="sig-risk" data-module="parse" onclick="selectFromSignal('parse', this)">
+          <div class="sig-risk-dot" style="background: var(--yellow);"></div>
+          <span class="sig-risk-name mono">parse/ruby.rs</span>
+          <span class="sig-risk-score" style="color: var(--yellow);">.68</span>
+        </div>
+      </div>
+
+      <!-- Modules -->
+      <div class="sig-section" id="modulesSection">
+        <div class="sig-section-head">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          Modules
+          <span class="sig-section-count">12</span>
+        </div>
+
+        <div class="sig-mod" data-module="pipeline" id="sig-pipeline" onclick="selectFromSignal('pipeline', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">pipeline/</div>
+            <div class="sig-mod-meta">387 sym &middot; 14 files &middot; <span style="color:var(--orange)">2 cycles</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 71%; background: var(--purple);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="parse" id="sig-parse" onclick="selectFromSignal('parse', this)">
+          <div class="sig-mod-dot" style="background: var(--yellow);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">parse/</div>
+            <div class="sig-mod-meta">284 sym &middot; 10 files &middot; <span style="color:var(--red)">12 dead</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 62%; background: var(--yellow);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="db" id="sig-db" onclick="selectFromSignal('db', this)">
+          <div class="sig-mod-dot" style="background: var(--yellow);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">db/</div>
+            <div class="sig-mod-meta">198 sym &middot; 4 files &middot; <span style="color:var(--yellow)">god object</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 55%; background: var(--orange);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="mcp" id="sig-mcp" onclick="selectFromSignal('mcp', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">mcp/</div>
+            <div class="sig-mod-meta">156 sym &middot; 6 files &middot; <span style="color:var(--green)">healthy</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 88%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="graph" id="sig-graph" onclick="selectFromSignal('graph', this)">
+          <div class="sig-mod-dot" style="background: var(--yellow);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">graph/</div>
+            <div class="sig-mod-meta">142 sym &middot; 5 files &middot; <span style="color:var(--yellow)">god object</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 52%; background: var(--yellow);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="analysis" id="sig-analysis" onclick="selectFromSignal('analysis', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">analysis/</div>
+            <div class="sig-mod-meta">118 sym &middot; 5 files &middot; <span style="color:var(--green)">healthy</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 85%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="search" id="sig-search" onclick="selectFromSignal('search', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">search/</div>
+            <div class="sig-mod-meta">64 sym &middot; 3 files &middot; <span style="color:var(--green)">healthy</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 92%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="dash" id="sig-dash" onclick="selectFromSignal('dash', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">dashboard/</div>
+            <div class="sig-mod-meta">87 sym &middot; 4 files &middot; <span style="color:var(--green)">healthy</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 80%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="config" id="sig-config" onclick="selectFromSignal('config', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">config/</div>
+            <div class="sig-mod-meta">34 sym &middot; 2 files</div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 78%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="output" id="sig-output" onclick="selectFromSignal('output', this)">
+          <div class="sig-mod-dot" style="background: var(--red);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">output/</div>
+            <div class="sig-mod-meta">42 sym &middot; 3 files &middot; <span style="color:var(--red)">8 dead</span></div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 38%; background: var(--red);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="watch" id="sig-watch" onclick="selectFromSignal('watch', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">watch/</div>
+            <div class="sig-mod-meta">28 sym &middot; 2 files</div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 90%; background: var(--green);"></div></div>
+        </div>
+
+        <div class="sig-mod" data-module="lsp" id="sig-lsp" onclick="selectFromSignal('lsp', this)">
+          <div class="sig-mod-dot" style="background: var(--green);"></div>
+          <div class="sig-mod-info">
+            <div class="sig-mod-name">lsp/</div>
+            <div class="sig-mod-meta">56 sym &middot; 3 files</div>
+          </div>
+          <div class="sig-mod-bar"><div class="sig-mod-bar-fill" style="width: 82%; background: var(--green);"></div></div>
+        </div>
+      </div>
+
+      <!-- Coupling -->
+      <div class="sig-section">
+        <div class="sig-section-head">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Coupling
+        </div>
+
+        <div class="sig-coupling" data-module="pipeline" onclick="selectFromSignal('pipeline', this)">
+          <span class="sig-coupling-pair mono">pipeline <span class="sig-coupling-arrow">&#8596;</span> db</span>
+          <span class="sig-coupling-val" style="color: var(--red);">.85</span>
+          <span class="sig-coupling-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+        </div>
+        <div class="sig-coupling" data-module="graph" onclick="selectFromSignal('graph', this)">
+          <span class="sig-coupling-pair mono">pipeline <span class="sig-coupling-arrow">&#8596;</span> graph</span>
+          <span class="sig-coupling-val" style="color: var(--orange);">.73</span>
+          <span class="sig-coupling-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+        </div>
+        <div class="sig-coupling" data-module="parse" onclick="selectFromSignal('parse', this)">
+          <span class="sig-coupling-pair mono">parse <span class="sig-coupling-arrow">&#8594;</span> pipeline</span>
+          <span class="sig-coupling-val">.61</span>
+          <span class="sig-coupling-tag" style="background: rgba(74,222,128,0.06); color: var(--green);">ok</span>
+        </div>
+        <div class="sig-coupling" data-module="db" onclick="selectFromSignal('db', this)">
+          <span class="sig-coupling-pair mono">db <span class="sig-coupling-arrow">&#8596;</span> analysis</span>
+          <span class="sig-coupling-val">.48</span>
+          <span class="sig-coupling-tag" style="background: rgba(251,146,60,0.08); color: var(--orange);">cycle</span>
+        </div>
+        <div class="sig-coupling" data-module="mcp" onclick="selectFromSignal('mcp', this)">
+          <span class="sig-coupling-pair mono">mcp <span class="sig-coupling-arrow">&#8594;</span> db</span>
+          <span class="sig-coupling-val">.42</span>
+          <span class="sig-coupling-tag" style="background: rgba(74,222,128,0.06); color: var(--green);">ok</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- VOID CANVAS -->
+  <div class="void-canvas" id="voidCanvas">
+
+    <!-- Ambient orbs -->
+    <div class="ambient-orb" style="width: 500px; height: 500px; background: #6366f1; top: -80px; left: 5%;"></div>
+    <div class="ambient-orb" style="width: 400px; height: 400px; background: #ec4899; bottom: -60px; right: 5%; animation-delay: -7s;"></div>
+    <div class="ambient-orb" style="width: 350px; height: 350px; background: #22c55e; top: 40%; left: 35%; animation-delay: -13s;"></div>
+
+    <!-- Layer labels -->
+    <div class="void-layer" style="top: 50px;">Interface</div>
+    <div class="void-layer" style="top: 220px;">Core</div>
+    <div class="void-layer" style="top: 420px;">Data</div>
+
+    <!-- SVG EDGES -->
+    <svg class="edge-layer" id="edges">
+      <defs>
+        <linearGradient id="gEdge1" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ef4444" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#ef4444" stop-opacity="0.04"/>
+        </linearGradient>
+        <linearGradient id="gEdge2" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#6366f1" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#6366f1" stop-opacity="0.03"/>
+        </linearGradient>
+        <linearGradient id="gCycle" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#fb923c" stop-opacity="0.25"/>
+          <stop offset="50%" stop-color="#fb923c" stop-opacity="0.12"/>
+          <stop offset="100%" stop-color="#fb923c" stop-opacity="0.25"/>
+        </linearGradient>
+      </defs>
+
+      <!-- pipeline -> db (heavy coupling) -->
+      <path class="edge-path" d="M 340,260 C 340,360 230,380 210,440" stroke="url(#gEdge1)" stroke-width="2.5"/>
+      <!-- pipeline <-> graph (cycle) -->
+      <path class="edge-path" d="M 420,250 C 480,310 510,330 530,370" stroke="url(#gCycle)" stroke-width="2" stroke-dasharray="6 4"/>
+      <!-- pipeline <- parse -->
+      <path class="edge-path" d="M 260,185 C 200,170 140,175 100,200" stroke="url(#gEdge2)" stroke-width="1.5"/>
+      <!-- mcp -> db -->
+      <path class="edge-path" d="M 590,145 C 470,270 300,360 220,440" stroke="url(#gEdge2)" stroke-width="1"/>
+      <!-- analysis <-> db (cycle) -->
+      <path class="edge-path" d="M 400,490 C 330,510 260,510 230,490" stroke="url(#gCycle)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    </svg>
+
+    <!-- NODES: INTERFACE LAYER -->
+    <div class="arch-node" data-module="main" style="left: 30px; top: 40px; --node-accent: #22d3ee; --node-glow: rgba(34,211,238,0.05);" onclick="selectFromVoid('main', this)">
+      <div class="an-inner" style="min-width: 90px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #22d3ee;"></div>
+          <span class="an-name">main.rs</span>
+        </div>
+        <div class="an-subtitle">CLI entry &middot; 12 sym</div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="mcp" style="left: 490px; top: 35px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.05);" onclick="selectFromVoid('mcp', this)">
+      <div class="an-inner" style="min-width: 170px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">mcp/</span>
+          <span class="an-count">156</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 4;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(74,222,128,0.06); color: #4ade80;">healthy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="dash" style="left: 720px; top: 50px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="selectFromVoid('dash', this)">
+      <div class="an-inner" style="min-width: 90px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">dash/</span>
+          <span class="an-count">87</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CORE LAYER -->
+    <div class="arch-node" data-module="pipeline" style="left: 220px; top: 165px; --node-accent: #a855f7; --node-glow: rgba(168,85,247,0.06);" onclick="selectFromVoid('pipeline', this)">
+      <div class="an-inner" style="min-width: 220px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">pipeline/</span>
+          <span class="an-count">387 &middot; 14 files</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(239,68,68,0.5); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 4;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.1); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(251,146,60,0.08); color: #fb923c;">2 cycles</span>
+          <span class="an-pill" style="background: rgba(192,132,252,0.08); color: #c084fc;">risk 0.71</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="parse" style="left: 30px; top: 190px; --node-accent: #facc15; --node-glow: rgba(250,204,21,0.04);" onclick="selectFromVoid('parse', this)">
+      <div class="an-inner" style="min-width: 150px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">parse/</span>
+          <span class="an-count">284</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.35); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(239,68,68,0.35); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(239,68,68,0.3); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(248,113,113,0.08); color: #f87171;">12 dead</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="graph" style="left: 480px; top: 330px; --node-accent: #facc15; --node-glow: rgba(250,204,21,0.04);" onclick="selectFromVoid('graph', this)">
+      <div class="an-inner" style="min-width: 150px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">graph/</span>
+          <span class="an-count">142</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(250,204,21,0.4); flex: 4;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(250,204,21,0.08); color: #facc15;">god object</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DATA LAYER -->
+    <div class="arch-node" data-module="db" style="left: 150px; top: 420px; --node-accent: #f87171; --node-glow: rgba(248,113,113,0.05);" onclick="selectFromVoid('db', this)">
+      <div class="an-inner" style="min-width: 170px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #facc15;"></div>
+          <span class="an-name">db/</span>
+          <span class="an-count">198</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(239,68,68,0.45); flex: 6;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 3;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.15); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(250,204,21,0.08); color: #facc15;">god object</span>
+          <span class="an-pill" style="background: rgba(251,146,60,0.08); color: #fb923c;">cycle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="analysis" style="left: 380px; top: 460px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="selectFromVoid('analysis', this)">
+      <div class="an-inner" style="min-width: 120px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">analysis/</span>
+          <span class="an-count">118</span>
+        </div>
+        <div class="an-sparkline">
+          <div class="an-spark" style="background: rgba(74,222,128,0.3); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.25); flex: 2;"></div>
+          <div class="an-spark" style="background: rgba(74,222,128,0.2); flex: 1;"></div>
+        </div>
+        <div class="an-pills">
+          <span class="an-pill" style="background: rgba(74,222,128,0.06); color: #4ade80;">healthy</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="search" style="left: 560px; top: 470px; --node-accent: #4ade80; --node-glow: rgba(74,222,128,0.03);" onclick="selectFromVoid('search', this)">
+      <div class="an-inner" style="min-width: 90px;">
+        <div class="an-top">
+          <div class="an-status" style="--status-color: #4ade80;"></div>
+          <span class="an-name">search/</span>
+          <span class="an-count">64</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Small peripheral nodes -->
+    <div class="arch-node" data-module="config" style="left: 710px; top: 190px; --node-accent: #fb923c;" onclick="selectFromVoid('config', this)">
+      <div class="an-inner" style="min-width: 70px; padding: 6px 10px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">config/</span></div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="output" style="left: 710px; top: 245px; --node-accent: #f87171;" onclick="selectFromVoid('output', this)">
+      <div class="an-inner" style="min-width: 70px; padding: 6px 10px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px; color: #f87171;">output/</span></div>
+        <div style="font-size: 8px; color: #3f3f46; font-family: 'SF Mono', monospace; margin-top: 2px;">8 dead</div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="watch" style="left: 710px; top: 300px; --node-accent: #4ade80;" onclick="selectFromVoid('watch', this)">
+      <div class="an-inner" style="min-width: 70px; padding: 6px 10px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">watch/</span></div>
+      </div>
+    </div>
+
+    <div class="arch-node" data-module="lsp" style="left: 710px; top: 350px; --node-accent: #4ade80;" onclick="selectFromVoid('lsp', this)">
+      <div class="an-inner" style="min-width: 70px; padding: 6px 10px;">
+        <div class="an-top" style="margin-bottom: 0;"><span class="an-name" style="font-size: 11px;">lsp/</span></div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  // ========== STATE ==========
+  let currentModule = null;
+  let panelCollapsed = false;
+
+  // ========== PANEL TOGGLE ==========
+  function togglePanel() {
+    const panel = document.getElementById('signalPanel');
+    panelCollapsed = !panelCollapsed;
+    if (panelCollapsed) {
+      panel.classList.add('collapsed');
+    } else {
+      panel.classList.remove('collapsed');
+    }
+  }
+
+  // ========== CLEAR SELECTIONS ==========
+  function clearSelections() {
+    // Clear void nodes
+    document.querySelectorAll('.arch-node.active').forEach(n => {
+      n.classList.remove('active');
+      n.classList.remove('highlight');
+    });
+    // Clear signal items
+    document.querySelectorAll('.sig-mod.active, .sig-risk.active').forEach(n => {
+      n.classList.remove('active');
+      n.classList.remove('highlight-anim');
+    });
+  }
+
+  // ========== SELECT FROM SIGNAL (click in panel -> highlight in void) ==========
+  function selectFromSignal(moduleId, clickedEl) {
+    clearSelections();
+    currentModule = moduleId;
+
+    // Highlight clicked signal item
+    clickedEl.classList.add('active');
+
+    // Also highlight matching module in the modules list
+    const sigMod = document.getElementById('sig-' + moduleId);
+    if (sigMod && sigMod !== clickedEl) {
+      sigMod.classList.add('active');
+    }
+
+    // Find and highlight matching void node
+    const voidNode = document.querySelector('.void-canvas .arch-node[data-module="' + moduleId + '"]');
+    if (voidNode) {
+      voidNode.classList.add('active');
+      voidNode.classList.remove('highlight');
+      // Force reflow to restart animation
+      void voidNode.offsetWidth;
+      voidNode.classList.add('highlight');
+
+      // Scroll void canvas if node is out of view
+      const canvas = document.getElementById('voidCanvas');
+      const nodeRect = voidNode.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+
+      if (nodeRect.left < canvasRect.left || nodeRect.right > canvasRect.right ||
+          nodeRect.top < canvasRect.top || nodeRect.bottom > canvasRect.bottom) {
+        voidNode.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+      }
+    }
+  }
+
+  // ========== SELECT FROM VOID (click in canvas -> scroll signal) ==========
+  function selectFromVoid(moduleId, clickedNode) {
+    clearSelections();
+    currentModule = moduleId;
+
+    // Highlight the void node
+    clickedNode.classList.add('active');
+
+    // If panel is collapsed, expand it
+    if (panelCollapsed) {
+      togglePanel();
+    }
+
+    // Find and highlight the matching signal module
+    const sigMod = document.getElementById('sig-' + moduleId);
+    if (sigMod) {
+      sigMod.classList.add('active');
+      sigMod.classList.remove('highlight-anim');
+      void sigMod.offsetWidth;
+      sigMod.classList.add('highlight-anim');
+
+      // Scroll signal panel to show this module
+      const signalBody = document.getElementById('signalBody');
+      const modRect = sigMod.getBoundingClientRect();
+      const bodyRect = signalBody.getBoundingClientRect();
+
+      if (modRect.top < bodyRect.top || modRect.bottom > bodyRect.bottom) {
+        sigMod.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    // Also highlight any risk items matching this module
+    document.querySelectorAll('.sig-risk[data-module="' + moduleId + '"]').forEach(r => {
+      r.classList.add('active');
+    });
+  }
+
+  // ========== CLICK OUTSIDE TO DESELECT ==========
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.arch-node') && !e.target.closest('.sig-mod') &&
+        !e.target.closest('.sig-risk') && !e.target.closest('.sig-coupling') &&
+        !e.target.closest('.panel-toggle') && !e.target.closest('.sc-btn')) {
+      clearSelections();
+      currentModule = null;
+    }
+  });
+
+  // ========== KEYBOARD ==========
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      clearSelections();
+      currentModule = null;
+    }
+    if (e.key === '[' || e.key === ']') {
+      togglePanel();
+    }
+  });
+</script>
+
+</body>
+</html>

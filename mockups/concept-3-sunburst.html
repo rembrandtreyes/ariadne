@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ariadne Sunburst — Concept Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0B0F19;
+    --bg-secondary: #111827;
+    --bg-card: #1A1F2E;
+    --bg-elevated: #252B3B;
+    --border: #2A3149;
+    --text-primary: #F1F5F9;
+    --text-secondary: #94A3B8;
+    --text-muted: #64748B;
+    --accent-blue: #3B82F6;
+    --accent-green: #22C55E;
+    --accent-yellow: #EAB308;
+    --accent-orange: #F97316;
+    --accent-red: #EF4444;
+    --accent-purple: #A855F7;
+    --accent-cyan: #06B6D4;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  code, .mono { font-family: 'Fira Code', monospace; }
+
+  /* ===== CENTER: SUNBURST ===== */
+  .sunburst-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+
+  .sunburst-canvas {
+    position: relative;
+  }
+
+  /* Center info */
+  .center-info {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .center-score {
+    font-size: 48px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+    line-height: 1;
+  }
+
+  .center-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  .center-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-top: 8px;
+    color: var(--text-secondary);
+  }
+
+  .center-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    margin-top: 2px;
+  }
+
+  /* ===== RIGHT PANEL ===== */
+  .right-panel {
+    width: 340px;
+    border-left: 1px solid var(--border);
+    background: var(--bg-secondary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .rp-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rp-title {
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rp-logo {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .rp-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .rp-stat {
+    text-align: center;
+    padding: 8px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .rp-stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    font-family: 'Fira Code', monospace;
+  }
+
+  .rp-stat-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  /* Search */
+  .rp-search {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rp-search input {
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    outline: none;
+  }
+
+  .rp-search input:focus { border-color: var(--accent-blue); }
+
+  /* Tabs */
+  .rp-tabs {
+    display: flex;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rp-tab {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+
+  .rp-tab:hover { color: var(--text-secondary); }
+  .rp-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+  /* List */
+  .rp-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+  }
+
+  .rp-list::-webkit-scrollbar { width: 4px; }
+  .rp-list::-webkit-scrollbar-track { background: transparent; }
+  .rp-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .rp-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .rp-item:hover { background: var(--bg-card); }
+
+  .rp-item-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .rp-item-info { flex: 1; min-width: 0; }
+
+  .rp-item-name {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rp-item-path {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rp-item-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Fira Code', monospace;
+    flex-shrink: 0;
+  }
+
+  /* Group headers */
+  .rp-group {
+    padding: 12px 12px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ===== FLOATING CONTROLS ===== */
+  .float-controls {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-70%);
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .fc-group {
+    display: flex;
+    gap: 2px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  .fc-btn {
+    padding: 6px 12px;
+    font-size: 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: none;
+    background: none;
+    transition: all 0.15s;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .fc-btn:hover { color: var(--text-secondary); background: var(--bg-card); }
+  .fc-btn.active { color: var(--text-primary); background: var(--bg-elevated); }
+
+  /* Breadcrumb */
+  .float-breadcrumb {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-70%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: rgba(17,24,39,0.9);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+    font-family: 'Fira Code', monospace;
+    z-index: 100;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+  }
+
+  .fb-item { color: var(--accent-blue); cursor: pointer; }
+  .fb-item:hover { text-decoration: underline; }
+  .fb-sep { color: var(--text-muted); font-size: 10px; }
+  .fb-current { color: var(--text-primary); font-weight: 500; }
+
+  /* Tooltip */
+  .sb-tooltip {
+    position: fixed;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    z-index: 1000;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    display: none;
+    max-width: 240px;
+  }
+
+  .sb-tooltip.visible { display: block; }
+
+  .tt-name { font-weight: 600; margin-bottom: 4px; }
+  .tt-stat { font-size: 10px; color: var(--text-muted); font-family: 'Fira Code', monospace; }
+</style>
+</head>
+<body>
+
+<!-- BREADCRUMB -->
+<div class="float-breadcrumb">
+  <span class="fb-item">ariadne</span>
+  <span class="fb-sep">/</span>
+  <span class="fb-current">src</span>
+</div>
+
+<!-- SUNBURST AREA -->
+<div class="sunburst-area">
+  <div class="sunburst-canvas">
+    <canvas id="sunburstCanvas" width="700" height="700"></canvas>
+    <div class="center-info">
+      <div class="center-score" style="color: var(--accent-green);" id="centerScore">84</div>
+      <div class="center-label" id="centerLabel">Health Score</div>
+      <div class="center-name" id="centerName">ariadne/src</div>
+      <div class="center-detail" id="centerDetail">1,842 symbols · 247 files</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM CONTROLS -->
+<div class="float-controls">
+  <div class="fc-group">
+    <button class="fc-btn active" id="colorHealth">Health</button>
+    <button class="fc-btn" id="colorRisk">Risk</button>
+    <button class="fc-btn" id="colorChurn">Churn</button>
+    <button class="fc-btn" id="colorType">Type</button>
+  </div>
+  <div class="fc-group">
+    <button class="fc-btn active" id="depthAll">All Depths</button>
+    <button class="fc-btn" id="depth2">2 Levels</button>
+    <button class="fc-btn" id="depth1">1 Level</button>
+  </div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div class="right-panel">
+  <div class="rp-header">
+    <div class="rp-title">
+      <div class="rp-logo">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg>
+      </div>
+      Ariadne
+    </div>
+    <div class="rp-stats">
+      <div class="rp-stat">
+        <div class="rp-stat-value" style="color: var(--accent-red)">47</div>
+        <div class="rp-stat-label">Dead</div>
+      </div>
+      <div class="rp-stat">
+        <div class="rp-stat-value" style="color: var(--accent-orange)">5</div>
+        <div class="rp-stat-label">Cycles</div>
+      </div>
+      <div class="rp-stat">
+        <div class="rp-stat-value" style="color: var(--accent-yellow)">3</div>
+        <div class="rp-stat-label">Gods</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rp-search">
+    <input type="text" placeholder="Search symbols, files..." />
+  </div>
+
+  <div class="rp-tabs">
+    <button class="rp-tab active">Issues</button>
+    <button class="rp-tab">Modules</button>
+    <button class="rp-tab">Symbols</button>
+  </div>
+
+  <div class="rp-list">
+    <div class="rp-group"><span style="color: var(--accent-red);">●</span> Dead Code · 47</div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-red)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">format_xml_output</div>
+        <div class="rp-item-path">src/output/formatters.rs:34</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red);">dead</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-red)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">parse_legacy_config</div>
+        <div class="rp-item-path">src/config/mod.rs:112</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red);">dead</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-red)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">validate_ruby_ast</div>
+        <div class="rp-item-path">src/parse/ruby.rs:78</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red);">dead</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-red)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">old_blast_radius</div>
+        <div class="rp-item-path">src/graph/blast_radius.rs:202</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(239,68,68,0.15); color: var(--accent-red);">dead</span>
+    </div>
+
+    <div class="rp-group"><span style="color: var(--accent-orange);">●</span> Circular Dependencies · 5</div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-orange)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">pipeline ↔ graph</div>
+        <div class="rp-item-path">mutual dependency detected</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(249,115,22,0.15); color: var(--accent-orange);">cycle</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-orange)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">db::query ↔ analysis</div>
+        <div class="rp-item-path">mutual dependency detected</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(249,115,22,0.15); color: var(--accent-orange);">cycle</span>
+    </div>
+
+    <div class="rp-group"><span style="color: var(--accent-yellow);">●</span> God Objects · 3</div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-yellow)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">Database</div>
+        <div class="rp-item-path">src/db/mod.rs — 127 connections</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(234,179,8,0.15); color: var(--accent-yellow);">god</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-yellow)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">CallGraph</div>
+        <div class="rp-item-path">src/graph/mod.rs — 89 connections</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(234,179,8,0.15); color: var(--accent-yellow);">god</span>
+    </div>
+
+    <div class="rp-group"><span style="color: var(--accent-purple);">●</span> High Risk · 12</div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-purple)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">call_resolution.rs</div>
+        <div class="rp-item-path">src/pipeline/ — risk: 0.91</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(168,85,247,0.15); color: var(--accent-purple);">0.91</span>
+    </div>
+
+    <div class="rp-item">
+      <span class="rp-item-dot" style="background: var(--accent-purple)"></span>
+      <div class="rp-item-info">
+        <div class="rp-item-name">query.rs</div>
+        <div class="rp-item-path">src/db/ — risk: 0.87</div>
+      </div>
+      <span class="rp-item-badge" style="background: rgba(168,85,247,0.15); color: var(--accent-purple);">0.87</span>
+    </div>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div class="sb-tooltip" id="tooltip">
+  <div class="tt-name" id="ttName">pipeline/</div>
+  <div class="tt-stat" id="ttStat">387 symbols · 14 files</div>
+</div>
+
+<script>
+const canvas = document.getElementById('sunburstCanvas');
+const ctx = canvas.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+canvas.width = 700 * dpr;
+canvas.height = 700 * dpr;
+canvas.style.width = '700px';
+canvas.style.height = '700px';
+ctx.scale(dpr, dpr);
+
+const cx = 350, cy = 350;
+const innerR = 70;
+const ringWidth = 55;
+const gap = 2;
+
+// Codebase hierarchy data
+const data = {
+  name: 'src',
+  children: [
+    {
+      name: 'pipeline', symbols: 387, health: 0.78, risk: 0.71,
+      children: [
+        { name: 'parsing.rs', symbols: 48, health: 0.85, risk: 0.4 },
+        { name: 'call_resolution.rs', symbols: 34, health: 0.45, risk: 0.91 },
+        { name: 'structure.rs', symbols: 28, health: 0.82, risk: 0.48 },
+        { name: 'import_resolution.rs', symbols: 22, health: 0.88, risk: 0.22 },
+        { name: 'community.rs', symbols: 20, health: 0.9, risk: 0.18 },
+        { name: 'dead_code.rs', symbols: 18, health: 0.92, risk: 0.15 },
+        { name: 'heritage.rs', symbols: 16, health: 0.85, risk: 0.12 },
+        { name: 'coupling.rs', symbols: 15, health: 0.88, risk: 0.14 },
+        { name: 'discovery.rs', symbols: 14, health: 0.95, risk: 0.08 },
+        { name: 'api_resolution.rs', symbols: 12, health: 0.7, risk: 0.35 },
+      ]
+    },
+    {
+      name: 'parse', symbols: 284, health: 0.72, risk: 0.45,
+      children: [
+        { name: 'python.rs', symbols: 42, health: 0.88, risk: 0.15 },
+        { name: 'javascript.rs', symbols: 40, health: 0.85, risk: 0.2 },
+        { name: 'typescript.rs', symbols: 38, health: 0.86, risk: 0.18 },
+        { name: 'rust.rs', symbols: 35, health: 0.9, risk: 0.12 },
+        { name: 'go.rs', symbols: 32, health: 0.88, risk: 0.14 },
+        { name: 'java.rs', symbols: 28, health: 0.82, risk: 0.2 },
+        { name: 'ruby.rs', symbols: 24, health: 0.4, risk: 0.6 },
+        { name: 'php.rs', symbols: 20, health: 0.45, risk: 0.55 },
+        { name: 'csharp.rs', symbols: 15, health: 0.8, risk: 0.25 },
+        { name: 'mod.rs', symbols: 10, health: 0.92, risk: 0.1 },
+      ]
+    },
+    {
+      name: 'db', symbols: 198, health: 0.65, risk: 0.72,
+      children: [
+        { name: 'query.rs', symbols: 89, health: 0.5, risk: 0.87 },
+        { name: 'schema.rs', symbols: 52, health: 0.88, risk: 0.2 },
+        { name: 'mod.rs', symbols: 38, health: 0.6, risk: 0.65 },
+        { name: 'migrations.rs', symbols: 19, health: 0.85, risk: 0.15 },
+      ]
+    },
+    {
+      name: 'mcp', symbols: 156, health: 0.88, risk: 0.2,
+      children: [
+        { name: 'tools/mod.rs', symbols: 40, health: 0.9, risk: 0.15 },
+        { name: 'tools/symbol.rs', symbols: 32, health: 0.88, risk: 0.18 },
+        { name: 'tools/impact.rs', symbols: 28, health: 0.85, risk: 0.22 },
+        { name: 'tools/graph.rs', symbols: 24, health: 0.9, risk: 0.12 },
+        { name: 'tools/quality.rs', symbols: 20, health: 0.92, risk: 0.1 },
+        { name: 'mod.rs', symbols: 12, health: 0.95, risk: 0.05 },
+      ]
+    },
+    {
+      name: 'graph', symbols: 142, health: 0.68, risk: 0.58,
+      children: [
+        { name: 'mod.rs', symbols: 52, health: 0.55, risk: 0.7 },
+        { name: 'blast_radius.rs', symbols: 34, health: 0.8, risk: 0.3 },
+        { name: 'circular.rs', symbols: 24, health: 0.85, risk: 0.2 },
+        { name: 'call_chain.rs', symbols: 18, health: 0.82, risk: 0.25 },
+        { name: 'traversal.rs', symbols: 14, health: 0.9, risk: 0.1 },
+      ]
+    },
+    {
+      name: 'analysis', symbols: 118, health: 0.85, risk: 0.25,
+      children: [
+        { name: 'affected_tests.rs', symbols: 32, health: 0.88, risk: 0.2 },
+        { name: 'arch_rules.rs', symbols: 28, health: 0.82, risk: 0.3 },
+        { name: 'boundaries.rs', symbols: 26, health: 0.85, risk: 0.22 },
+        { name: 'scip_export.rs', symbols: 18, health: 0.9, risk: 0.1 },
+        { name: 'mod.rs', symbols: 14, health: 0.88, risk: 0.15 },
+      ]
+    },
+    {
+      name: 'dashboard', symbols: 87, health: 0.82, risk: 0.3,
+      children: [
+        { name: 'api.rs', symbols: 45, health: 0.8, risk: 0.35 },
+        { name: 'mod.rs', symbols: 22, health: 0.85, risk: 0.2 },
+        { name: 'static/', symbols: 20, health: 0.82, risk: 0.28 },
+      ]
+    },
+    {
+      name: 'search', symbols: 64, health: 0.9, risk: 0.15,
+      children: [
+        { name: 'mod.rs', symbols: 42, health: 0.9, risk: 0.15 },
+        { name: 'fuzzy.rs', symbols: 22, health: 0.92, risk: 0.1 },
+      ]
+    },
+    {
+      name: 'config', symbols: 48, health: 0.55, risk: 0.52,
+      children: [
+        { name: 'mod.rs', symbols: 30, health: 0.5, risk: 0.6 },
+        { name: 'language.rs', symbols: 18, health: 0.65, risk: 0.35 },
+      ]
+    },
+    {
+      name: 'output', symbols: 42, health: 0.4, risk: 0.65,
+      children: [
+        { name: 'formatters.rs', symbols: 28, health: 0.35, risk: 0.7 },
+        { name: 'mod.rs', symbols: 14, health: 0.5, risk: 0.5 },
+      ]
+    },
+    {
+      name: 'watch', symbols: 31, health: 0.88, risk: 0.15,
+      children: [
+        { name: 'mod.rs', symbols: 31, health: 0.88, risk: 0.15 },
+      ]
+    },
+    {
+      name: 'lsp', symbols: 28, health: 0.9, risk: 0.1,
+      children: [
+        { name: 'mod.rs', symbols: 28, health: 0.9, risk: 0.1 },
+      ]
+    },
+  ]
+};
+
+function healthColor(h) {
+  if (h >= 0.85) return { r: 34, g: 197, b: 94 };
+  if (h >= 0.7) return { r: 132, g: 204, b: 22 };
+  if (h >= 0.55) return { r: 234, g: 179, b: 8 };
+  if (h >= 0.4) return { r: 249, g: 115, b: 22 };
+  return { r: 239, g: 68, b: 68 };
+}
+
+function drawRing(segments, ringIndex) {
+  const rInner = innerR + ringIndex * (ringWidth + gap);
+  const rOuter = rInner + ringWidth;
+  let totalSymbols = segments.reduce((sum, s) => sum + s.symbols, 0);
+  let currentAngle = -Math.PI / 2;
+
+  segments.forEach(seg => {
+    const sweep = (seg.symbols / totalSymbols) * Math.PI * 2;
+    const segGap = 0.008;
+    const startA = currentAngle + segGap;
+    const endA = currentAngle + sweep - segGap;
+
+    if (endA > startA) {
+      const color = healthColor(seg.health);
+
+      // Main segment
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOuter, startA, endA);
+      ctx.arc(cx, cy, rInner, endA, startA, true);
+      ctx.closePath();
+
+      const alpha = 0.15 + seg.health * 0.45;
+      ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.3)`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+
+      // Label for large segments
+      if (sweep > 0.15 && ringIndex < 2) {
+        const midAngle = (startA + endA) / 2;
+        const labelR = (rInner + rOuter) / 2;
+        const lx = cx + Math.cos(midAngle) * labelR;
+        const ly = cy + Math.sin(midAngle) * labelR;
+
+        ctx.save();
+        ctx.translate(lx, ly);
+        let rotation = midAngle;
+        if (rotation > Math.PI / 2 || rotation < -Math.PI / 2) {
+          rotation += Math.PI;
+        }
+        ctx.rotate(rotation);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `500 ${ringIndex === 0 ? 11 : 9}px Inter`;
+        ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.9)`;
+
+        const displayName = seg.name.replace('.rs', '').replace('tools/', '');
+        ctx.fillText(displayName, 0, 0);
+        ctx.restore();
+      }
+
+      // Store segment bounds for hover
+      seg._startAngle = startA;
+      seg._endAngle = endA;
+      seg._rInner = rInner;
+      seg._rOuter = rOuter;
+    }
+
+    currentAngle += sweep;
+  });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, 700, 700);
+
+  // Subtle glow behind center
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, innerR + 20);
+  grad.addColorStop(0, 'rgba(59, 130, 246, 0.05)');
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR + 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw rings
+  drawRing(data.children, 0);
+
+  // Draw sub-rings
+  let totalSymbols = data.children.reduce((sum, c) => sum + c.symbols, 0);
+  let currentAngle = -Math.PI / 2;
+
+  data.children.forEach(mod => {
+    const modSweep = (mod.symbols / totalSymbols) * Math.PI * 2;
+    if (mod.children && mod.children.length > 0) {
+      const rInner = innerR + 1 * (ringWidth + gap);
+      const rOuter = rInner + ringWidth;
+      let childTotal = mod.children.reduce((sum, c) => sum + c.symbols, 0);
+      let childAngle = currentAngle;
+
+      mod.children.forEach(child => {
+        const childSweep = (child.symbols / childTotal) * modSweep;
+        const segGap = 0.008;
+        const startA = childAngle + segGap;
+        const endA = childAngle + childSweep - segGap;
+
+        if (endA > startA) {
+          const color = healthColor(child.health);
+          const alpha = 0.1 + child.health * 0.35;
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, rOuter, startA, endA);
+          ctx.arc(cx, cy, rInner, endA, startA, true);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.2)`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+
+          // Label for larger inner segments
+          if (childSweep > 0.12) {
+            const midAngle = (startA + endA) / 2;
+            const labelR = (rInner + rOuter) / 2;
+            const lx = cx + Math.cos(midAngle) * labelR;
+            const ly = cy + Math.sin(midAngle) * labelR;
+
+            ctx.save();
+            ctx.translate(lx, ly);
+            let rotation = midAngle;
+            if (rotation > Math.PI / 2 || rotation < -Math.PI / 2) {
+              rotation += Math.PI;
+            }
+            ctx.rotate(rotation);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = '400 8px "Fira Code"';
+            ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 0.7)`;
+            ctx.fillText(child.name.replace('.rs', ''), 0, 0);
+            ctx.restore();
+          }
+        }
+
+        childAngle += childSweep;
+      });
+    }
+
+    currentAngle += modSweep;
+  });
+
+  // Center circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = var_bg = 'rgba(11,15,25,0.8)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(59,130,246,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+draw();
+
+// Hover handling
+const tooltip = document.getElementById('tooltip');
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const dx = mx - cx;
+  const dy = my - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  let angle = Math.atan2(dy, dx);
+
+  // Check ring 0
+  if (dist >= innerR && dist <= innerR + ringWidth) {
+    let found = false;
+    data.children.forEach(seg => {
+      if (seg._startAngle !== undefined) {
+        let a = angle;
+        let s = seg._startAngle;
+        let e2 = seg._endAngle;
+        // Normalize
+        if (a >= s && a <= e2) {
+          tooltip.querySelector('.tt-name').textContent = seg.name + '/';
+          tooltip.querySelector('.tt-stat').textContent = `${seg.symbols} symbols · health: ${Math.round(seg.health * 100)}%`;
+          tooltip.style.left = (e.clientX + 12) + 'px';
+          tooltip.style.top = (e.clientY - 10) + 'px';
+          tooltip.classList.add('visible');
+          canvas.style.cursor = 'pointer';
+          found = true;
+        }
+      }
+    });
+    if (!found) {
+      tooltip.classList.remove('visible');
+      canvas.style.cursor = 'default';
+    }
+  } else {
+    tooltip.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.classList.remove('visible');
+  canvas.style.cursor = 'default';
+});
+
+// Color mode switching
+document.querySelectorAll('.fc-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('.fc-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// Tab switching
+document.querySelectorAll('.rp-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.rp-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+  });
+});
+</script>
+
+</body>
+</html>
