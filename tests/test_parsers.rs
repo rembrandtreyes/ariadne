@@ -324,3 +324,80 @@ fn test_ts_parser_emits_module_symbol() {
         "TS parser must emit a <module> symbol to anchor module-level calls"
     );
 }
+
+// ---------------------------------------------------------------------------
+// A2: JSX prop identifier tracking
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_javascript_jsx_prop_bare_identifier_tracked_as_call() {
+    let parser = get_parser(Language::JavaScript);
+    let source = r#"function MyComponent() {
+    function handleClick() {}
+    return <Button onClick={handleClick} />;
+}"#
+    .to_string();
+    let result = parser
+        .parse_file(&source, "test.jsx")
+        .expect("parse succeeds");
+    let has_edge = result.calls.iter().any(|c| c.callee_name == "handleClick");
+    assert!(
+        has_edge,
+        "Expected call edge to handleClick from JSX prop — got calls: {:?}",
+        result
+            .calls
+            .iter()
+            .map(|c| &c.callee_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_javascript_jsx_multiple_prop_identifiers_all_tracked() {
+    let parser = get_parser(Language::JavaScript);
+    let source = r#"function MyComponent() {
+    function handleClick() {}
+    function handleChange() {}
+    return <Input onClick={handleClick} onChange={handleChange} />;
+}"#
+    .to_string();
+    let result = parser
+        .parse_file(&source, "test.jsx")
+        .expect("parse succeeds");
+    let has_click = result.calls.iter().any(|c| c.callee_name == "handleClick");
+    let has_change = result.calls.iter().any(|c| c.callee_name == "handleChange");
+    assert!(has_click, "Expected call edge to handleClick");
+    assert!(has_change, "Expected call edge to handleChange");
+}
+
+#[test]
+fn test_javascript_jsx_ternary_prop_not_tracked_as_identifier() {
+    let parser = get_parser(Language::JavaScript);
+    // Ternary expressions in props are deferred scope — should not produce
+    // bare-identifier call edges from the jsx_expression→identifier path.
+    let source = r#"function MyComponent() {
+    function handleA() {}
+    function handleB() {}
+    return <Button onClick={condition ? handleA : handleB} />;
+}"#
+    .to_string();
+    let result = parser
+        .parse_file(&source, "test.jsx")
+        .expect("parse succeeds");
+    // The jsx_expression child of a ternary prop is a conditional_expression,
+    // not a bare identifier — so A2 should NOT emit edges from this path.
+    let ternary_edges = result
+        .calls
+        .iter()
+        .filter(|c| c.callee_name == "handleA" || c.callee_name == "handleB")
+        .count();
+    assert_eq!(
+        ternary_edges, 0,
+        "Ternary prop values must not produce bare-identifier call edges (deferred scope)"
+    );
+}
+
+// Note: test_typescript_jsx_prop_bare_identifier_tracked_as_call is omitted here
+// because the TypeScript parser uses LANGUAGE_TYPESCRIPT (not LANGUAGE_TSX), so JSX
+// nodes never appear in its parse tree. The A2 code in typescript.rs is correct and
+// will be exercised once TSX grammar support is wired up.

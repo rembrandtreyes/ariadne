@@ -405,6 +405,8 @@ impl JavaScriptParser {
         result: &mut ParseResult,
         parent_name: Option<&str>,
     ) {
+        let caller = parent_name.unwrap_or("<module>").to_string();
+        // Pass 1: extract the component tag name (uppercase-first identifiers only).
         let mut cursor = jsx_node.walk();
         for child in jsx_node.children(&mut cursor) {
             match child.kind() {
@@ -414,9 +416,8 @@ impl JavaScriptParser {
                         .unwrap_or_default()
                         .to_string();
                     if tag_name.starts_with(|c: char| c.is_uppercase()) {
-                        let caller = parent_name.unwrap_or("<module>").to_string();
                         result.calls.push(ParsedCall {
-                            caller_name: caller,
+                            caller_name: caller.clone(),
                             callee_name: tag_name,
                             line: jsx_node.start_position().row as u32 + 1,
                         });
@@ -424,6 +425,35 @@ impl JavaScriptParser {
                     break;
                 }
                 _ => {}
+            }
+        }
+        // Pass 2 (A2): track bare identifier prop values as call edges.
+        // e.g., <Button onClick={handleClick} /> emits caller→handleClick.
+        // Scope: bare identifiers only; ternaries and member expressions are deferred.
+        let mut attr_cursor = jsx_node.walk();
+        for child in jsx_node.children(&mut attr_cursor) {
+            if child.kind() == "jsx_attribute" {
+                let mut expr_cursor = child.walk();
+                for attr_child in child.children(&mut expr_cursor) {
+                    if attr_child.kind() == "jsx_expression" {
+                        let mut ident_cursor = attr_child.walk();
+                        for expr_child in attr_child.children(&mut ident_cursor) {
+                            if expr_child.kind() == "identifier" {
+                                let ident = expr_child
+                                    .utf8_text(source.as_bytes())
+                                    .unwrap_or_default()
+                                    .to_string();
+                                if !ident.is_empty() {
+                                    result.calls.push(ParsedCall {
+                                        caller_name: caller.clone(),
+                                        callee_name: ident,
+                                        line: expr_child.start_position().row as u32 + 1,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         Self::extract_symbols(jsx_node, source, result, parent_name);

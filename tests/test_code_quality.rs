@@ -1,5 +1,22 @@
 use ariadne::db::{query, write, Database};
 
+/// Minimal DB with one service and file — no symbols.
+fn setup_minimal_db() -> (Database, i64, i64) {
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test-svc", "/tmp/test", "monolith", "rust")
+        .expect("insert service");
+    let file = write::insert_file(
+        &db,
+        svc,
+        "src/main.rs",
+        "/tmp/test/src/main.rs",
+        "rust",
+        0.0,
+    )
+    .expect("insert file");
+    (db, svc, file)
+}
+
 /// Create a test DB with symbols that have varying health signals.
 fn setup_quality_db() -> Database {
     let db = Database::open_in_memory().expect("in-memory db");
@@ -194,6 +211,293 @@ fn test_complexity_hotspots() {
 
     // Login should be the top hotspot (highest combined signals)
     assert_eq!(hotspots[0].name, "login");
+}
+
+// ---- get_complexity_hotspots edge cases ----
+
+#[test]
+fn test_complexity_hotspots_empty_db() {
+    let (db, _, _) = setup_minimal_db();
+    let hotspots = query::get_complexity_hotspots(&db, 10).expect("query should succeed");
+    assert!(hotspots.is_empty(), "Empty DB should return no hotspots");
+}
+
+#[test]
+fn test_complexity_hotspots_limit_zero() {
+    let db = setup_quality_db();
+    let hotspots = query::get_complexity_hotspots(&db, 0).expect("query should succeed");
+    assert!(hotspots.is_empty(), "limit=0 should return empty result");
+}
+
+#[test]
+fn test_complexity_hotspots_limit_exceeds_symbol_count() {
+    let db = setup_quality_db();
+    // setup_quality_db has 4 eligible (non-dead, non-test) symbols; limit 1000 should return all
+    let hotspots = query::get_complexity_hotspots(&db, 1000).expect("query should succeed");
+    assert!(
+        !hotspots.is_empty(),
+        "Should return symbols when limit > count"
+    );
+    assert!(
+        hotspots.len() <= 4,
+        "Cannot return more symbols than exist: got {}",
+        hotspots.len()
+    );
+}
+
+#[test]
+fn test_complexity_hotspots_excludes_dead_symbols() {
+    let (db, _, file) = setup_minimal_db();
+    let sym = write::insert_symbol(
+        &db,
+        file,
+        "dead_fn",
+        "main::dead_fn",
+        "function",
+        1,
+        10,
+        false,
+        false,
+        "fn dead_fn()",
+        "",
+        None,
+    )
+    .expect("insert symbol");
+    db.conn()
+        .execute(
+            "UPDATE symbols SET is_dead = 1 WHERE id = ?1",
+            rusqlite::params![sym],
+        )
+        .expect("mark dead");
+    let hotspots = query::get_complexity_hotspots(&db, 10).expect("query should succeed");
+    assert!(
+        hotspots.is_empty(),
+        "Dead symbols must be excluded from hotspots"
+    );
+}
+
+#[test]
+fn test_complexity_hotspots_no_symbol_history_uses_zero_defaults() {
+    let (db, _, file) = setup_minimal_db();
+    // Symbol with no symbol_history row — modification_count and is_volatile default to 0
+    write::insert_symbol(
+        &db,
+        file,
+        "no_history",
+        "main::no_history",
+        "function",
+        1,
+        5,
+        true,
+        false,
+        "fn no_history()",
+        "",
+        None,
+    )
+    .expect("insert symbol");
+    let hotspots = query::get_complexity_hotspots(&db, 10).expect("query should succeed");
+    assert_eq!(hotspots.len(), 1);
+    assert_eq!(hotspots[0].name, "no_history");
+    assert_eq!(
+        hotspots[0].modification_count, 0,
+        "No history → modification_count = 0"
+    );
+    assert!(!hotspots[0].is_volatile, "No history → is_volatile = false");
+}
+
+#[test]
+fn test_complexity_hotspots_high_churn_surfaces_symbol() {
+    // Score = fan_in + fan_out + modification_count * 0.1 + (volatile ? 10 : 0)
+    // high_churn: 0 + 0 + 100 * 0.1 = 10.0
+    // low_churn:  fan_in=1 + fan_out=0 + 0 = 1.0
+    // high_churn must rank first despite zero fan counts
+    let (db, _, file) = setup_minimal_db();
+    let sym_high = write::insert_symbol(
+        &db,
+        file,
+        "high_churn",
+        "main::high_churn",
+        "function",
+        1,
+        10,
+        true,
+        false,
+        "fn high_churn()",
+        "",
+        None,
+    )
+    .expect("insert high_churn");
+    let sym_low = write::insert_symbol(
+        &db,
+        file,
+        "low_churn",
+        "main::low_churn",
+        "function",
+        11,
+        20,
+        true,
+        false,
+        "fn low_churn()",
+        "",
+        None,
+    )
+    .expect("insert low_churn");
+    write::insert_symbol_history(&db, sym_high, None, None, 100, 1, false)
+        .expect("history high_churn");
+    write::insert_symbol_history(&db, sym_low, None, None, 0, 1, false).expect("history low_churn");
+    // Add one caller to low_churn so it has fan_in=1
+    db.conn()
+        .execute(
+            "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES (?1, ?2, 'low_churn', ?3, 1, 1.0, 'exact')",
+            rusqlite::params![sym_high, sym_low, file],
+        )
+        .expect("insert call");
+    let hotspots = query::get_complexity_hotspots(&db, 10).expect("query should succeed");
+    assert_eq!(hotspots.len(), 2);
+    assert_eq!(
+        hotspots[0].name, "high_churn",
+        "high_churn (score=10.0) must outrank low_churn (score=1.0)"
+    );
+}
+
+#[test]
+fn test_complexity_hotspots_volatile_bonus_outranks_higher_fan_counts() {
+    // score = fan_in + fan_out + modification_count*0.1 + (volatile ? 10 : 0)
+    // symbol_a: fan_in=3 + fan_out=3 + 0 = 6.0 (not volatile)
+    // symbol_b: fan_in=1 + fan_out=1 + 10 = 12.0 (volatile)
+    // symbol_b must rank first despite fewer connections
+    let (db, _, file) = setup_minimal_db();
+    let sym_a = write::insert_symbol(
+        &db,
+        file,
+        "high_fan",
+        "main::high_fan",
+        "function",
+        1,
+        10,
+        true,
+        false,
+        "fn high_fan()",
+        "",
+        None,
+    )
+    .expect("insert high_fan");
+    let sym_b = write::insert_symbol(
+        &db,
+        file,
+        "volatile_sym",
+        "main::volatile_sym",
+        "function",
+        11,
+        20,
+        true,
+        false,
+        "fn volatile_sym()",
+        "",
+        None,
+    )
+    .expect("insert volatile_sym");
+    write::insert_symbol_history(&db, sym_a, None, None, 0, 1, false).expect("history a");
+    write::insert_symbol_history(&db, sym_b, None, None, 0, 1, true).expect("history b (volatile)");
+    // Give high_fan 3 callers and 3 callees
+    for i in 0..3i64 {
+        let caller = write::insert_symbol(
+            &db,
+            file,
+            &format!("caller_{i}"),
+            &format!("main::caller_{i}"),
+            "function",
+            (30 + i * 5) as u32,
+            (34 + i * 5) as u32,
+            false,
+            false,
+            "",
+            "",
+            None,
+        )
+        .expect("insert caller");
+        let callee = write::insert_symbol(
+            &db,
+            file,
+            &format!("callee_{i}"),
+            &format!("main::callee_{i}"),
+            "function",
+            (60 + i * 5) as u32,
+            (64 + i * 5) as u32,
+            false,
+            false,
+            "",
+            "",
+            None,
+        )
+        .expect("insert callee");
+        db.conn()
+            .execute(
+                "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+                 VALUES (?1, ?2, 'high_fan', ?3, ?4, 1.0, 'exact')",
+                rusqlite::params![caller, sym_a, file, i],
+            )
+            .expect("insert fan-in");
+        db.conn()
+            .execute(
+                "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+                 VALUES (?1, ?2, 'callee', ?3, ?4, 1.0, 'exact')",
+                rusqlite::params![sym_a, callee, file, i + 10],
+            )
+            .expect("insert fan-out");
+    }
+    // Give volatile_sym 1 caller and 1 callee
+    let caller_b = write::insert_symbol(
+        &db,
+        file,
+        "caller_b",
+        "main::caller_b",
+        "function",
+        90,
+        94,
+        false,
+        false,
+        "",
+        "",
+        None,
+    )
+    .expect("insert caller_b");
+    let callee_b = write::insert_symbol(
+        &db,
+        file,
+        "callee_b",
+        "main::callee_b",
+        "function",
+        95,
+        99,
+        false,
+        false,
+        "",
+        "",
+        None,
+    )
+    .expect("insert callee_b");
+    db.conn()
+        .execute(
+            "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES (?1, ?2, 'volatile_sym', ?3, 1, 1.0, 'exact')",
+            rusqlite::params![caller_b, sym_b, file],
+        )
+        .expect("insert volatile fan-in");
+    db.conn()
+        .execute(
+            "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES (?1, ?2, 'callee_b', ?3, 2, 1.0, 'exact')",
+            rusqlite::params![sym_b, callee_b, file],
+        )
+        .expect("insert volatile fan-out");
+    let hotspots = query::get_complexity_hotspots(&db, 2).expect("query should succeed");
+    assert_eq!(hotspots.len(), 2);
+    assert_eq!(
+        hotspots[0].name, "volatile_sym",
+        "volatile_sym (score=12.0) must outrank high_fan (score=6.0)"
+    );
 }
 
 #[test]
