@@ -64,7 +64,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 28 Ariadne MCP tools.
+/// Return the 30 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -253,6 +253,25 @@ fn all_tools() -> Vec<Tool> {
                 vec!["from_symbol", "to_symbol"],
             ),
         ),
+        Tool::new(
+            "get_god_objects",
+            "List symbols whose fan-in meets or exceeds a threshold — the highly-depended-on 'god objects' agents should handle carefully before editing. Pair with blast_radius for full structural-risk intel. Excludes dead code and tests.",
+            make_schema(
+                serde_json::json!({
+                    "threshold": {
+                        "type": "integer",
+                        "description": "Minimum fan_in (unique callers) to qualify as a god object. Default: 20",
+                        "default": 20
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results. Default: 10",
+                        "default": 10
+                    }
+                }),
+                vec![],
+            ),
+        ),
     ]
 }
 
@@ -387,6 +406,7 @@ impl AriadneService {
             "detect_cycles" => self.tool_detect_cycles(),
             "get_boundaries" => self.tool_get_boundaries(),
             "get_dependency_path" => self.tool_get_dependency_path(params),
+            "get_god_objects" => self.tool_get_god_objects(params),
             // Impact tools
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),

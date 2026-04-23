@@ -1020,6 +1020,55 @@ pub fn get_complexity_hotspots(db: &Database, limit: i64) -> anyhow::Result<Vec<
     Ok(rows)
 }
 
+/// Get symbols whose fan_in meets or exceeds `threshold` — the "god objects" agents
+/// should handle carefully. Excludes dead and test symbols. Ordered by fan_in desc.
+pub fn get_god_objects(
+    db: &Database,
+    threshold: i64,
+    limit: i64,
+) -> anyhow::Result<Vec<SymbolHealthData>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT s.id, s.name, s.qualified_name, s.kind, f.path,
+                s.line_start, s.line_end, s.is_dead,
+                (SELECT COUNT(DISTINCT caller_symbol_id) FROM calls WHERE callee_symbol_id = s.id) as fan_in,
+                (SELECT COUNT(DISTINCT callee_symbol_id) FROM calls WHERE caller_symbol_id = s.id AND callee_symbol_id IS NOT NULL) as fan_out,
+                COALESCE(sh.modification_count, 0),
+                COALESCE(sh.author_count, 0),
+                COALESCE(sh.is_volatile, 0),
+                CASE WHEN sh.id IS NOT NULL THEN 1 ELSE 0 END as has_history
+         FROM symbols s
+         JOIN files f ON s.file_id = f.id
+         LEFT JOIN symbol_history sh ON sh.symbol_id = s.id
+         WHERE s.is_test = 0 AND s.is_dead = 0
+           AND (SELECT COUNT(DISTINCT caller_symbol_id) FROM calls WHERE callee_symbol_id = s.id) >= ?1
+         ORDER BY fan_in DESC, s.name ASC
+         LIMIT ?2",
+    )?;
+
+    let rows = stmt
+        .query_map(params![threshold, limit], |row| {
+            Ok(SymbolHealthData {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                file_path: row.get(4)?,
+                line_start: row.get(5)?,
+                line_end: row.get(6)?,
+                is_dead: row.get(7)?,
+                fan_in: row.get(8)?,
+                fan_out: row.get(9)?,
+                modification_count: row.get(10)?,
+                author_count: row.get(11)?,
+                is_volatile: row.get(12)?,
+                has_history: row.get(13)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
 /// Get symbols that exhibit code smell patterns (high volatility, high fan-in, etc.).
 /// Returns all non-test symbols with their health data for smell classification in the tool layer.
 pub fn get_code_smell_candidates(db: &Database) -> anyhow::Result<Vec<SymbolHealthData>> {

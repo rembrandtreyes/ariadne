@@ -681,3 +681,105 @@ fn test_get_code_smells_mcp_tool() {
         assert!(smell.get("severity").is_some());
     }
 }
+
+// ---- get_god_objects tests ----
+
+#[test]
+fn test_god_objects_empty_db() {
+    let (db, _, _) = setup_minimal_db();
+    let gods = query::get_god_objects(&db, 1, 10).expect("query should succeed");
+    assert!(gods.is_empty(), "Empty DB should return no god objects");
+}
+
+#[test]
+fn test_god_objects_threshold_filters() {
+    let db = setup_quality_db();
+    // fan_in: login=1, hash_pw=1, format_output=0, parse_input=0, old_auth=dead(excluded)
+
+    let at_one = query::get_god_objects(&db, 1, 10).expect("query should succeed");
+    assert_eq!(
+        at_one.len(),
+        2,
+        "threshold=1 should return login + hash_pw (both fan_in=1)"
+    );
+
+    let at_two = query::get_god_objects(&db, 2, 10).expect("query should succeed");
+    assert!(
+        at_two.is_empty(),
+        "threshold=2 should return no symbols (no fan_in >= 2 in fixture)"
+    );
+}
+
+#[test]
+fn test_god_objects_excludes_dead_and_test() {
+    let db = setup_quality_db();
+    let gods = query::get_god_objects(&db, 0, 10).expect("query should succeed");
+    // threshold=0 includes fan_in=0 symbols; excludes is_dead=1 (old_auth) and is_test=1
+    assert_eq!(
+        gods.len(),
+        4,
+        "Should exclude old_auth (dead); got {:?}",
+        gods.iter().map(|g| &g.name).collect::<Vec<_>>()
+    );
+    for g in &gods {
+        assert_ne!(g.name, "old_auth", "dead symbol must not appear");
+        assert!(!g.is_dead, "is_dead must be false in results");
+    }
+}
+
+#[test]
+fn test_get_god_objects_mcp_tool() {
+    use std::borrow::Cow;
+    use std::sync::Arc;
+
+    use ariadne::mcp::tools::AriadneService;
+    use rmcp::model::*;
+    use rmcp::service::{AtomicU32RequestIdProvider, Peer, RequestContext, RoleServer};
+    use rmcp::ServerHandler;
+
+    let db = setup_quality_db();
+    let service = AriadneService::new(db);
+
+    let provider = Arc::new(AtomicU32RequestIdProvider::default());
+    let client_info = ClientInfo::default();
+    let (peer, _rx) = Peer::<RoleServer>::new(provider, client_info);
+    let ct = tokio_util::sync::CancellationToken::new();
+    let id = RequestId::Number(1);
+    let ctx = RequestContext { ct, id, peer };
+
+    let mut args = serde_json::Map::new();
+    args.insert("threshold".to_string(), serde_json::json!(1));
+    args.insert("limit".to_string(), serde_json::json!(10));
+    let req = CallToolRequestParam {
+        name: Cow::Owned("get_god_objects".to_string()),
+        arguments: Some(args),
+    };
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let result = rt
+        .block_on(service.call_tool(req, ctx))
+        .expect("should succeed");
+
+    assert!(
+        result.is_error != Some(true),
+        "get_god_objects should not error"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+
+    assert!(parsed.get("god_objects").is_some());
+    assert!(parsed.get("count").is_some());
+    assert!(parsed.get("threshold").is_some());
+
+    let objects = parsed["god_objects"].as_array().expect("array");
+    assert_eq!(objects.len(), 2, "threshold=1 should yield 2 symbols");
+    for obj in objects {
+        assert!(obj.get("symbol").is_some());
+        assert!(obj.get("fan_in").is_some());
+        assert!(obj.get("file").is_some());
+    }
+}

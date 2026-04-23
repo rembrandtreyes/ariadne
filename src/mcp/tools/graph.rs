@@ -2,7 +2,7 @@ use rmcp::model::*;
 
 use crate::db::query;
 
-use super::{get_string_param, AriadneService};
+use super::{get_int_param, get_string_param, AriadneService};
 
 impl AriadneService {
     pub(crate) fn tool_get_call_chain(&self, params: &CallToolRequestParam) -> CallToolResult {
@@ -161,6 +161,41 @@ impl AriadneService {
             }
             Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
                 "Boundary analysis failed: {e}"
+            ))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
+    pub(crate) fn tool_get_god_objects(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let threshold = get_int_param(params, "threshold").unwrap_or(20);
+        let limit = get_int_param(params, "limit").unwrap_or(10);
+
+        match self.with_db(|db| query::get_god_objects(db, threshold, limit)) {
+            Ok(Ok(objects)) => {
+                let items: Vec<_> = objects
+                    .iter()
+                    .map(|o| {
+                        serde_json::json!({
+                            "symbol": o.name,
+                            "qualified_name": o.qualified_name,
+                            "kind": o.kind,
+                            "file": o.file_path,
+                            "line_start": o.line_start,
+                            "fan_in": o.fan_in,
+                            "fan_out": o.fan_out,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "god_objects": items,
+                    "count": items.len(),
+                    "threshold": threshold,
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
+                "God objects query failed: {e}"
             ))]),
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
         }
