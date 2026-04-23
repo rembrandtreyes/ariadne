@@ -166,6 +166,45 @@ impl AriadneService {
         }
     }
 
+    pub(crate) fn tool_get_entry_points(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let raw_category = get_string_param(params, "category");
+        let category_filter = match raw_category.as_str() {
+            "" | "all" => None,
+            other => Some(other.to_string()),
+        };
+        let limit = get_int_param(params, "limit").unwrap_or(100);
+
+        let filter_ref = category_filter.as_deref();
+        match self.with_db(|db| query::get_entry_points(db, filter_ref, limit)) {
+            Ok(Ok(points)) => {
+                let items: Vec<_> = points
+                    .iter()
+                    .map(|p| {
+                        serde_json::json!({
+                            "symbol": p.name,
+                            "qualified_name": p.qualified_name,
+                            "kind": p.kind,
+                            "file": p.file_path,
+                            "line_start": p.line_start,
+                            "category": p.category,
+                        })
+                    })
+                    .collect();
+                let result = serde_json::json!({
+                    "entry_points": items,
+                    "count": items.len(),
+                    "category": category_filter.clone().unwrap_or_else(|| "all".to_string()),
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                CallToolResult::success(vec![Content::text(json)])
+            }
+            Ok(Err(e)) => CallToolResult::error(vec![Content::text(format!(
+                "Entry points query failed: {e}"
+            ))]),
+            Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),
+        }
+    }
+
     pub(crate) fn tool_get_god_objects(&self, params: &CallToolRequestParam) -> CallToolResult {
         let threshold = get_int_param(params, "threshold").unwrap_or(20);
         let limit = get_int_param(params, "limit").unwrap_or(10);

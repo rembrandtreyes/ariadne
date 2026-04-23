@@ -64,7 +64,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 30 Ariadne MCP tools.
+/// Return the 31 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -254,6 +254,25 @@ fn all_tools() -> Vec<Tool> {
             ),
         ),
         Tool::new(
+            "get_entry_points",
+            "List the codebase's entry points — framework callbacks (is_entry_point symbols), HTTP/RPC handlers (from api_endpoints), and `main` functions. Use when onboarding an unfamiliar codebase to discover where execution originates. Excludes dead code. Filter by category: 'framework', 'http', 'main', or 'all' (default).",
+            make_schema(
+                serde_json::json!({
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by category: 'framework', 'http', 'main', or 'all' (default)",
+                        "default": "all"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results. Default: 100",
+                        "default": 100
+                    }
+                }),
+                vec![],
+            ),
+        ),
+        Tool::new(
             "get_god_objects",
             "List symbols whose fan-in meets or exceeds a threshold — the highly-depended-on 'god objects' agents should handle carefully before editing. Pair with blast_radius for full structural-risk intel. Excludes dead code and tests.",
             make_schema(
@@ -407,6 +426,7 @@ impl AriadneService {
             "get_boundaries" => self.tool_get_boundaries(),
             "get_dependency_path" => self.tool_get_dependency_path(params),
             "get_god_objects" => self.tool_get_god_objects(params),
+            "get_entry_points" => self.tool_get_entry_points(params),
             // Impact tools
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),

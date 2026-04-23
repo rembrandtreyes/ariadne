@@ -1069,6 +1069,75 @@ pub fn get_god_objects(
     Ok(rows)
 }
 
+/// A codebase entry point: a symbol where execution originates from outside the project
+/// (framework callback, HTTP handler, or `main` function).
+#[derive(Debug, Clone, Serialize)]
+pub struct EntryPoint {
+    pub id: i64,
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file_path: String,
+    pub line_start: u32,
+    /// One of: "framework", "http", "main".
+    pub category: String,
+}
+
+/// List the codebase's entry points: framework-detected callbacks, HTTP/RPC handlers,
+/// and `main` functions. Excludes dead code. Use this when onboarding to an unfamiliar
+/// codebase to discover where execution begins.
+///
+/// `category_filter` may be `Some("framework")`, `Some("http")`, `Some("main")`, or `None`
+/// (returns all categories). Unknown categories return an empty result set.
+pub fn get_entry_points(
+    db: &Database,
+    category_filter: Option<&str>,
+    limit: i64,
+) -> anyhow::Result<Vec<EntryPoint>> {
+    // Deduplicate via UNION: the same symbol may be both framework-flagged and an HTTP
+    // handler; pick one deterministic category via priority in the outer SELECT.
+    let sql = "\
+         SELECT id, name, qualified_name, kind, file_path, line_start, category FROM (\
+             SELECT s.id, s.name, s.qualified_name, s.kind, f.path AS file_path, \
+                    s.line_start, 'http' AS category, 1 AS prio \
+               FROM symbols s JOIN files f ON s.file_id = f.id \
+               JOIN api_endpoints ae ON ae.handler_symbol_id = s.id \
+              WHERE s.is_dead = 0 \
+             UNION ALL \
+             SELECT s.id, s.name, s.qualified_name, s.kind, f.path AS file_path, \
+                    s.line_start, 'framework' AS category, 2 AS prio \
+               FROM symbols s JOIN files f ON s.file_id = f.id \
+              WHERE s.is_entry_point = 1 AND s.is_dead = 0 \
+             UNION ALL \
+             SELECT s.id, s.name, s.qualified_name, s.kind, f.path AS file_path, \
+                    s.line_start, 'main' AS category, 3 AS prio \
+               FROM symbols s JOIN files f ON s.file_id = f.id \
+              WHERE s.name = 'main' AND s.kind = 'function' AND s.is_dead = 0\
+         ) \
+         WHERE (?1 IS NULL OR category = ?1) \
+         GROUP BY id \
+         HAVING prio = MIN(prio) \
+         ORDER BY category ASC, name ASC \
+         LIMIT ?2";
+
+    let mut stmt = db.conn().prepare(sql)?;
+    let rows = stmt
+        .query_map(params![category_filter, limit], |row| {
+            Ok(EntryPoint {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                file_path: row.get(4)?,
+                line_start: row.get(5)?,
+                category: row.get(6)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(rows)
+}
+
 /// Get symbols that exhibit code smell patterns (high volatility, high fan-in, etc.).
 /// Returns all non-test symbols with their health data for smell classification in the tool layer.
 pub fn get_code_smell_candidates(db: &Database) -> anyhow::Result<Vec<SymbolHealthData>> {

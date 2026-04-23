@@ -783,3 +783,207 @@ fn test_get_god_objects_mcp_tool() {
         assert!(obj.get("file").is_some());
     }
 }
+
+// ---- get_entry_points tests ----
+
+/// Seed a DB with three categories of entry points: 1 framework, 1 HTTP handler, 1 `main`.
+/// Returns (db, service_id, file_id, sym_fw_id, sym_http_id, sym_main_id).
+fn setup_entry_points_db() -> (Database, i64, i64, i64, i64, i64) {
+    let (db, svc, file) = setup_minimal_db();
+
+    let sym_fw = write::insert_symbol(
+        &db,
+        file,
+        "handleClick",
+        "ui::handleClick",
+        "function",
+        10,
+        15,
+        true,
+        false,
+        "fn handleClick()",
+        "",
+        None,
+    )
+    .expect("insert framework symbol");
+    db.conn()
+        .execute(
+            "UPDATE symbols SET is_entry_point = 1 WHERE id = ?1",
+            [sym_fw],
+        )
+        .expect("mark framework");
+
+    let sym_http = write::insert_symbol(
+        &db,
+        file,
+        "create_user",
+        "routes::create_user",
+        "function",
+        30,
+        40,
+        true,
+        false,
+        "fn create_user()",
+        "",
+        None,
+    )
+    .expect("insert http handler");
+    write::insert_api_endpoint(
+        &db,
+        svc,
+        "POST",
+        "/users",
+        Some(sym_http),
+        Some(file),
+        Some(30),
+    )
+    .expect("insert api endpoint");
+
+    let sym_main = write::insert_symbol(
+        &db,
+        file,
+        "main",
+        "main",
+        "function",
+        100,
+        120,
+        true,
+        false,
+        "fn main()",
+        "",
+        None,
+    )
+    .expect("insert main");
+
+    (db, svc, file, sym_fw, sym_http, sym_main)
+}
+
+#[test]
+fn test_entry_points_empty_db() {
+    let (db, _, _) = setup_minimal_db();
+    let points = query::get_entry_points(&db, None, 100).expect("query should succeed");
+    assert!(points.is_empty(), "Empty DB should return no entry points");
+}
+
+#[test]
+fn test_entry_points_returns_all_three_categories() {
+    let (db, _, _, _, _, _) = setup_entry_points_db();
+    let points = query::get_entry_points(&db, None, 100).expect("query should succeed");
+
+    let categories: std::collections::HashSet<&str> =
+        points.iter().map(|p| p.category.as_str()).collect();
+    assert!(categories.contains("framework"), "missing framework");
+    assert!(categories.contains("http"), "missing http");
+    assert!(categories.contains("main"), "missing main");
+    assert_eq!(points.len(), 3, "expected exactly 3 entry points");
+}
+
+#[test]
+fn test_entry_points_category_filter() {
+    let (db, _, _, _, _, _) = setup_entry_points_db();
+
+    let http = query::get_entry_points(&db, Some("http"), 100).expect("query should succeed");
+    assert_eq!(http.len(), 1, "http filter should return 1");
+    assert_eq!(http[0].name, "create_user");
+
+    let fw = query::get_entry_points(&db, Some("framework"), 100).expect("query should succeed");
+    assert_eq!(fw.len(), 1, "framework filter should return 1");
+    assert_eq!(fw[0].name, "handleClick");
+
+    let main = query::get_entry_points(&db, Some("main"), 100).expect("query should succeed");
+    assert_eq!(main.len(), 1, "main filter should return 1");
+    assert_eq!(main[0].name, "main");
+
+    let none = query::get_entry_points(&db, Some("bogus"), 100).expect("query should succeed");
+    assert!(none.is_empty(), "unknown category returns empty");
+}
+
+#[test]
+fn test_entry_points_excludes_dead() {
+    let (db, _, file, _, _, _) = setup_entry_points_db();
+
+    // Add a dead framework-flagged symbol; it must NOT appear.
+    let dead = write::insert_symbol(
+        &db,
+        file,
+        "oldHandler",
+        "ui::oldHandler",
+        "function",
+        200,
+        210,
+        true,
+        false,
+        "fn oldHandler()",
+        "",
+        None,
+    )
+    .expect("insert dead sym");
+    db.conn()
+        .execute(
+            "UPDATE symbols SET is_entry_point = 1, is_dead = 1 WHERE id = ?1",
+            [dead],
+        )
+        .expect("mark dead entry");
+
+    let points = query::get_entry_points(&db, None, 100).expect("query should succeed");
+    assert_eq!(points.len(), 3, "dead entry must be excluded");
+    assert!(
+        points.iter().all(|p| p.name != "oldHandler"),
+        "dead symbol leaked into results"
+    );
+}
+
+#[test]
+fn test_get_entry_points_mcp_tool() {
+    use std::borrow::Cow;
+    use std::sync::Arc;
+
+    use ariadne::mcp::tools::AriadneService;
+    use rmcp::model::*;
+    use rmcp::service::{AtomicU32RequestIdProvider, Peer, RequestContext, RoleServer};
+    use rmcp::ServerHandler;
+
+    let (db, _, _, _, _, _) = setup_entry_points_db();
+    let service = AriadneService::new(db);
+
+    let provider = Arc::new(AtomicU32RequestIdProvider::default());
+    let client_info = ClientInfo::default();
+    let (peer, _rx) = Peer::<RoleServer>::new(provider, client_info);
+    let ct = tokio_util::sync::CancellationToken::new();
+    let id = RequestId::Number(1);
+    let ctx = RequestContext { ct, id, peer };
+
+    let mut args = serde_json::Map::new();
+    args.insert("category".to_string(), serde_json::json!("all"));
+    let req = CallToolRequestParam {
+        name: Cow::Owned("get_entry_points".to_string()),
+        arguments: Some(args),
+    };
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let result = rt
+        .block_on(service.call_tool(req, ctx))
+        .expect("should succeed");
+
+    assert!(
+        result.is_error != Some(true),
+        "get_entry_points should not error"
+    );
+
+    let text = match &result.content[0].raw {
+        RawContent::Text(t) => &t.text,
+        _ => panic!("expected text content"),
+    };
+    let parsed: serde_json::Value = serde_json::from_str(text).expect("should be valid JSON");
+
+    assert!(parsed.get("entry_points").is_some());
+    assert_eq!(parsed["count"].as_u64(), Some(3));
+    assert_eq!(parsed["category"].as_str(), Some("all"));
+
+    let points = parsed["entry_points"].as_array().expect("array");
+    for p in points {
+        assert!(p.get("symbol").is_some());
+        assert!(p.get("category").is_some());
+        assert!(p.get("file").is_some());
+    }
+}
