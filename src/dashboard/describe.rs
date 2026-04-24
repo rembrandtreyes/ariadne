@@ -36,6 +36,15 @@ pub fn describe_symbol(db: &Database, symbol_id: i64) -> anyhow::Result<Describe
     let callees = query::get_dependencies(db, sym.id).unwrap_or_default();
     let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
 
+    // Blast radius counts every transitive caller. Graceful on graph-build failure
+    // so a describe request never crashes on a partially-indexed DB.
+    let blast_radius = query::build_call_graph(db, None)
+        .map(|graph| {
+            crate::graph::blast_radius::analyze_blast_radius(&graph, sym.id as u64, Some(10), false)
+                .total_affected
+        })
+        .unwrap_or(0);
+
     // Get health data if available
     let health = query::get_symbol_health_data(db, &sym.name).ok().flatten();
 
@@ -110,7 +119,7 @@ pub fn describe_symbol(db: &Database, symbol_id: i64) -> anyhow::Result<Describe
             modification_count,
             author_count,
             is_volatile,
-            blast_radius: 0,
+            blast_radius,
             coupled_file_count,
             max_coupling_strength,
         },

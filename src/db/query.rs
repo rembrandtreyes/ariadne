@@ -1216,8 +1216,16 @@ pub struct ModuleSummary {
 ///
 /// Groups files by the first directory component of their path after any "src/" prefix
 /// (e.g., "src/pipeline/foo.rs" → "pipeline"). Computes per-module symbol counts,
-/// dead code counts, and per-file breakdowns.
+/// dead code counts, cycle counts (from SCC analysis), god-object counts (fan_in ≥ 20),
+/// and per-file breakdowns. Cycles are attributed to every module whose symbols
+/// participate in an SCC of size ≥ 2 (a cycle spanning two modules counts once per module).
 pub fn get_module_summaries(db: &Database) -> anyhow::Result<Vec<ModuleSummary>> {
+    // Build the CallGraph once — reused for cycle detection and kept cheap enough
+    // for one dashboard request. get_god_objects is a pure DB query, no graph needed.
+    let graph = build_call_graph(db, None)?;
+    let cycles_per_module = compute_cycles_per_module(&graph);
+    let god_objects_per_module = compute_god_objects_per_module(db, 20, 1000)?;
+
     let conn = db.conn();
 
     let mut stmt = conn.prepare(
@@ -1294,8 +1302,8 @@ pub fn get_module_summaries(db: &Database) -> anyhow::Result<Vec<ModuleSummary>>
             health: (1.0 - module_risk).max(0.0),
             risk: module_risk,
             dead_count,
-            cycle_count: 0,
-            god_objects: 0,
+            cycle_count: cycles_per_module.get(name).copied().unwrap_or(0),
+            god_objects: god_objects_per_module.get(name).copied().unwrap_or(0),
             files: file_summaries,
         });
     }
@@ -1353,6 +1361,48 @@ pub fn get_top_coupling_pairs(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(pairs)
+}
+
+/// Count SCC-based cycles per module. A cycle spanning multiple modules
+/// is counted once against each module whose symbols participate — a vibe-coder
+/// seeing `cycles: 2` on a module card expects 2 cycles touch that module.
+fn compute_cycles_per_module(
+    graph: &crate::graph::CallGraph,
+) -> std::collections::HashMap<String, u64> {
+    use petgraph::algo::kosaraju_scc;
+    let mut per_module: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for scc in kosaraju_scc(&graph.graph) {
+        if scc.len() < 2 {
+            continue;
+        }
+        let mut modules_in_cycle: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for node_idx in &scc {
+            if let Some(sym) = graph.graph.node_weight(*node_idx) {
+                modules_in_cycle.insert(extract_module_name(&sym.file_path));
+            }
+        }
+        for m in modules_in_cycle {
+            *per_module.entry(m).or_insert(0) += 1;
+        }
+    }
+    per_module
+}
+
+/// Count god-objects (fan_in ≥ threshold) per module by grouping
+/// `get_god_objects` results by their file's module.
+fn compute_god_objects_per_module(
+    db: &Database,
+    threshold: i64,
+    limit: i64,
+) -> anyhow::Result<std::collections::HashMap<String, u64>> {
+    let rows = get_god_objects(db, threshold, limit)?;
+    let mut per_module: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    for row in rows {
+        let module = extract_module_name(&row.file_path);
+        *per_module.entry(module).or_insert(0) += 1;
+    }
+    Ok(per_module)
 }
 
 /// Extract module name from a file path (e.g., "src/pipeline/foo.rs" → "pipeline").

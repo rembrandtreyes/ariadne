@@ -569,7 +569,7 @@ fn test_get_symbol_health_mcp_tool() {
 
     let score = parsed["health_score"].as_f64().unwrap();
     assert!(
-        score >= 0.0 && score <= 1.0,
+        (0.0..=1.0).contains(&score),
         "health_score should be 0.0-1.0: {score}"
     );
 

@@ -17,8 +17,6 @@ fn test_why_symbol_found() {
 
     run_full_pipeline(&db, fixture, &config).unwrap();
 
-    // Find any symbol to verify the why logic works
-    let symbols = query::get_dead_symbols(&db).unwrap();
     // There should be at least some symbols in the DB
     let sym_count = query::count_symbols(&db).unwrap();
     assert!(sym_count > 0, "fixture should have symbols");
@@ -59,11 +57,11 @@ fn test_why_symbol_found() {
     let callees = query::get_dependencies(&db, sym.id);
     assert!(callees.is_ok(), "get_dependencies should succeed");
 
-    // Verify blast radius query succeeds
+    // Verify blast radius query succeeds without panicking. The returned
+    // total_affected is a usize so it's always ≥ 0 — the existence of the
+    // call is the assertion here.
     let graph = query::build_call_graph(&db, None).unwrap();
-    let blast = analyze_blast_radius(&graph, sym.id as u64, Some(10), false);
-    // blast radius should return a valid result (may be 0)
-    assert!(blast.total_affected >= 0);
+    let _blast = analyze_blast_radius(&graph, sym.id as u64, Some(10), false);
 }
 
 /// The `why` logic should handle symbol-not-found gracefully.

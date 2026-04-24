@@ -421,3 +421,218 @@ async fn test_dashboard_v2_all_endpoints() {
     );
     assert!(source_result.0.line_count > 0, "line_count should be > 0");
 }
+
+// ---- Dashboard stub-zero wiring tests (Run #13) ----
+//
+// Signal-view module cards and the describe panel shipped with three hardcoded
+// zeros (cycle_count, god_objects, blast_radius). These tests pin the real
+// values so the stubs can't silently regress.
+
+fn insert_call_sql(db: &ariadne::db::Database, caller: i64, callee: i64, file_id: i64) {
+    db.conn()
+        .execute(
+            "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES (?1, ?2, '', ?3, 1, 1.0, 'exact')",
+            rusqlite::params![caller, callee, file_id],
+        )
+        .expect("insert call");
+}
+
+#[test]
+fn test_module_summaries_cycle_count_wired_up() {
+    use ariadne::db::{query, write, Database};
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let f_a = write::insert_file(
+        &db,
+        svc,
+        "src/pipeline/a.rs",
+        "/tmp/t/src/pipeline/a.rs",
+        "rust",
+        0.0,
+    )
+    .unwrap();
+    let f_b = write::insert_file(
+        &db,
+        svc,
+        "src/pipeline/b.rs",
+        "/tmp/t/src/pipeline/b.rs",
+        "rust",
+        0.0,
+    )
+    .unwrap();
+
+    let sym_a = write::insert_symbol(
+        &db,
+        f_a,
+        "fn_a",
+        "pipeline::a::fn_a",
+        "function",
+        1,
+        10,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+    let sym_b = write::insert_symbol(
+        &db,
+        f_b,
+        "fn_b",
+        "pipeline::b::fn_b",
+        "function",
+        1,
+        10,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+
+    // Mutual recursion A <-> B forms a strongly-connected component of size 2.
+    insert_call_sql(&db, sym_a, sym_b, f_a);
+    insert_call_sql(&db, sym_b, sym_a, f_b);
+
+    let modules = query::get_module_summaries(&db).expect("module summaries");
+    let pipeline = modules
+        .iter()
+        .find(|m| m.name == "pipeline")
+        .expect("pipeline module exists");
+
+    assert!(
+        pipeline.cycle_count >= 1,
+        "cycle_count should be ≥1 for A<->B cycle in pipeline module, got {}",
+        pipeline.cycle_count
+    );
+}
+
+#[test]
+fn test_module_summaries_god_objects_wired_up() {
+    use ariadne::db::{query, write, Database};
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let popular_file = write::insert_file(
+        &db,
+        svc,
+        "src/graph/popular.rs",
+        "/tmp/t/src/graph/popular.rs",
+        "rust",
+        0.0,
+    )
+    .unwrap();
+
+    let popular = write::insert_symbol(
+        &db,
+        popular_file,
+        "popular_fn",
+        "graph::popular_fn",
+        "function",
+        1,
+        5,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+
+    // 20 caller symbols each invoking popular_fn → fan_in = 20 = default god-object threshold.
+    for i in 0..20 {
+        let caller = write::insert_symbol(
+            &db,
+            popular_file,
+            &format!("caller_{i}"),
+            &format!("graph::caller_{i}"),
+            "function",
+            (100 + i * 10) as u32,
+            (100 + i * 10 + 5) as u32,
+            true,
+            false,
+            "",
+            "",
+            None,
+        )
+        .unwrap();
+        insert_call_sql(&db, caller, popular, popular_file);
+    }
+
+    let modules = query::get_module_summaries(&db).expect("module summaries");
+    let graph = modules
+        .iter()
+        .find(|m| m.name == "graph")
+        .expect("graph module exists");
+
+    assert!(
+        graph.god_objects >= 1,
+        "god_objects should be ≥1 for a fan-in-20 symbol in graph module, got {}",
+        graph.god_objects
+    );
+}
+
+#[test]
+fn test_describe_blast_radius_wired_up() {
+    use ariadne::dashboard::describe::describe_symbol;
+    use ariadne::db::{write, Database};
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file = write::insert_file(
+        &db,
+        svc,
+        "src/mcp/core.rs",
+        "/tmp/t/src/mcp/core.rs",
+        "rust",
+        0.0,
+    )
+    .unwrap();
+
+    let callee = write::insert_symbol(
+        &db,
+        file,
+        "target_fn",
+        "mcp::target_fn",
+        "function",
+        1,
+        5,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+
+    // 3 callers → blast_radius.total_affected should be 3.
+    for i in 0..3 {
+        let caller = write::insert_symbol(
+            &db,
+            file,
+            &format!("c{i}"),
+            &format!("mcp::c{i}"),
+            "function",
+            (10 + i * 10) as u32,
+            (10 + i * 10 + 5) as u32,
+            true,
+            false,
+            "",
+            "",
+            None,
+        )
+        .unwrap();
+        insert_call_sql(&db, caller, callee, file);
+    }
+
+    let result = describe_symbol(&db, callee).expect("describe");
+    assert!(
+        result.metrics.blast_radius >= 3,
+        "blast_radius should reflect 3 callers, got {}",
+        result.metrics.blast_radius
+    );
+}
