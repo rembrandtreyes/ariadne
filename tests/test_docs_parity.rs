@@ -17,7 +17,7 @@ use std::path::PathBuf;
 /// `tests/test_mcp_tools.rs`. When tools are added, update this constant,
 /// `src/lib.rs` docstring, and the README "Available MCP Tools" table
 /// in a single commit.
-const EXPECTED_TOOL_COUNT: usize = 31;
+const EXPECTED_TOOL_COUNT: usize = 32;
 
 fn read_repo_file(relative: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative);

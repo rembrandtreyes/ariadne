@@ -64,7 +64,7 @@ fn files_param_tool(name: &'static str, desc: &'static str) -> Tool {
     )
 }
 
-/// Return the 31 Ariadne MCP tools.
+/// Return the 32 Ariadne MCP tools.
 fn all_tools() -> Vec<Tool> {
     vec![
         string_param_tool(
@@ -291,6 +291,12 @@ fn all_tools() -> Vec<Tool> {
                 vec![],
             ),
         ),
+        string_param_tool(
+            "propose_edit_plan",
+            "Compose dependents + affected tests + execution flows into a leaves-first edit order for refactoring. Returns the dependent cone sorted (depth_asc, id_asc) — a valid topological order on DAGs, with BFS-depth fallback (cycle_detected=true) when the cone contains a cycle. Use when you're about to rename or restructure a symbol and need the safe sequence to update callers.",
+            "symbol",
+            "Symbol name or qualified name to plan edits around",
+        ),
     ]
 }
 
@@ -431,6 +437,7 @@ impl AriadneService {
             "diff_impact" => self.tool_diff_impact(params),
             "affected_tests" => self.tool_affected_tests(params),
             "compute_file_risk" => self.tool_compute_file_risk(params),
+            "propose_edit_plan" => self.tool_propose_edit_plan(params),
             // Quality tools
             "get_symbol_health" => self.tool_get_symbol_health(params),
             "get_complexity_hotspots" => self.tool_get_complexity_hotspots(),
@@ -458,7 +465,7 @@ impl ServerHandler for AriadneService {
             },
             instructions: Some(
                 "Ariadne — universal dependency graph for AI coding agents. \
-                 31 tools total, grouped by intent.\n\n\
+                 32 tools total, grouped by intent.\n\n\
                  ONBOARDING (new codebase): call `get_entry_points` first, then \
                  `get_god_objects` and `get_codebase_health`.\n\n\
                  PR REVIEW: start with `diff_impact(changed_files)` — one call \
@@ -467,7 +474,9 @@ impl ServerHandler for AriadneService {
                  the closest read.\n\n\
                  REFACTORING: `blast_radius(symbol)` shows WILL-BREAK direct and \
                  MAY-BREAK transitive dependents; pair with `affected_tests` and \
-                 `get_execution_flows`.\n\n\
+                 `get_execution_flows`. For the leaves-first edit sequence, \
+                 call `propose_edit_plan(symbol)` — one composed call returns \
+                 ordered callers + tests + flows + cycle status.\n\n\
                  EXPLAIN A SYMBOL: prefer `why_symbol` for human-readable \
                  narrative; use `get_context` for raw structured JSON. Add \
                  `get_symbol_history` for temporal context (churn, authors).\n\n\

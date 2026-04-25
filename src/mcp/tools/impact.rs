@@ -1,3 +1,8 @@
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use petgraph::graph::NodeIndex;
+use petgraph::visit::NodeFiltered;
+use petgraph::Direction;
 use rmcp::model::*;
 
 use crate::db::query;
@@ -326,5 +331,230 @@ impl AriadneService {
                 CallToolResult::error(vec![Content::text(format!("Affected tests failed: {e}"))])
             }
         }
+    }
+
+    /// Compose `get_dependents` + `affected_tests` + `get_execution_flows` into
+    /// an ordered edit plan. The dependent set is sorted (depth_asc, id_asc),
+    /// putting depth-1 callers first — a valid topological order on DAGs and a
+    /// stable BFS-depth fallback when a cycle is detected in the dependent
+    /// cone.
+    pub(crate) fn tool_propose_edit_plan(&self, params: &CallToolRequestParam) -> CallToolResult {
+        let symbol_name = get_string_param(params, "symbol");
+        if symbol_name.is_empty() {
+            return CallToolResult::error(vec![Content::text("symbol parameter is required")]);
+        }
+
+        // Resolve the target symbol (structured summary on miss — never tool error).
+        let target = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
+            Ok(Ok(Some(s))) => s,
+            Ok(Ok(None)) => {
+                let result = serde_json::json!({
+                    "symbol": serde_json::Value::Null,
+                    "total_dependents": 0,
+                    "edit_order": [],
+                    "affected_tests": [],
+                    "execution_flows": {},
+                    "cycle_detected": false,
+                    "ordering_strategy": "topological",
+                    "summary": format!("Symbol not found: {symbol_name}"),
+                });
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                return CallToolResult::success(vec![Content::text(json)]);
+            }
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
+        };
+
+        // Pull execution flows from the DB (independent of the cached graph).
+        let flows = self
+            .with_db(|db| query::get_execution_flows(db, target.id))
+            .unwrap_or_else(|_| Ok(Vec::new()))
+            .unwrap_or_default();
+
+        let target_file_path = self
+            .with_db(|db| query::file_path_by_id(db, target.file_id))
+            .ok()
+            .and_then(|r| r.ok())
+            .unwrap_or_else(|| "unknown".into());
+
+        // Build the ordered plan from the cached call graph (BFS upstream + cycle check).
+        let plan = self
+            .with_cached_graph(|graph| Ok(build_edit_plan(graph, target.id)))
+            .unwrap_or_else(|_| EditPlanOrdering::empty());
+
+        // Group execution flow steps by flow name for the response payload.
+        let mut grouped_flows: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
+        for step in &flows {
+            grouped_flows
+                .entry(step.flow_name.clone())
+                .or_default()
+                .push(serde_json::json!({
+                    "step": step.step_order,
+                    "depth": step.depth,
+                    "symbol": step.symbol_name,
+                    "qualified_name": step.qualified_name,
+                    "file": step.file_path,
+                    "kind": step.kind,
+                }));
+        }
+
+        let edit_order_json: Vec<serde_json::Value> = plan
+            .edit_order
+            .iter()
+            .enumerate()
+            .map(|(i, entry)| {
+                serde_json::json!({
+                    "step": i + 1,
+                    "symbol_id": entry.symbol_id,
+                    "name": entry.name,
+                    "qualified_name": entry.qualified_name,
+                    "kind": entry.kind,
+                    "file": entry.file_path,
+                    "depth": entry.depth,
+                    "is_test": entry.is_test,
+                })
+            })
+            .collect();
+
+        let affected_tests_json: Vec<serde_json::Value> = plan
+            .edit_order
+            .iter()
+            .filter(|e| e.is_test)
+            .map(|e| {
+                serde_json::json!({
+                    "name": e.name,
+                    "qualified_name": e.qualified_name,
+                    "file": e.file_path,
+                })
+            })
+            .collect();
+
+        let summary = if plan.cycle_detected {
+            format!(
+                "Edit plan for '{}' — {} dependents (cycle detected, BFS-depth fallback ordering)",
+                target.name,
+                plan.edit_order.len()
+            )
+        } else {
+            format!(
+                "Edit plan for '{}' — {} dependents in topological order (leaf-callees first)",
+                target.name,
+                plan.edit_order.len()
+            )
+        };
+
+        let result = serde_json::json!({
+            "symbol": {
+                "name": target.name,
+                "qualified_name": target.qualified_name,
+                "kind": target.kind,
+                "file": target_file_path,
+            },
+            "total_dependents": plan.edit_order.len(),
+            "edit_order": edit_order_json,
+            "affected_tests": affected_tests_json,
+            "affected_test_count": affected_tests_json.len(),
+            "execution_flows": grouped_flows,
+            "flow_count": grouped_flows.len(),
+            "cycle_detected": plan.cycle_detected,
+            "ordering_strategy": if plan.cycle_detected {
+                "bfs_depth_fallback"
+            } else {
+                "topological"
+            },
+            "summary": summary,
+        });
+
+        let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+        CallToolResult::success(vec![Content::text(json)])
+    }
+}
+
+/// One row of the proposed edit order.
+struct EditPlanEntry {
+    symbol_id: i64,
+    name: String,
+    qualified_name: String,
+    kind: String,
+    file_path: String,
+    depth: u32,
+    is_test: bool,
+}
+
+/// Result of ordering the dependent cone. `cycle_detected` flips the response's
+/// `ordering_strategy` field; the in-array order is always `(depth_asc, id_asc)`,
+/// which is topologically valid on DAGs and stable on cyclic cones.
+struct EditPlanOrdering {
+    edit_order: Vec<EditPlanEntry>,
+    cycle_detected: bool,
+}
+
+impl EditPlanOrdering {
+    fn empty() -> Self {
+        Self {
+            edit_order: Vec::new(),
+            cycle_detected: false,
+        }
+    }
+}
+
+/// BFS upstream from `target_id`, then sort the dependent set by
+/// (depth_asc, symbol_id_asc) and detect cycles via `petgraph::algo::toposort`
+/// over the induced subgraph.
+fn build_edit_plan(graph: &crate::graph::CallGraph, target_id: i64) -> EditPlanOrdering {
+    let Some(&target_idx) = graph.symbol_index.get(&target_id) else {
+        return EditPlanOrdering::empty();
+    };
+
+    // BFS upstream (incoming edges = callers) recording depth.
+    let mut depth: HashMap<NodeIndex, u32> = HashMap::new();
+    let mut visited: HashSet<NodeIndex> = HashSet::new();
+    let mut queue: VecDeque<(NodeIndex, u32)> = VecDeque::new();
+    queue.push_back((target_idx, 0));
+    visited.insert(target_idx);
+
+    while let Some((node, d)) = queue.pop_front() {
+        depth.insert(node, d);
+        for caller in graph.graph.neighbors_directed(node, Direction::Incoming) {
+            if visited.insert(caller) {
+                queue.push_back((caller, d + 1));
+            }
+        }
+    }
+
+    // Cycle detection on the induced subgraph (dependent set including target).
+    let dependent_set = visited.clone();
+    let filtered = NodeFiltered::from_fn(&graph.graph, |n: NodeIndex| dependent_set.contains(&n));
+    let cycle_detected = petgraph::algo::toposort(&filtered, None).is_err();
+
+    // Order: depth asc, then symbol_id asc — deterministic, topologically valid on DAGs,
+    // stable BFS-layer ordering on cyclic cones.
+    let mut sorted: Vec<NodeIndex> = visited
+        .iter()
+        .copied()
+        .filter(|n| *n != target_idx)
+        .collect();
+    sorted.sort_by_key(|n| (depth[n], graph.graph[*n].id));
+
+    let edit_order: Vec<EditPlanEntry> = sorted
+        .iter()
+        .map(|&n| {
+            let sym = &graph.graph[n];
+            EditPlanEntry {
+                symbol_id: sym.id,
+                name: sym.name.clone(),
+                qualified_name: sym.qualified_name.clone(),
+                kind: sym.kind.clone(),
+                file_path: sym.file_path.clone(),
+                depth: depth[&n],
+                is_test: sym.is_test,
+            }
+        })
+        .collect();
+
+    EditPlanOrdering {
+        edit_order,
+        cycle_detected,
     }
 }

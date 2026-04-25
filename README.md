@@ -193,7 +193,7 @@ Run `ariadne index .` once in your project root first. The MCP server reads from
 
 ### Available MCP Tools
 
-Ariadne ships 31 MCP tools grouped by intent. See [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md) for decision-tree guidance on which tool to pick for which task.
+Ariadne ships 32 MCP tools grouped by intent. See [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md) for decision-tree guidance on which tool to pick for which task.
 
 **Onboarding & triage** — "what am I looking at?"
 
@@ -212,6 +212,7 @@ Ariadne ships 31 MCP tools grouped by intent. See [`docs/AGENT-GUIDE.md`](docs/A
 | `blast_radius` | "What breaks if I change this — categorized by certainty (WILL / MAY)." |
 | `diff_impact` | "Given changed files: affected symbols + blast radius + affected tests in one call." |
 | `affected_tests` | "Minimum test set that transitively covers changed files." |
+| `propose_edit_plan` | "Ordered edit sequence for callers when refactoring a symbol — leaves-first, with cycle detection." |
 | `get_dependency_path` | "Shortest directed call path from symbol A to symbol B." |
 
 **Deep-dive on a specific symbol** — "explain this code"

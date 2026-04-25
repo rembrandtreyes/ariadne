@@ -67,18 +67,27 @@ You know which files changed and need to scope review.
 You're about to rename, split, or restructure a symbol and need the
 dependency cone before starting.
 
-1. **`blast_radius(symbol)`** — everyone you might break. Use
-   `max_depth` to widen or narrow the cone.
-2. **`get_execution_flows(symbol)`** — the ordered call paths that reach
+1. **`propose_edit_plan(symbol)`** — single composed call returning the
+   leaves-first edit order over the dependent cone, plus the affected
+   tests, plus the execution flows that pass through this symbol. Use
+   this first when refactoring; the `edit_order` array IS the safe
+   sequence for updating callers (depth-1 callers before transitive
+   ones). Sets `cycle_detected: true` and falls back to BFS-depth
+   ordering when the cone contains a cycle.
+2. **`blast_radius(symbol)`** — everyone you might break. Use
+   `max_depth` to widen or narrow the cone. Prefer `propose_edit_plan`
+   when you need the *order* to edit; prefer `blast_radius` when you
+   only need the WILL/MAY breakdown.
+3. **`get_execution_flows(symbol)`** — the ordered call paths that reach
    this symbol from entry points. Tells you which execution contexts
    you're touching, not just which callers.
-3. **`get_dependents(symbol)`** — raw list of direct callers. Pair with
+4. **`get_dependents(symbol)`** — raw list of direct callers. Pair with
    `blast_radius` when you need the names, not the summary.
-4. **`get_symbol_health(symbol)`** — 0.0–1.0 score fusing stability,
+5. **`get_symbol_health(symbol)`** — 0.0–1.0 score fusing stability,
    connectivity, and dead-code status. Low-health symbols refactor with
    less review overhead; high-health symbols are load-bearing and
    deserve more care.
-5. **`compute_file_risk(file_path)`** — should I be especially careful
+6. **`compute_file_risk(file_path)`** — should I be especially careful
    editing here?
 
 ---
@@ -170,16 +179,16 @@ tools that hit SQLite FTS, <5ms for graph traversal).
 - **Semantic similarity search** — Ariadne uses resolved call edges,
   not embeddings. Use it when you know the symbol; use RAG when you
   only have a fuzzy English description.
-- **Propose edit plans** — today Ariadne answers "what will break"; it
-  doesn't yet return "here's the order to migrate callers." Planned
-  for a future `propose_edit_plan` tool.
 - **Index as you type** — Ariadne re-indexes on file save via
   `ariadne watch --serve`. Edits in your current IDE buffer aren't
   visible to the MCP server until saved.
 
+(`propose_edit_plan` previously listed here as "won't do — planned"
+ships in the current release. See the Refactoring section above.)
+
 ---
 
-## Quick-reference matrix — 31 tools by intent
+## Quick-reference matrix — 32 tools by intent
 
 Full descriptions live in the [README's Available MCP Tools table](../README.md#available-mcp-tools).
 Use this matrix for rapid selection:
@@ -190,6 +199,7 @@ Use this matrix for rapid selection:
 | Handle-with-care warning | `get_god_objects` | `get_complexity_hotspots` |
 | PR review triage | `diff_impact` | `compute_file_risk` |
 | Blast impact of a rename | `blast_radius` | `get_dependents` |
+| Order to update callers when refactoring | `propose_edit_plan` | `blast_radius` |
 | Which tests to re-run | `affected_tests` | `diff_impact` |
 | Explain a function | `why_symbol` | `get_context` |
 | Stability / churn profile | `get_symbol_history` | `get_symbol_health` |
