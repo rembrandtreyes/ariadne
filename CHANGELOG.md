@@ -5,6 +5,88 @@ All notable changes to Ariadne will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+**21 new MCP tools** (total now 31, up from 10 at 0.1.0) — grouped by intent
+and documented in [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md).
+
+Onboarding & triage:
+- `get_entry_points` — `main`, HTTP handlers, framework callbacks with category filter
+- `get_god_objects` — high fan-in symbols with parameterizable threshold
+- `get_codebase_health` — one-call letter grade A–F with natural-language summary
+- `compute_file_risk` — per-file 0.0–1.0 risk scoring for PR triage
+- `get_complexity_hotspots` — top 50 symbols by combined fan-in × fan-out × churn
+
+Change impact:
+- `diff_impact` — unified change-impact report in a single call
+- `affected_tests` — minimum test set for a set of changed files
+- `get_dependency_path` — shortest directed call path between two symbols (BFS)
+
+Deep-dive on a symbol:
+- `why_symbol` — single-narrative explainer with role, callers, callees, blast radius
+- `get_symbol_history` — git temporal analysis (creation, churn, authors, volatility)
+- `get_symbol_health` — 0.0–1.0 score fusing stability, connectivity, dead status
+- `get_heritage` — inheritance hierarchy (parent + child classes/interfaces)
+- `get_execution_flows` — ordered call paths through a symbol from entry points
+
+Navigation:
+- `get_file_dependencies` / `get_file_dependents` — transitive file-level graph traversal
+
+Structural exploration:
+- `detect_cycles` — Kosaraju SCC with member symbols + length
+- `get_boundaries` — module-boundary modularity scores
+- `get_coupling` — top file pairs by git co-change strength
+- `get_communities` — Louvain clustering of logical modules
+- `get_api_endpoints` — detected HTTP/RPC endpoints with handler links
+- `get_code_smells` — bottleneck / shotgun-surgery / volatility / dead detection
+
+**Dashboard v2 (Signal + Void views)**
+- Signal view: hero 0-100 health score, top risks with narrative descriptions,
+  module grid with per-file sparklines, coupling list, dead code grid
+- Void view: force-directed / architecture / risk / coupling canvas with HUD
+  mode switching, click-through drill-down from Signal
+- Module summaries now surface real cycle counts (Kosaraju SCC per module)
+  and real god-object counts (fan-in-based, per module) — previously stubbed
+  to zero
+- Describe panel now shows real blast radius per symbol — previously stubbed
+
+**Indexing pipeline**
+- 15-phase indexing (up from documented 14): structure, parsing,
+  import_resolution, call_resolution, heritage, framework_entry_points,
+  dead_code, flow, coupling, git_history, search_index, api_resolution,
+  service_topology, community, schema_resolution
+- Pipeline wrapped in a single SQLite `BEGIN / COMMIT / ROLLBACK` via
+  `execute_batch` — crashed indexes no longer leave partial data
+- Synthetic `<module>` symbol anchors module-level call edges in JS/TS
+  parsers (previously dropped)
+- JSX prop bare-identifier tracking for JavaScript and TypeScript (`.jsx`,
+  `.tsx`, `.ts`)
+- Edge-driven graph loading with batched N+1 query elimination
+
+**Quality**
+- `cargo clippy --all-targets` exits 0 (first time in project history)
+- MCP call-graph cache rebuilds only when pipeline generation changes —
+  eliminates per-tool-call O(symbols+calls) SQLite scan
+- `tests/test_mcp_tools.rs` guardrail asserts exact `Vec<Tool>` length so
+  tool-count drift is caught at CI time
+- `tests/test_docs_parity.rs` asserts README + lib.rs + AGENT-GUIDE.md
+  stay in sync with `all_tools()` — shipped-docs lies now fail CI
+
+### Changed
+
+- README competitor comparison updated from 2015-era tools
+  (dependency-cruiser, Axon, Sourcegraph, CodeScene) to current 2025/2026
+  HIGH threats (GitNexus, Codebase-Memory, Greptile, Potpie,
+  Understand-Anything, code-review-graph) with moat-aligned capability axes
+- README MCP tools table regenerated from `all_tools()` — now lists all
+  31 tools grouped by intent (onboarding, change impact, deep-dive,
+  navigation, structural exploration)
+- MCP server `instructions` payload points agents to the onboarding triad
+  and the decision tree
+- `src/lib.rs` module docstring tool count corrected (was 29, reality 31)
+
 ## [0.1.0] — 2026-03-12
 
 Initial open source release.

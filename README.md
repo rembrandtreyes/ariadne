@@ -33,24 +33,29 @@ AI coding agents are flying blind. They generate code without understanding how 
 
 **Ariadne gives your AI agent a map of your entire codebase** -- every function, every call, every dependency, across every language, in milliseconds.
 
-| Capability | Ariadne | Axon | Sourcegraph | CodeScene | dependency-cruiser |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Polyglot (9+ languages) | Yes | No | Yes | No | JS only |
-| Sub-second queries | Yes | Yes | No | No | Yes |
-| MCP native | Yes | No | No | No | No |
-| Blast radius analysis | Yes | No | Partial | Yes | No |
-| Dead code detection | Yes | No | No | Yes | No |
-| Affected test mapping | Yes | No | No | No | No |
-| Cross-service tracing | Yes | No | Yes | No | No |
-| Architectural rules | Yes | No | No | Yes | Yes |
-| Community detection | Yes | No | No | Yes | No |
-| SCIP export | Yes | No | Yes | No | No |
-| File watcher + live re-index | Yes | No | No | No | No |
-| Web dashboard | Yes | No | Yes | Yes | No |
-| LSP server | Yes | No | No | No | No |
-| Plugin system (WASM) | Yes | No | No | No | Yes |
-| GitHub Action | Yes | No | No | Yes | Yes |
-| Single binary, zero deps | Yes | No | No | No | No |
+The landscape of code intelligence for AI agents moved fast in 2025-2026. Here's where Ariadne sits against the current generation of graph/memory backends:
+
+| Capability | Ariadne | GitNexus | Codebase-Memory | Greptile | Potpie | Understand-Anything | code-review-graph |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Deterministic parsing (no LLM, no embeddings) | Yes | Yes | Yes | No | No | No | Partial |
+| Resolved call edges (not semantic similarity) | Yes | Yes | Yes | No | Partial | Yes | Yes |
+| Local-only, no cloud/API required | Yes | Yes | Yes | No | No | Yes | Yes |
+| Sub-5ms resident query latency | Yes | Partial | Yes | No | No | No | No |
+| MCP server | Yes | Yes | Yes | No | Partial | Yes | Yes |
+| LSP server | Yes | No | No | No | No | No | No |
+| REST dashboard | Yes | No | No | No | No | Yes | No |
+| CLI in the same binary | Yes | Yes | Yes | No | No | No | No |
+| Blast radius with certainty tiers (WILL/MAY break) | Yes | Partial | No | No | No | No | Yes |
+| Temporal + structural fusion (git churn × fan-in) | Yes | No | No | No | No | No | No |
+| Ordered affected-tests mapping | Yes | No | No | No | No | No | Yes |
+| Community detection (graph clustering) | Yes | No | No | No | No | No | No |
+| Architectural rules enforcement | Yes | No | No | No | No | No | No |
+| SCIP export (Sourcegraph interop) | Yes | No | No | No | No | No | No |
+| Cross-service API tracing | Yes | No | No | No | Partial | No | No |
+| File watcher + incremental re-index | Yes | No | Partial | No | No | No | No |
+| Single static binary, zero runtime deps | Yes | No | Yes | No | No | No | No |
+
+Ariadne's moat is the **fusion** — no single competitor combines a resolved deterministic call graph with git-temporal history, community detection, architectural boundary enforcement, SCIP export, an LSP, AND a sub-5ms-latency MCP server in one local static binary. RAG/embedding systems (Greptile, Potpie) can't produce directed call graphs. Pure graph tools (GitNexus, Codebase-Memory) don't fuse temporal signal. Ariadne does both, offline, at agent-loop speed.
 
 ## Install
 
@@ -188,18 +193,63 @@ Run `ariadne index .` once in your project root first. The MCP server reads from
 
 ### Available MCP Tools
 
+Ariadne ships 31 MCP tools grouped by intent. See [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md) for decision-tree guidance on which tool to pick for which task.
+
+**Onboarding & triage** — "what am I looking at?"
+
 | Tool | What it answers |
 |---|---|
-| `search_symbol` | "Find anything named X across the whole codebase" |
-| `get_context` | "Who calls this? What does it call? Is it dead code?" |
-| `get_imports` | "What does this file import and are they resolved?" |
-| `get_dependents` | "Who depends on this symbol (upstream callers)?" |
-| `get_dependencies` | "What does this symbol depend on (downstream callees)?" |
-| `get_call_chain` | "Show the full call tree from this symbol as a Mermaid diagram" |
-| `blast_radius` | "What breaks if I change this — categorized by certainty" |
-| `find_dead_code` | "Which functions are never called?" |
-| `get_file_summary` | "What symbols and imports are in this file?" |
-| `get_complexity` | "What are the codebase-wide statistics?" |
+| `get_entry_points` | "Where does execution start — `main`, HTTP handlers, framework callbacks?" |
+| `get_god_objects` | "Which symbols are most depended on? Handle these carefully." |
+| `get_codebase_health` | "Letter grade A–F with dead code ratio, cycles, coupling, modularity." |
+| `compute_file_risk` | "Per-file 0–1 risk score combining churn, coupling, fan-in, dead-proximity." |
+| `get_complexity_hotspots` | "Top 50 symbols by combined fan-in × fan-out × churn × volatility." |
+
+**Change impact** — "what breaks if I do X?"
+
+| Tool | What it answers |
+|---|---|
+| `blast_radius` | "What breaks if I change this — categorized by certainty (WILL / MAY)." |
+| `diff_impact` | "Given changed files: affected symbols + blast radius + affected tests in one call." |
+| `affected_tests` | "Minimum test set that transitively covers changed files." |
+| `get_dependency_path` | "Shortest directed call path from symbol A to symbol B." |
+
+**Deep-dive on a specific symbol** — "explain this code"
+
+| Tool | What it answers |
+|---|---|
+| `why_symbol` | "One narrative: role, callers, callees, blast radius, coupled files." |
+| `get_symbol_history` | "Creation date, last modification, author count, volatility — git temporal." |
+| `get_symbol_health` | "0–1 score fusing stability, connectivity, dead-code status." |
+| `get_heritage` | "Inheritance hierarchy: parent classes/interfaces + child subclasses." |
+| `get_execution_flows` | "Ordered call paths from entry points that pass through this symbol." |
+
+**Navigation** — "find the thing"
+
+| Tool | What it answers |
+|---|---|
+| `search_symbol` | "Find anything named X across the whole codebase (FTS + fuzzy)." |
+| `get_context` | "Callers, callees, file, signature, dead status, coupled files." |
+| `get_imports` | "All imports for a file with resolution status." |
+| `get_file_summary` | "Every symbol and import in a file." |
+| `get_dependents` | "Upstream callers of a symbol." |
+| `get_dependencies` | "Downstream callees of a symbol." |
+| `get_file_dependencies` | "Files this file depends on (with connecting symbol pairs + transitive depth)." |
+| `get_file_dependents` | "Files that depend on this file (with connecting symbol pairs + transitive depth)." |
+
+**Structural exploration** — "what's the shape?"
+
+| Tool | What it answers |
+|---|---|
+| `get_call_chain` | "Full call tree from a symbol, rendered as Mermaid flowchart." |
+| `detect_cycles` | "Circular dependencies via Kosaraju SCC — returns cycles with symbols + length." |
+| `get_boundaries` | "Module boundaries: internal vs cross-boundary call details + modularity scores." |
+| `get_coupling` | "Top coupled file pairs by git co-change strength (implicit dependencies)." |
+| `get_communities` | "Detected module communities with symbol counts + modularity scores." |
+| `get_api_endpoints` | "All detected HTTP/RPC endpoints with method, path, handler, file." |
+| `get_code_smells` | "Volatility spikes, bottlenecks, shotgun-surgery risks, dead code." |
+| `find_dead_code` | "Unreachable functions and methods (never called from any entry point)." |
+| `get_complexity` | "Codebase-wide counts: files, symbols, calls, dead, resolution rate, languages." |
 
 ### Before and After
 

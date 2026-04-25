@@ -457,8 +457,26 @@ impl ServerHandler for AriadneService {
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
             instructions: Some(
-                "Ariadne -- universal dependency graph for AI coding agents. \
-                 Query symbols, blast radius, call chains, dead code, and more."
+                "Ariadne — universal dependency graph for AI coding agents. \
+                 31 tools total, grouped by intent.\n\n\
+                 ONBOARDING (new codebase): call `get_entry_points` first, then \
+                 `get_god_objects` and `get_codebase_health`.\n\n\
+                 PR REVIEW: start with `diff_impact(changed_files)` — one call \
+                 returns affected symbols, blast radius, affected tests, review \
+                 focus. Add `compute_file_risk` to triage which file deserves \
+                 the closest read.\n\n\
+                 REFACTORING: `blast_radius(symbol)` shows WILL-BREAK direct and \
+                 MAY-BREAK transitive dependents; pair with `affected_tests` and \
+                 `get_execution_flows`.\n\n\
+                 EXPLAIN A SYMBOL: prefer `why_symbol` for human-readable \
+                 narrative; use `get_context` for raw structured JSON. Add \
+                 `get_symbol_history` for temporal context (churn, authors).\n\n\
+                 DISAMBIGUATION: `get_context` vs `why_symbol` — same data, \
+                 `why_symbol` reads better. `find_dead_code` is a subset of \
+                 `get_code_smells`. `get_symbol_health` is symbol-level, \
+                 `compute_file_risk` is file-level.\n\n\
+                 See docs/AGENT-GUIDE.md in the Ariadne repository for the full \
+                 decision tree and the 31-tool quick-reference matrix."
                     .to_string(),
             ),
         }
