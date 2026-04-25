@@ -12,6 +12,7 @@ class Signal {
             Signal.renderTopStats(Signal._data.stats);
             Signal.renderRisks(Signal._data.insights, Signal._data.modules);
             Signal.renderModules(Signal._data.modules);
+            Signal.renderEntryPoints(Signal._data.entryPoints);
             Signal.renderCoupling(Signal._data.coupling);
             Signal.renderDeadCode(Signal._data.insights);
         } catch (e) {
@@ -20,23 +21,26 @@ class Signal {
     }
 
     static async fetchData() {
-        const [statsRes, modulesRes, insightsRes, couplingRes] = await Promise.all([
+        const [statsRes, modulesRes, insightsRes, couplingRes, entryPointsRes] = await Promise.all([
             fetch('/api/stats'),
             fetch('/api/modules'),
             fetch('/api/graph/insights'),
             fetch('/api/coupling?limit=10'),
+            fetch('/api/entry_points?limit=12'),
         ]);
 
         const stats = await statsRes.json();
         const modulesData = await modulesRes.json();
         const insights = await insightsRes.json();
         const couplingData = await couplingRes.json();
+        const entryPointsData = await entryPointsRes.json();
 
         return {
             stats,
             modules: modulesData.modules || [],
             insights,
             coupling: couplingData.pairs || [],
+            entryPoints: entryPointsData.entry_points || [],
         };
     }
 
@@ -227,6 +231,35 @@ class Signal {
                 <div class="coupling-row__bar">
                     <div class="coupling-row__bar-fill" style="width:${esc(String(strengthPct))}%;background:${esc(color)}"></div>
                 </div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // entryPoints: array from /api/entry_points — each item has {id, name, qualified_name, kind, file_path, line_start, category}
+    // Categories: "framework" (callbacks), "http" (request handlers), "main" (program entry).
+    static renderEntryPoints(entryPoints) {
+        const container = document.getElementById('entry-points-grid');
+        if (!container) return;
+
+        const items = entryPoints || [];
+        if (items.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">No entry points detected.</div>';
+            return;
+        }
+
+        let html = '';
+        for (const e of items) {
+            const fileName = (e.file_path || '').split('/').pop() || e.file_path || '';
+            const filePath = e.file_path || '';
+            const pathWithoutSrc = filePath.startsWith('src/') ? filePath.slice(4) : filePath;
+            const moduleName = pathWithoutSrc.includes('/') ? pathWithoutSrc.split('/')[0] : 'root';
+
+            html += `<div class="dead-code-item" onclick="App.drillDown('${esc(moduleName)}', ${esc(String(e.id))})">
+                <span class="dead-code-item__icon">&#9655;</span>
+                <span class="dead-code-item__name">${esc(e.name)}</span>
+                <span class="dead-code-item__file">${esc(e.category)} · ${esc(fileName)}</span>
             </div>`;
         }
 

@@ -607,6 +607,182 @@ pub async fn describe(
     Ok(Json(result))
 }
 
+// REST parity slice — surfaces 4 agent-facing MCP tools at /api/* so the
+// dashboard reads the same intelligence the MCP tools do.
+
+#[derive(Deserialize)]
+pub struct EntryPointsQuery {
+    pub category: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct EntryPointsResponse {
+    pub entry_points: Vec<crate::db::query::EntryPoint>,
+}
+
+pub async fn entry_points(
+    State(db_path): State<DbState>,
+    Query(query): Query<EntryPointsQuery>,
+) -> Result<Json<EntryPointsResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    let category = query.category.as_deref();
+    let rows = crate::db::query::get_entry_points(&db, category, limit)
+        .map_err(|_| ApiError::query_failed("Failed to load entry points."))?;
+    Ok(Json(EntryPointsResponse { entry_points: rows }))
+}
+
+#[derive(Deserialize)]
+pub struct ComplexityHotspotsQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct HotspotsResponse {
+    pub hotspots: Vec<crate::db::query::SymbolHealthData>,
+}
+
+pub async fn complexity_hotspots(
+    State(db_path): State<DbState>,
+    Query(query): Query<ComplexityHotspotsQuery>,
+) -> Result<Json<HotspotsResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let limit = query.limit.unwrap_or(20).clamp(1, 100);
+    let rows = crate::db::query::get_complexity_hotspots(&db, limit)
+        .map_err(|_| ApiError::query_failed("Failed to load complexity hotspots."))?;
+    Ok(Json(HotspotsResponse { hotspots: rows }))
+}
+
+#[derive(Deserialize)]
+pub struct GodObjectsQuery {
+    pub threshold: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct GodObjectsResponse {
+    pub god_objects: Vec<crate::db::query::SymbolHealthData>,
+}
+
+pub async fn god_objects(
+    State(db_path): State<DbState>,
+    Query(query): Query<GodObjectsQuery>,
+) -> Result<Json<GodObjectsResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let threshold = query.threshold.unwrap_or(20).max(0);
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let rows = crate::db::query::get_god_objects(&db, threshold, limit)
+        .map_err(|_| ApiError::query_failed("Failed to load god objects."))?;
+    Ok(Json(GodObjectsResponse { god_objects: rows }))
+}
+
+#[derive(Deserialize)]
+pub struct DependencyPathQuery {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Serialize)]
+pub struct PathNode {
+    pub id: i64,
+    pub name: String,
+    pub kind: String,
+    pub file_path: String,
+}
+
+#[derive(Serialize)]
+pub struct DependencyPathResponse {
+    pub reachable: bool,
+    pub path_length: usize,
+    pub path: Vec<PathNode>,
+    pub summary: String,
+}
+
+pub async fn dependency_path(
+    State(db_path): State<DbState>,
+    Query(query): Query<DependencyPathQuery>,
+) -> Result<Json<DependencyPathResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+
+    // Resolve symbol names to IDs; missing symbols return a structured miss
+    // (HTTP 200) so dashboards can render "not found" without a 5xx.
+    let from_sym = crate::db::query::find_symbol_by_name(&db, &query.from)
+        .map_err(|_| ApiError::query_failed("Failed to resolve 'from' symbol."))?;
+    let to_sym = crate::db::query::find_symbol_by_name(&db, &query.to)
+        .map_err(|_| ApiError::query_failed("Failed to resolve 'to' symbol."))?;
+
+    let (from_sym, to_sym) = match (from_sym, to_sym) {
+        (Some(f), Some(t)) => (f, t),
+        (None, _) => {
+            return Ok(Json(DependencyPathResponse {
+                reachable: false,
+                path_length: 0,
+                path: Vec::new(),
+                summary: format!("Symbol not found: {}", query.from),
+            }));
+        }
+        (_, None) => {
+            return Ok(Json(DependencyPathResponse {
+                reachable: false,
+                path_length: 0,
+                path: Vec::new(),
+                summary: format!("Symbol not found: {}", query.to),
+            }));
+        }
+    };
+
+    let graph = crate::db::query::build_call_graph(&db, None)
+        .map_err(|_| ApiError::query_failed("Failed to build call graph."))?;
+
+    let path_ids = crate::graph::traversal::find_shortest_path(&graph, from_sym.id, to_sym.id);
+
+    let response = match path_ids {
+        None => DependencyPathResponse {
+            reachable: false,
+            path_length: 0,
+            path: Vec::new(),
+            summary: format!("No path from '{}' to '{}'", query.from, query.to),
+        },
+        Some(ids) => {
+            let path: Vec<PathNode> = ids
+                .iter()
+                .filter_map(|&id| {
+                    graph.symbol_index.get(&id).map(|&idx| {
+                        let n = &graph.graph[idx];
+                        PathNode {
+                            id: n.id,
+                            name: n.name.clone(),
+                            kind: n.kind.clone(),
+                            file_path: n.file_path.clone(),
+                        }
+                    })
+                })
+                .collect();
+            let hops = path.len().saturating_sub(1);
+            let summary = if path.len() <= 6 {
+                let names: Vec<&str> = path.iter().map(|n| n.name.as_str()).collect();
+                format!(
+                    "{} ({} hop{})",
+                    names.join(" -> "),
+                    hops,
+                    if hops == 1 { "" } else { "s" }
+                )
+            } else {
+                format!("Path found ({hops} hops)")
+            };
+            DependencyPathResponse {
+                reachable: true,
+                path_length: hops,
+                path,
+                summary,
+            }
+        }
+    };
+
+    Ok(Json(response))
+}
+
 fn fetch_source(db: &Database, symbol_id: i64, context: u32) -> anyhow::Result<SourceResult> {
     let conn = db.conn();
 

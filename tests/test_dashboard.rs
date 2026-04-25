@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
 use ariadne::dashboard::api::{
-    coupling, describe, graph_data, modules, search_symbols, source, stats, CouplingQuery, DbState,
-    DescribeQuery, SearchQuery, SourceQuery,
+    complexity_hotspots, coupling, dependency_path, describe, entry_points, god_objects,
+    graph_data, modules, search_symbols, source, stats, ComplexityHotspotsQuery, CouplingQuery,
+    DbState, DependencyPathQuery, DescribeQuery, EntryPointsQuery, GodObjectsQuery, SearchQuery,
+    SourceQuery,
 };
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
@@ -634,5 +636,164 @@ fn test_describe_blast_radius_wired_up() {
         result.metrics.blast_radius >= 3,
         "blast_radius should reflect 3 callers, got {}",
         result.metrics.blast_radius
+    );
+}
+
+// =====================================================================
+// Run #15 — REST parity slice (Option B): 4 new routes mirror MCP tools
+// =====================================================================
+
+#[tokio::test]
+async fn test_dashboard_entry_points_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    // Default: no category filter, default limit.
+    let query = EntryPointsQuery {
+        category: None,
+        limit: None,
+    };
+    let result = entry_points(State(state.clone()), Query(query))
+        .await
+        .expect("entry_points should succeed");
+    let response = result.0;
+
+    // The Python fixture has no `main` symbol; the handler must still return
+    // a successful empty response, never a 5xx.
+    let has_main_filter = EntryPointsQuery {
+        category: Some("main".to_string()),
+        limit: Some(10),
+    };
+    let main_result = entry_points(State(state.clone()), Query(has_main_filter))
+        .await
+        .expect("main-filtered entry_points should succeed");
+    assert!(
+        main_result
+            .0
+            .entry_points
+            .iter()
+            .all(|e| e.category == "main"),
+        "category filter should constrain results"
+    );
+
+    // Unknown category returns empty, not error.
+    let unknown_filter = EntryPointsQuery {
+        category: Some("nonexistent".to_string()),
+        limit: None,
+    };
+    let unknown_result = entry_points(State(state), Query(unknown_filter))
+        .await
+        .expect("unknown category should succeed with empty result");
+    assert!(unknown_result.0.entry_points.is_empty());
+
+    // Even when no entry points exist, the response shape must be consistent.
+    let _ = response.entry_points;
+}
+
+#[tokio::test]
+async fn test_dashboard_complexity_hotspots_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    let query = ComplexityHotspotsQuery { limit: Some(5) };
+    let result = complexity_hotspots(State(state.clone()), Query(query))
+        .await
+        .expect("complexity_hotspots should succeed");
+    let response = result.0;
+
+    assert!(
+        response.hotspots.len() <= 5,
+        "limit should cap result count, got {}",
+        response.hotspots.len()
+    );
+    // Default limit when None — should clamp to a sane upper bound.
+    let default_query = ComplexityHotspotsQuery { limit: None };
+    let default_result = complexity_hotspots(State(state), Query(default_query))
+        .await
+        .expect("default limit should succeed");
+    assert!(
+        default_result.0.hotspots.len() <= 100,
+        "default limit must cap below 100, got {}",
+        default_result.0.hotspots.len()
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_god_objects_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    // Threshold of 0 should match every non-dead, non-test symbol.
+    let permissive = GodObjectsQuery {
+        threshold: Some(0),
+        limit: Some(50),
+    };
+    let result = god_objects(State(state.clone()), Query(permissive))
+        .await
+        .expect("permissive god_objects should succeed");
+    let permissive_count = result.0.god_objects.len();
+
+    // High threshold should yield fewer (or zero) results.
+    let strict = GodObjectsQuery {
+        threshold: Some(10_000),
+        limit: Some(50),
+    };
+    let strict_result = god_objects(State(state), Query(strict))
+        .await
+        .expect("strict god_objects should succeed");
+    assert!(
+        strict_result.0.god_objects.len() <= permissive_count,
+        "higher threshold must not yield more results: strict={} vs permissive={}",
+        strict_result.0.god_objects.len(),
+        permissive_count
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_dependency_path_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    // The python_repo fixture wires greet -> helper at minimum; if call
+    // resolution finds it, the path should be reachable.
+    let query = DependencyPathQuery {
+        from: "greet".to_string(),
+        to: "helper".to_string(),
+    };
+    let result = dependency_path(State(state.clone()), Query(query))
+        .await
+        .expect("dependency_path should succeed");
+    let response = result.0;
+
+    // Either reachable (path returned) or unreachable (empty path) — never crash.
+    if response.reachable {
+        assert!(
+            !response.path.is_empty(),
+            "reachable path must be non-empty"
+        );
+        assert_eq!(
+            response.path_length,
+            response.path.len().saturating_sub(1),
+            "path_length should equal hops (path nodes - 1)"
+        );
+    } else {
+        assert!(response.path.is_empty(), "unreachable path must be empty");
+        assert_eq!(response.path_length, 0);
+    }
+
+    // Missing symbol => 200 with reachable=false, summary describes the miss.
+    let missing = DependencyPathQuery {
+        from: "doesnotexist_xyzzy".to_string(),
+        to: "helper".to_string(),
+    };
+    let missing_result = dependency_path(State(state), Query(missing))
+        .await
+        .expect("missing symbol should succeed with structured miss");
+    assert!(!missing_result.0.reachable);
+    assert!(
+        missing_result.0.summary.contains("doesnotexist")
+            || missing_result
+                .0
+                .summary
+                .to_lowercase()
+                .contains("not found"),
+        "summary should mention the missing symbol or 'not found', got: {}",
+        missing_result.0.summary
     );
 }

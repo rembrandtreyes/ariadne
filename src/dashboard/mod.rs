@@ -52,6 +52,16 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
         .route("/api/modules", axum::routing::get(api::modules))
         .route("/api/coupling", axum::routing::get(api::coupling))
         .route("/api/describe", axum::routing::get(api::describe))
+        .route("/api/entry_points", axum::routing::get(api::entry_points))
+        .route(
+            "/api/complexity_hotspots",
+            axum::routing::get(api::complexity_hotspots),
+        )
+        .route("/api/god_objects", axum::routing::get(api::god_objects))
+        .route(
+            "/api/dependency_path",
+            axum::routing::get(api::dependency_path),
+        )
         .route(
             "/graph-renderer.js",
             axum::routing::get(graph_renderer_js_handler),
