@@ -85,6 +85,83 @@ fn test_agent_guide_exists_and_nonempty() {
 }
 
 #[test]
+fn test_changelog_unreleased_mentions_current_tool_count() {
+    // CHANGELOG.md is the third count-bearing doc on the front door (after
+    // README and lib.rs docstring). When tools ship without a CHANGELOG bump,
+    // the next release notes go out as a shipped lie. This test asserts the
+    // [Unreleased] section names the current EXPECTED_TOOL_COUNT either as a
+    // running total or as a `(N tools)` parenthetical.
+    let changelog = read_repo_file("CHANGELOG.md");
+    let start = changelog
+        .find("## [Unreleased]")
+        .expect("CHANGELOG should contain '## [Unreleased]' section");
+    let section_after = &changelog[start..];
+    let end = section_after[3..]
+        .find("\n## ")
+        .map(|i| i + 3)
+        .unwrap_or(section_after.len());
+    let unreleased = &section_after[..end];
+
+    let total_now = format!("total now {}", EXPECTED_TOOL_COUNT);
+    let parenthetical = format!("({} tools)", EXPECTED_TOOL_COUNT);
+    let total_of = format!("total of {}", EXPECTED_TOOL_COUNT);
+
+    assert!(
+        unreleased.contains(&total_now)
+            || unreleased.contains(&parenthetical)
+            || unreleased.contains(&total_of),
+        "CHANGELOG.md [Unreleased] should reference the current tool count \
+         ({}) — expected one of `{}`, `{}`, or `{}`. Update CHANGELOG when \
+         shipping new MCP tools so release notes don't go out as a shipped lie.",
+        EXPECTED_TOOL_COUNT,
+        total_now,
+        parenthetical,
+        total_of
+    );
+}
+
+#[test]
+fn test_changelog_unreleased_documents_recent_features() {
+    // Every shipped MCP tool must appear in the [Unreleased] section before
+    // the next release. This test asserts the most recent tools (those most
+    // likely to be missed in a CHANGELOG bump) are documented. When this test
+    // fails, add the tool to CHANGELOG.md [Unreleased]/Added in the same
+    // commit that ships the tool.
+    let changelog = read_repo_file("CHANGELOG.md");
+    let start = changelog
+        .find("## [Unreleased]")
+        .expect("CHANGELOG should contain '## [Unreleased]' section");
+    let section_after = &changelog[start..];
+    let end = section_after[3..]
+        .find("\n## ")
+        .map(|i| i + 3)
+        .unwrap_or(section_after.len());
+    let unreleased = &section_after[..end];
+
+    // Recent shipped MCP tools (verified against `all_tools()`). Extend this
+    // slice when new tools ship that need a CHANGELOG-truth gate.
+    let recent_tools: &[&str] = &["propose_edit_plan"];
+    for tool in recent_tools {
+        assert!(
+            unreleased.contains(tool),
+            "CHANGELOG.md [Unreleased] should document `{}` (shipped MCP tool). \
+             Update CHANGELOG when shipping tools so the next release notes \
+             accurately list new capabilities.",
+            tool
+        );
+    }
+
+    // Run #15 shipped 4 REST routes mirroring high-value MCP tools. The
+    // CHANGELOG must announce REST parity progress so dashboard consumers
+    // know which tools are HTTP-reachable.
+    assert!(
+        unreleased.to_lowercase().contains("rest") || unreleased.contains("/api/"),
+        "CHANGELOG.md [Unreleased] should mention REST/dashboard routes — \
+         shipped REST parity progress is invisible without it."
+    );
+}
+
+#[test]
 fn test_readme_competitor_table_targets_current_threats() {
     // The README competitor table must mention at least 2 of the current
     // HIGH threats (from competitive landscape memory, as of 2026-04-24).

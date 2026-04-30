@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-**21 new MCP tools** (total now 31, up from 10 at 0.1.0) — grouped by intent
+**22 new MCP tools** (total now 32, up from 10 at 0.1.0) — grouped by intent
 and documented in [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md).
 
 Onboarding & triage:
@@ -23,6 +23,9 @@ Change impact:
 - `diff_impact` — unified change-impact report in a single call
 - `affected_tests` — minimum test set for a set of changed files
 - `get_dependency_path` — shortest directed call path between two symbols (BFS)
+- `propose_edit_plan` — leaves-first ordered edit sequence for callers when
+  refactoring a symbol; topological sort over the dependent cone with
+  cycle detection and BFS-depth fallback on cyclic graphs
 
 Deep-dive on a symbol:
 - `why_symbol` — single-narrative explainer with role, callers, callees, blast radius
@@ -65,14 +68,24 @@ Structural exploration:
   `.tsx`, `.ts`)
 - Edge-driven graph loading with batched N+1 query elimination
 
+**Dashboard REST parity** (Signal-view intelligence over HTTP)
+- `GET /api/entry_points?category=&limit=` mirrors `get_entry_points`
+- `GET /api/complexity_hotspots?limit=` mirrors `get_complexity_hotspots`
+- `GET /api/god_objects?threshold=&limit=` mirrors `get_god_objects`
+- `GET /api/dependency_path?from=&to=` mirrors `get_dependency_path`
+- Signal view "Entry Points" card surfaces 12 framework/HTTP/main entry
+  points with click-through drill-down into the detail panel
+- All four routes measured at 22-34ms latency on a 1MB self-index;
+  no per-request cache needed under the 200ms budget
+
 **Quality**
 - `cargo clippy --all-targets` exits 0 (first time in project history)
 - MCP call-graph cache rebuilds only when pipeline generation changes —
   eliminates per-tool-call O(symbols+calls) SQLite scan
 - `tests/test_mcp_tools.rs` guardrail asserts exact `Vec<Tool>` length so
   tool-count drift is caught at CI time
-- `tests/test_docs_parity.rs` asserts README + lib.rs + AGENT-GUIDE.md
-  stay in sync with `all_tools()` — shipped-docs lies now fail CI
+- `tests/test_docs_parity.rs` asserts README + lib.rs + AGENT-GUIDE.md +
+  CHANGELOG stay in sync with `all_tools()` — shipped-docs lies now fail CI
 
 ### Changed
 
@@ -81,11 +94,13 @@ Structural exploration:
   HIGH threats (GitNexus, Codebase-Memory, Greptile, Potpie,
   Understand-Anything, code-review-graph) with moat-aligned capability axes
 - README MCP tools table regenerated from `all_tools()` — now lists all
-  31 tools grouped by intent (onboarding, change impact, deep-dive,
+  32 tools grouped by intent (onboarding, change impact, deep-dive,
   navigation, structural exploration)
 - MCP server `instructions` payload points agents to the onboarding triad
   and the decision tree
-- `src/lib.rs` module docstring tool count corrected (was 29, reality 31)
+- `src/lib.rs` module docstring tool count corrected (was 29, reality 32)
+- `docs/AGENT-GUIDE.md` Refactoring section now leads with `propose_edit_plan`
+  for leaves-first edit ordering when refactoring a symbol's callers
 
 ## [0.1.0] — 2026-03-12
 
