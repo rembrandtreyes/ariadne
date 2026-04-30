@@ -2,7 +2,7 @@ mod architecture;
 mod file;
 mod graph;
 mod health;
-mod impact;
+pub(crate) mod impact;
 mod symbol;
 
 use std::sync::{Arc, Mutex};

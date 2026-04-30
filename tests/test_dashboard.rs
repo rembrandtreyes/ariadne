@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use ariadne::dashboard::api::{
     complexity_hotspots, coupling, dependency_path, describe, entry_points, god_objects,
-    graph_data, modules, search_symbols, source, stats, ComplexityHotspotsQuery, CouplingQuery,
-    DbState, DependencyPathQuery, DescribeQuery, EntryPointsQuery, GodObjectsQuery, SearchQuery,
-    SourceQuery,
+    graph_data, modules, propose_edit_plan, search_symbols, source, stats, ComplexityHotspotsQuery,
+    CouplingQuery, DbState, DependencyPathQuery, DescribeQuery, EntryPointsQuery, GodObjectsQuery,
+    ProposeEditPlanQuery, SearchQuery, SourceQuery,
 };
 use axum::extract::{Query, State};
 use axum::response::IntoResponse;
@@ -794,6 +794,105 @@ async fn test_dashboard_dependency_path_handler() {
                 .to_lowercase()
                 .contains("not found"),
         "summary should mention the missing symbol or 'not found', got: {}",
+        missing_result.0.summary
+    );
+}
+
+#[tokio::test]
+async fn test_dashboard_propose_edit_plan_handler() {
+    let (_dir, state) = setup_indexed_db();
+
+    // The python_repo fixture wires greet -> helper, so `helper` has at least
+    // one dependent (`greet`). Editing helper requires touching greet first.
+    let query = ProposeEditPlanQuery {
+        symbol: "helper".to_string(),
+    };
+    let result = propose_edit_plan(State(state.clone()), Query(query))
+        .await
+        .expect("propose_edit_plan should succeed");
+    let response = result.0;
+
+    let symbol = response
+        .symbol
+        .as_ref()
+        .expect("resolved symbol must populate response.symbol");
+    assert_eq!(symbol.name, "helper");
+
+    // Default ordering on a small DAG must be the deterministic topological one.
+    assert!(
+        response.ordering_strategy == "topological"
+            || response.ordering_strategy == "bfs_depth_fallback",
+        "ordering_strategy must be one of the two known values, got: {}",
+        response.ordering_strategy
+    );
+
+    // total_dependents must equal the edit_order length (the same dependent
+    // cone, surfaced as both a count and a list).
+    assert_eq!(
+        response.total_dependents,
+        response.edit_order.len(),
+        "total_dependents must match edit_order length"
+    );
+
+    // affected_test_count must equal the count of is_test entries — REST
+    // mirror of the MCP invariant.
+    assert_eq!(
+        response.affected_test_count,
+        response.affected_tests.len(),
+        "affected_test_count must match affected_tests length"
+    );
+    let test_steps = response.edit_order.iter().filter(|e| e.is_test).count();
+    assert_eq!(
+        response.affected_tests.len(),
+        test_steps,
+        "affected_tests must equal the is_test rows in edit_order"
+    );
+
+    // Steps must be 1-indexed and consecutive.
+    for (i, entry) in response.edit_order.iter().enumerate() {
+        assert_eq!(entry.step, i + 1, "edit_order steps must be 1-indexed");
+    }
+
+    // Idempotent ordering — same query twice produces byte-identical edit_order.
+    let repeat_query = ProposeEditPlanQuery {
+        symbol: "helper".to_string(),
+    };
+    let repeat = propose_edit_plan(State(state.clone()), Query(repeat_query))
+        .await
+        .expect("repeat propose_edit_plan should succeed");
+    let names_a: Vec<&str> = response
+        .edit_order
+        .iter()
+        .map(|e| e.name.as_str())
+        .collect();
+    let names_b: Vec<&str> = repeat
+        .0
+        .edit_order
+        .iter()
+        .map(|e| e.name.as_str())
+        .collect();
+    assert_eq!(
+        names_a, names_b,
+        "edit_order must be deterministic across repeated calls"
+    );
+
+    // Missing symbol => 200 OK with structured summary, never an error.
+    let missing = ProposeEditPlanQuery {
+        symbol: "doesnotexist_xyzzy".to_string(),
+    };
+    let missing_result = propose_edit_plan(State(state), Query(missing))
+        .await
+        .expect("missing symbol should succeed with structured miss");
+    assert!(missing_result.0.symbol.is_none());
+    assert_eq!(missing_result.0.total_dependents, 0);
+    assert!(missing_result.0.edit_order.is_empty());
+    assert!(
+        missing_result
+            .0
+            .summary
+            .to_lowercase()
+            .contains("not found"),
+        "summary should mention 'not found', got: {}",
         missing_result.0.summary
     );
 }

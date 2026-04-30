@@ -783,6 +783,179 @@ pub async fn dependency_path(
     Ok(Json(response))
 }
 
+#[derive(Deserialize)]
+pub struct ProposeEditPlanQuery {
+    pub symbol: String,
+}
+
+#[derive(Serialize)]
+pub struct PlanSymbol {
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file: String,
+}
+
+#[derive(Serialize)]
+pub struct EditOrderStep {
+    pub step: usize,
+    pub symbol_id: i64,
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file: String,
+    pub depth: u32,
+    pub is_test: bool,
+}
+
+#[derive(Serialize)]
+pub struct AffectedTestEntry {
+    pub name: String,
+    pub qualified_name: String,
+    pub file: String,
+}
+
+#[derive(Serialize)]
+pub struct ExecutionFlowStep {
+    pub step: i32,
+    pub depth: i32,
+    pub symbol: String,
+    pub qualified_name: String,
+    pub file: String,
+    pub kind: String,
+}
+
+#[derive(Serialize)]
+pub struct ProposeEditPlanResponse {
+    pub symbol: Option<PlanSymbol>,
+    pub total_dependents: usize,
+    pub edit_order: Vec<EditOrderStep>,
+    pub affected_tests: Vec<AffectedTestEntry>,
+    pub affected_test_count: usize,
+    pub execution_flows: std::collections::BTreeMap<String, Vec<ExecutionFlowStep>>,
+    pub flow_count: usize,
+    pub cycle_detected: bool,
+    pub ordering_strategy: String,
+    pub summary: String,
+}
+
+pub async fn propose_edit_plan(
+    State(db_path): State<DbState>,
+    Query(query): Query<ProposeEditPlanQuery>,
+) -> Result<Json<ProposeEditPlanResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+
+    // Resolve target — missing symbol returns a structured 200 (mirrors
+    // dependency_path so dashboards can render "not found" without a 5xx).
+    let target = crate::db::query::find_symbol_by_name(&db, &query.symbol)
+        .map_err(|_| ApiError::query_failed("Failed to resolve symbol."))?;
+    let target = match target {
+        Some(t) => t,
+        None => {
+            return Ok(Json(ProposeEditPlanResponse {
+                symbol: None,
+                total_dependents: 0,
+                edit_order: Vec::new(),
+                affected_tests: Vec::new(),
+                affected_test_count: 0,
+                execution_flows: std::collections::BTreeMap::new(),
+                flow_count: 0,
+                cycle_detected: false,
+                ordering_strategy: "topological".to_string(),
+                summary: format!("Symbol not found: {}", query.symbol),
+            }));
+        }
+    };
+
+    let target_file_path =
+        crate::db::query::file_path_by_id(&db, target.file_id).unwrap_or_else(|_| "unknown".into());
+
+    let flows = crate::db::query::get_execution_flows(&db, target.id).unwrap_or_default();
+
+    let graph = crate::db::query::build_call_graph(&db, None)
+        .map_err(|_| ApiError::query_failed("Failed to build call graph."))?;
+
+    let plan = crate::mcp::tools::impact::build_edit_plan(&graph, target.id);
+
+    let edit_order: Vec<EditOrderStep> = plan
+        .edit_order
+        .iter()
+        .enumerate()
+        .map(|(i, e)| EditOrderStep {
+            step: i + 1,
+            symbol_id: e.symbol_id,
+            name: e.name.clone(),
+            qualified_name: e.qualified_name.clone(),
+            kind: e.kind.clone(),
+            file: e.file_path.clone(),
+            depth: e.depth,
+            is_test: e.is_test,
+        })
+        .collect();
+
+    let affected_tests: Vec<AffectedTestEntry> = plan
+        .edit_order
+        .iter()
+        .filter(|e| e.is_test)
+        .map(|e| AffectedTestEntry {
+            name: e.name.clone(),
+            qualified_name: e.qualified_name.clone(),
+            file: e.file_path.clone(),
+        })
+        .collect();
+
+    let mut execution_flows: std::collections::BTreeMap<String, Vec<ExecutionFlowStep>> =
+        std::collections::BTreeMap::new();
+    for step in &flows {
+        execution_flows
+            .entry(step.flow_name.clone())
+            .or_default()
+            .push(ExecutionFlowStep {
+                step: step.step_order,
+                depth: step.depth,
+                symbol: step.symbol_name.clone(),
+                qualified_name: step.qualified_name.clone(),
+                file: step.file_path.clone(),
+                kind: step.kind.clone(),
+            });
+    }
+
+    let total_dependents = edit_order.len();
+    let summary = if plan.cycle_detected {
+        format!(
+            "Edit plan for '{}' — {} dependents (cycle detected, BFS-depth fallback ordering)",
+            target.name, total_dependents
+        )
+    } else {
+        format!(
+            "Edit plan for '{}' — {} dependents in topological order (leaf-callees first)",
+            target.name, total_dependents
+        )
+    };
+
+    Ok(Json(ProposeEditPlanResponse {
+        symbol: Some(PlanSymbol {
+            name: target.name,
+            qualified_name: target.qualified_name,
+            kind: target.kind,
+            file: target_file_path,
+        }),
+        total_dependents,
+        affected_test_count: affected_tests.len(),
+        edit_order,
+        affected_tests,
+        flow_count: execution_flows.len(),
+        execution_flows,
+        cycle_detected: plan.cycle_detected,
+        ordering_strategy: if plan.cycle_detected {
+            "bfs_depth_fallback".to_string()
+        } else {
+            "topological".to_string()
+        },
+        summary,
+    }))
+}
+
 fn fetch_source(db: &Database, symbol_id: i64, context: u32) -> anyhow::Result<SourceResult> {
     let conn = db.conn();
 

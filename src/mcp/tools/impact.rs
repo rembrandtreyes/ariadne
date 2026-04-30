@@ -472,26 +472,26 @@ impl AriadneService {
 }
 
 /// One row of the proposed edit order.
-struct EditPlanEntry {
-    symbol_id: i64,
-    name: String,
-    qualified_name: String,
-    kind: String,
-    file_path: String,
-    depth: u32,
-    is_test: bool,
+pub(crate) struct EditPlanEntry {
+    pub(crate) symbol_id: i64,
+    pub(crate) name: String,
+    pub(crate) qualified_name: String,
+    pub(crate) kind: String,
+    pub(crate) file_path: String,
+    pub(crate) depth: u32,
+    pub(crate) is_test: bool,
 }
 
 /// Result of ordering the dependent cone. `cycle_detected` flips the response's
 /// `ordering_strategy` field; the in-array order is always `(depth_asc, id_asc)`,
 /// which is topologically valid on DAGs and stable on cyclic cones.
-struct EditPlanOrdering {
-    edit_order: Vec<EditPlanEntry>,
-    cycle_detected: bool,
+pub(crate) struct EditPlanOrdering {
+    pub(crate) edit_order: Vec<EditPlanEntry>,
+    pub(crate) cycle_detected: bool,
 }
 
 impl EditPlanOrdering {
-    fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self {
             edit_order: Vec::new(),
             cycle_detected: false,
@@ -502,7 +502,7 @@ impl EditPlanOrdering {
 /// BFS upstream from `target_id`, then sort the dependent set by
 /// (depth_asc, symbol_id_asc) and detect cycles via `petgraph::algo::toposort`
 /// over the induced subgraph.
-fn build_edit_plan(graph: &crate::graph::CallGraph, target_id: i64) -> EditPlanOrdering {
+pub(crate) fn build_edit_plan(graph: &crate::graph::CallGraph, target_id: i64) -> EditPlanOrdering {
     let Some(&target_idx) = graph.symbol_index.get(&target_id) else {
         return EditPlanOrdering::empty();
     };

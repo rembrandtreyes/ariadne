@@ -63,6 +63,10 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
             axum::routing::get(api::dependency_path),
         )
         .route(
+            "/api/propose_edit_plan",
+            axum::routing::get(api::propose_edit_plan),
+        )
+        .route(
             "/graph-renderer.js",
             axum::routing::get(graph_renderer_js_handler),
         )
