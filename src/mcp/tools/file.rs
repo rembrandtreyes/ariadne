@@ -67,8 +67,8 @@ impl AriadneService {
         match self.with_db(|db| {
             let file = query::find_file_by_path(db, &file_path_param)?
                 .ok_or_else(|| anyhow::anyhow!("File not found: {file_path_param}"))?;
-            let symbols = query::get_file_symbols(db, file.id).unwrap_or_default();
-            let imports = query::get_file_imports(db, file.id).unwrap_or_default();
+            let symbols = query::get_file_symbols(db, file.id)?;
+            let imports = query::get_file_imports(db, file.id)?;
             Ok::<_, anyhow::Error>(serde_json::json!({
                 "file": file.path, "language": file.language,
                 "parse_error_count": query::get_file_parse_error_count(db, file.id)?,

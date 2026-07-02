@@ -619,3 +619,77 @@ async fn test_propose_edit_plan_miss_carries_parse_warnings_when_dirty() {
          Got: {payload}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// DB-error propagation — tools must error, not render empty data
+// ---------------------------------------------------------------------------
+
+/// Helper: service whose coupling table is gone — queries against it must Err.
+fn service_with_broken_table(drop_sql: &str) -> AriadneService {
+    use ariadne::db::write;
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file = write::insert_file(&db, svc, "src/a.rs", "/tmp/t/src/a.rs", "rust", 0.0).unwrap();
+    write::insert_symbol(
+        &db,
+        file,
+        "target_fn",
+        "a::target_fn",
+        "function",
+        1,
+        5,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+    db.conn().execute_batch(drop_sql).expect("drop table");
+    AriadneService::new(db)
+}
+
+#[tokio::test]
+async fn test_get_context_propagates_db_errors() {
+    let service = service_with_broken_table("DROP TABLE coupling");
+    let ctx = test_context();
+    let mut args = serde_json::Map::new();
+    args.insert("symbol".to_string(), serde_json::json!("target_fn"));
+    let req = tool_request("get_context", Some(args));
+    let result = service.call_tool(req, ctx).await.expect("call_tool");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "get_context must surface DB errors, not render empty coupled_files"
+    );
+}
+
+#[tokio::test]
+async fn test_why_symbol_propagates_db_errors() {
+    let service = service_with_broken_table("DROP TABLE coupling");
+    let ctx = test_context();
+    let mut args = serde_json::Map::new();
+    args.insert("symbol".to_string(), serde_json::json!("target_fn"));
+    let req = tool_request("why_symbol", Some(args));
+    let result = service.call_tool(req, ctx).await.expect("call_tool");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "why_symbol must surface DB errors, not render empty callers/couplings"
+    );
+}
+
+#[tokio::test]
+async fn test_get_file_summary_propagates_db_errors() {
+    let service = service_with_broken_table("DROP TABLE imports");
+    let ctx = test_context();
+    let mut args = serde_json::Map::new();
+    args.insert("file_path".to_string(), serde_json::json!("src/a.rs"));
+    let req = tool_request("get_file_summary", Some(args));
+    let result = service.call_tool(req, ctx).await.expect("call_tool");
+    assert_eq!(
+        result.is_error,
+        Some(true),
+        "get_file_summary must surface DB errors, not render an empty file"
+    );
+}

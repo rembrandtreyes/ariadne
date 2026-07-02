@@ -23,7 +23,6 @@ pub mod dashboard;
 pub mod db;
 pub mod graph;
 pub mod mcp;
-pub mod output;
 pub mod parse;
 pub mod pipeline;
 pub mod search;

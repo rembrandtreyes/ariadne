@@ -36,11 +36,10 @@ impl AriadneService {
             let sym = query::find_symbol_by_name(db, &symbol_name)?;
             let sym = sym.ok_or_else(|| anyhow::anyhow!("Symbol not found: {symbol_name}"))?;
 
-            let file_path =
-                query::file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
-            let dependents = query::get_dependents(db, sym.id).unwrap_or_default();
-            let dependencies = query::get_dependencies(db, sym.id).unwrap_or_default();
-            let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
+            let file_path = query::file_path_by_id(db, sym.file_id)?;
+            let dependents = query::get_dependents(db, sym.id)?;
+            let dependencies = query::get_dependencies(db, sym.id)?;
+            let couplings = query::get_file_couplings(db, sym.file_id)?;
 
             let mut context = serde_json::json!({
                 "symbol": {
@@ -125,16 +124,19 @@ impl AriadneService {
             }
         };
 
-        // Get callers, callees, and file path from DB
+        // Get callers, callees, and file path from DB — errors surface rather
+        // than rendering as empty relationship lists.
         let (file_path, callers, callees, couplings) = match self.with_db(|db| {
-            let fp = query::file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
-            let callers = query::get_dependents(db, sym.id).unwrap_or_default();
-            let callees = query::get_dependencies(db, sym.id).unwrap_or_default();
-            let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
-            (fp, callers, callees, couplings)
+            let fp = query::file_path_by_id(db, sym.file_id)?;
+            let callers = query::get_dependents(db, sym.id)?;
+            let callees = query::get_dependencies(db, sym.id)?;
+            let couplings = query::get_file_couplings(db, sym.file_id)?;
+            Ok::<_, anyhow::Error>((fp, callers, callees, couplings))
         }) {
-            Ok(result) => result,
-            Err(e) => return CallToolResult::error(vec![Content::text(format!("{e}"))]),
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) | Err(e) => {
+                return CallToolResult::error(vec![Content::text(format!("{e}"))])
+            }
         };
 
         // Get blast radius from cached graph
