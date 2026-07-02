@@ -50,7 +50,14 @@ impl AriadneService {
             ))
         }) {
             Ok(result) => {
-                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                let mut value = match serde_json::to_value(&result) {
+                    Ok(v) => v,
+                    Err(e) => return CallToolResult::error(vec![Content::text(format!("{e}"))]),
+                };
+                if let Err(e) = self.attach_parse_warnings(&mut value) {
+                    return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+                }
+                let json = serde_json::to_string_pretty(&value).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
             Err(e) => CallToolResult::error(vec![Content::text(format!("{e}"))]),

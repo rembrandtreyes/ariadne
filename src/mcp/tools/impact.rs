@@ -176,7 +176,10 @@ impl AriadneService {
                 "truncated": affected_symbols.len() > 50,
             }))
         }) {
-            Ok(result) => {
+            Ok(mut result) => {
+                if let Err(e) = self.attach_parse_warnings(&mut result) {
+                    return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+                }
                 let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
@@ -323,7 +326,10 @@ impl AriadneService {
                 "count": tests.len(),
             }))
         }) {
-            Ok(result) => {
+            Ok(mut result) => {
+                if let Err(e) = self.attach_parse_warnings(&mut result) {
+                    return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+                }
                 let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
@@ -348,7 +354,7 @@ impl AriadneService {
         let target = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
             Ok(Ok(Some(s))) => s,
             Ok(Ok(None)) => {
-                let result = serde_json::json!({
+                let mut result = serde_json::json!({
                     "symbol": serde_json::Value::Null,
                     "total_dependents": 0,
                     "edit_order": [],
@@ -358,6 +364,11 @@ impl AriadneService {
                     "ordering_strategy": "topological",
                     "summary": format!("Symbol not found: {symbol_name}"),
                 });
+                // A miss on a dirty index deserves the warning most: the symbol
+                // may be unindexed precisely because its file failed to parse.
+                if let Err(e) = self.attach_parse_warnings(&mut result) {
+                    return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+                }
                 let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 return CallToolResult::success(vec![Content::text(json)]);
             }
@@ -444,7 +455,7 @@ impl AriadneService {
             )
         };
 
-        let result = serde_json::json!({
+        let mut result = serde_json::json!({
             "symbol": {
                 "name": target.name,
                 "qualified_name": target.qualified_name,
@@ -466,6 +477,9 @@ impl AriadneService {
             "summary": summary,
         });
 
+        if let Err(e) = self.attach_parse_warnings(&mut result) {
+            return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+        }
         let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
         CallToolResult::success(vec![Content::text(json)])
     }

@@ -320,6 +320,35 @@ pub(crate) fn get_int_param(params: &CallToolRequestParam, key: &str) -> Option<
         .and_then(|v| v.as_i64())
 }
 
+/// Index-wide parse-health block for answer-bearing tools, or `None` when the
+/// index is clean. Files that parsed with syntax errors have missing graph
+/// edges, so impact answers built on them may undercount — the block tells
+/// the agent why an answer may be wrong and what to do about it.
+///
+/// Queried fresh per request: the scan is bounded by tracked-file count and
+/// usually returns empty; a cache would risk a stale "clean" after re-index,
+/// which is worse than the scan.
+pub(crate) fn parse_health_json(db: &Database) -> anyhow::Result<Option<serde_json::Value>> {
+    let files = crate::db::query::get_files_with_parse_errors(db)?;
+    if files.is_empty() {
+        return Ok(None);
+    }
+    let total_errors: i64 = files.iter().map(|(_, n)| n).sum();
+    let listed: Vec<serde_json::Value> = files
+        .iter()
+        .take(10)
+        .map(|(path, n)| serde_json::json!({ "file": path, "parse_error_count": n }))
+        .collect();
+    Ok(Some(serde_json::json!({
+        "files_with_parse_errors": listed,
+        "affected_file_count": files.len(),
+        "total_parse_errors": total_errors,
+        "note": "These files parsed with syntax errors, so graph edges from them \
+                 may be missing and this answer may undercount. Re-index after \
+                 fixing the syntax, or verify these files manually.",
+    })))
+}
+
 pub struct AriadneService {
     db: Arc<Mutex<Database>>,
     /// Cached call graph — rebuilt when pipeline_generation changes.
@@ -341,6 +370,20 @@ impl Clone for AriadneService {
 }
 
 impl AriadneService {
+    /// Attach the index-wide parse-health block to an answer JSON. The
+    /// `parse_warnings` key is ABSENT when the index is clean — presence
+    /// itself is the signal, so agents never pay for an empty field.
+    pub(crate) fn attach_parse_warnings(
+        &self,
+        value: &mut serde_json::Value,
+    ) -> anyhow::Result<()> {
+        let health = self.with_db(parse_health_json)??;
+        if let (Some(obj), Some(h)) = (value.as_object_mut(), health) {
+            obj.insert("parse_warnings".to_string(), h);
+        }
+        Ok(())
+    }
+
     pub fn new(db: Database) -> Self {
         Self {
             db: Arc::new(Mutex::new(db)),

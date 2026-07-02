@@ -505,3 +505,117 @@ async fn test_get_file_summary_includes_parse_error_count() {
         "recorded parse_error_count value should round-trip into the summary"
     );
 }
+
+// ---------------------------------------------------------------------------
+// parse_warnings — answer-level trust propagation
+// ---------------------------------------------------------------------------
+
+/// Helper: in-memory service with one symbol, optionally one parse-broken file.
+fn service_with_symbol(dirty: bool) -> AriadneService {
+    use ariadne::db::write;
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file = write::insert_file(&db, svc, "src/a.rs", "/tmp/t/src/a.rs", "rust", 0.0).unwrap();
+    write::insert_symbol(
+        &db,
+        file,
+        "target_fn",
+        "a::target_fn",
+        "function",
+        1,
+        5,
+        true,
+        false,
+        "",
+        "",
+        None,
+    )
+    .unwrap();
+    if dirty {
+        let broken = write::insert_file(
+            &db,
+            svc,
+            "src/broken.tsx",
+            "/tmp/t/src/broken.tsx",
+            "typescript",
+            0.0,
+        )
+        .unwrap();
+        write::set_file_parse_error_count(&db, broken, 4).unwrap();
+    }
+    AriadneService::new(db)
+}
+
+/// Helper: call a tool with a `symbol` arg and return the response text.
+async fn call_symbol_tool(service: &AriadneService, tool: &str, symbol: &str) -> String {
+    let ctx = test_context();
+    let mut args = serde_json::Map::new();
+    args.insert("symbol".to_string(), serde_json::json!(symbol));
+    let req = tool_request(tool, Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    serde_json::to_string(&result.content).expect("serializable content")
+}
+
+#[tokio::test]
+async fn test_blast_radius_parse_warnings_present_when_index_dirty() {
+    let service = service_with_symbol(true);
+    let payload = call_symbol_tool(&service, "blast_radius", "target_fn").await;
+    assert!(
+        payload.contains("parse_warnings"),
+        "blast_radius must carry parse_warnings when the index has parse-broken \
+         files — its answer may undercount. Got: {payload}"
+    );
+    assert!(
+        payload.contains("broken.tsx"),
+        "parse_warnings should name the broken file"
+    );
+}
+
+#[tokio::test]
+async fn test_blast_radius_parse_warnings_absent_when_index_clean() {
+    let service = service_with_symbol(false);
+    let payload = call_symbol_tool(&service, "blast_radius", "target_fn").await;
+    assert!(
+        !payload.contains("parse_warnings"),
+        "parse_warnings must be ABSENT (not null/empty) on a clean index — \
+         always-on noise is the rejected health-tool pattern. Got: {payload}"
+    );
+}
+
+#[tokio::test]
+async fn test_get_context_parse_warnings_present_when_index_dirty() {
+    let service = service_with_symbol(true);
+    let payload = call_symbol_tool(&service, "get_context", "target_fn").await;
+    assert!(
+        payload.contains("parse_warnings"),
+        "get_context must carry parse_warnings on a dirty index. Got: {payload}"
+    );
+}
+
+#[tokio::test]
+async fn test_get_context_parse_warnings_absent_when_index_clean() {
+    let service = service_with_symbol(false);
+    let payload = call_symbol_tool(&service, "get_context", "target_fn").await;
+    assert!(
+        !payload.contains("parse_warnings"),
+        "parse_warnings must be absent on a clean index. Got: {payload}"
+    );
+}
+
+#[tokio::test]
+async fn test_propose_edit_plan_miss_carries_parse_warnings_when_dirty() {
+    // The killer case: "symbol not found" on a dirty index — the symbol may be
+    // missing precisely BECAUSE its file failed to parse. The structured miss
+    // must say so.
+    let service = service_with_symbol(true);
+    let payload = call_symbol_tool(&service, "propose_edit_plan", "GhostComponent").await;
+    assert!(
+        payload.contains("not found") && payload.contains("parse_warnings"),
+        "propose_edit_plan's structured miss must carry parse_warnings on a \
+         dirty index — the symbol may be unindexed due to the parse failure. \
+         Got: {payload}"
+    );
+}

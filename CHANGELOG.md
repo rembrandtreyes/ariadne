@@ -96,6 +96,11 @@ Structural exploration:
   dropping the file from the graph
 - Dashboard `describe` propagates DB errors instead of rendering them as
   empty metrics
+- Answer-bearing MCP tools (`blast_radius`, `diff_impact`, `affected_tests`,
+  `propose_edit_plan`, `why_symbol`, `get_context`) carry a top-level
+  `parse_warnings` block when the index contains parse-broken files — impact
+  answers built on missing edges now say so instead of undercounting
+  silently; the key is absent on a clean index
 
 **Quality**
 - `cargo clippy --all-targets` exits 0 (first time in project history)

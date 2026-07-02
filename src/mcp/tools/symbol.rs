@@ -42,7 +42,7 @@ impl AriadneService {
             let dependencies = query::get_dependencies(db, sym.id).unwrap_or_default();
             let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
 
-            Ok::<_, anyhow::Error>(serde_json::json!({
+            let mut context = serde_json::json!({
                 "symbol": {
                     "id": sym.id,
                     "name": sym.name,
@@ -63,7 +63,13 @@ impl AriadneService {
                 "coupled_files": couplings.iter().map(|c| serde_json::json!({
                     "path": c.coupled_path, "strength": c.strength, "co_changes": c.co_changes,
                 })).collect::<Vec<_>>(),
-            }))
+            });
+            if let Some(health) = super::parse_health_json(db)? {
+                if let Some(obj) = context.as_object_mut() {
+                    obj.insert("parse_warnings".to_string(), health);
+                }
+            }
+            Ok::<_, anyhow::Error>(context)
         }) {
             Ok(Ok(context)) => CallToolResult::success(vec![Content::text(
                 serde_json::to_string_pretty(&context).unwrap_or_else(|_| "{}".into()),
@@ -143,7 +149,7 @@ impl AriadneService {
             })
             .ok();
 
-        let result = serde_json::json!({
+        let mut result = serde_json::json!({
             "symbol": {
                 "name": sym.name,
                 "qualified_name": sym.qualified_name,
@@ -168,6 +174,9 @@ impl AriadneService {
             })).collect::<Vec<_>>(),
         });
 
+        if let Err(e) = self.attach_parse_warnings(&mut result) {
+            return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+        }
         let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
         CallToolResult::success(vec![Content::text(json)])
     }

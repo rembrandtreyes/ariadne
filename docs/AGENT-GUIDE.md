@@ -203,6 +203,22 @@ structured-content model better than HTTP query strings.
 
 ---
 
+## Answer trust: `parse_warnings`
+
+Answer-bearing tools (`blast_radius`, `diff_impact`, `affected_tests`,
+`propose_edit_plan`, `why_symbol`, `get_context`) include a top-level
+`parse_warnings` block **only when** the index contains files that parsed
+with syntax errors. Files listed there have missing graph edges, so the
+answer may undercount (blast radius, affected tests) or mis-order edits.
+A "symbol not found" miss on a dirty index carries the block too — the
+symbol may be unindexed precisely because its file failed to parse.
+
+When you see `parse_warnings`: re-index after fixing the syntax, or verify
+the listed files manually. No `parse_warnings` key means the index is
+clean — trust the answer.
+
+---
+
 ## What Ariadne won't do
 
 - **Execute or modify code** — Ariadne is read-only. It tells you what
