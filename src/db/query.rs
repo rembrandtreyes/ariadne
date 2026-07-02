@@ -271,6 +271,32 @@ pub fn file_path_by_id(db: &Database, file_id: i64) -> anyhow::Result<String> {
     Ok(path)
 }
 
+/// Files whose last parse produced syntax errors, worst first.
+///
+/// Returns `(path, parse_error_count)` pairs. Non-zero counts mean the graph's
+/// answers for those files are built from a partial parse.
+pub fn get_files_with_parse_errors(db: &Database) -> anyhow::Result<Vec<(String, i64)>> {
+    let mut stmt = db.conn().prepare(
+        "SELECT path, parse_error_count FROM files
+         WHERE parse_error_count > 0
+         ORDER BY parse_error_count DESC, path",
+    )?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<(String, i64)>, _>>()?;
+    Ok(rows)
+}
+
+/// Syntax-error count recorded for a single file.
+pub fn get_file_parse_error_count(db: &Database, file_id: i64) -> anyhow::Result<i64> {
+    let count: i64 = db.conn().query_row(
+        "SELECT parse_error_count FROM files WHERE id = ?1",
+        params![file_id],
+        |row| row.get(0),
+    )?;
+    Ok(count)
+}
+
 /// Get all imports for a file.
 pub fn get_file_imports(db: &Database, file_id: i64) -> anyhow::Result<Vec<ImportRow>> {
     let mut stmt = db.conn().prepare(

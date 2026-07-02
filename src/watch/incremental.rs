@@ -114,6 +114,7 @@ fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Resul
     // Insert symbols and imports
     crate::db::write::insert_symbols_batch(db, new_file_id, &result.symbols)?;
     crate::db::write::insert_imports_batch(db, new_file_id, &result.imports)?;
+    crate::db::write::set_file_parse_error_count(db, new_file_id, result.syntax_error_count)?;
 
     // Insert calls with proper caller symbol IDs
     if !result.calls.is_empty() {

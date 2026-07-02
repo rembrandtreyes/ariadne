@@ -52,6 +52,7 @@ pub fn run_full_pipeline(
 
     let dead_count = crate::db::query::count_dead(db).unwrap_or(0);
     let rate = crate::db::query::resolution_rate(db).unwrap_or(0.0);
+    let parse_error_files = crate::db::query::get_files_with_parse_errors(db).unwrap_or_default();
 
     Ok(PipelineStats {
         files_scanned: file_count,
@@ -61,6 +62,7 @@ pub fn run_full_pipeline(
         resolution_rate: rate,
         duration_ms: start.elapsed().as_millis() as u64,
         phase_durations,
+        parse_error_files,
     })
 }
 
@@ -130,4 +132,6 @@ pub struct PipelineStats {
     pub resolution_rate: f64,
     pub duration_ms: u64,
     pub phase_durations: Vec<PhaseTiming>,
+    /// (path, count) for files whose parse produced syntax errors, worst first.
+    pub parse_error_files: Vec<(String, i64)>,
 }

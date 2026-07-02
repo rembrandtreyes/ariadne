@@ -463,3 +463,45 @@ async fn test_get_api_endpoints_empty_db() {
         "empty DB should have zero endpoints"
     );
 }
+
+#[tokio::test]
+async fn test_get_file_summary_includes_parse_error_count() {
+    use ariadne::db::write;
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "typescript").unwrap();
+    let file_id = write::insert_file(
+        &db,
+        svc,
+        "src/app.tsx",
+        "/tmp/t/src/app.tsx",
+        "typescript",
+        0.0,
+    )
+    .unwrap();
+    write::set_file_parse_error_count(&db, file_id, 3).unwrap();
+
+    let service = AriadneService::new(db);
+    let ctx = test_context();
+    let mut args = serde_json::Map::new();
+    args.insert("file_path".to_string(), serde_json::json!("src/app.tsx"));
+    let req = tool_request("get_file_summary", Some(args));
+    let result = service
+        .call_tool(req, ctx)
+        .await
+        .expect("call_tool should succeed");
+    assert!(
+        result.is_error != Some(true),
+        "get_file_summary should not error"
+    );
+
+    let payload = serde_json::to_string(&result.content).expect("serializable content");
+    assert!(
+        payload.contains("parse_error_count"),
+        "file summary must expose parse_error_count so agents can judge trust — got: {payload}"
+    );
+    assert!(
+        payload.contains('3'),
+        "recorded parse_error_count value should round-trip into the summary"
+    );
+}

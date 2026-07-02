@@ -82,6 +82,21 @@ Structural exploration:
 - All five routes measured at 1-34ms latency on a 1MB self-index;
   no per-request cache needed under the 200ms budget
 
+**Parse truthfulness** (TSX grammar dispatch + per-file syntax-error visibility)
+- Fixed: `.tsx` files now parse with the TSX grammar. Previously every `.tsx`
+  file went through `LANGUAGE_TYPESCRIPT`, which cannot parse JSX — React
+  component symbols and render edges were silently dropped, so the JSX
+  tracking advertised above was unreachable for `.tsx` until now
+- Every parser records a per-file `parse_error_count` (tree-sitter
+  ERROR/MISSING nodes), persisted on the `files` table with an idempotent
+  column migration on open — existing `.ariadne.db` files upgrade in place
+- `ariadne index` warns which files parsed with syntax errors;
+  `get_file_summary` (MCP) exposes `parse_error_count` so agents can judge
+  per-file graph trust; parser I/O failures are logged instead of silently
+  dropping the file from the graph
+- Dashboard `describe` propagates DB errors instead of rendering them as
+  empty metrics
+
 **Quality**
 - `cargo clippy --all-targets` exits 0 (first time in project history)
 - MCP call-graph cache rebuilds only when pipeline generation changes —

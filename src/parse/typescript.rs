@@ -652,14 +652,25 @@ impl LanguageParser for TypeScriptParser {
 
     fn parse_file(&self, source: &str, file_path: &str) -> anyhow::Result<ParseResult> {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?;
+        // .tsx needs the TSX grammar: LANGUAGE_TYPESCRIPT cannot parse JSX, and
+        // LANGUAGE_TSX cannot parse `<T>expr` type assertions — that ambiguity
+        // is why upstream ships two grammars. Dispatch on extension.
+        let language = if file_path.ends_with(".tsx") {
+            tree_sitter_typescript::LANGUAGE_TSX
+        } else {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+        };
+        parser.set_language(&language.into())?;
 
         let tree = parser
             .parse(source, None)
             .ok_or_else(|| anyhow::anyhow!("Failed to parse {}", file_path))?;
 
         let root = tree.root_node();
-        let mut result = ParseResult::default();
+        let mut result = ParseResult {
+            syntax_error_count: crate::parse::count_syntax_errors(root),
+            ..ParseResult::default()
+        };
 
         // Synthetic symbol that anchors module-level call edges.
         // Calls made at file scope have caller_name = "<module>"; without a

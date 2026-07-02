@@ -896,3 +896,29 @@ async fn test_dashboard_propose_edit_plan_handler() {
         missing_result.0.summary
     );
 }
+
+#[test]
+fn test_describe_symbol_propagates_db_errors() {
+    use ariadne::dashboard::describe::describe_symbol;
+    use ariadne::db::{write, Database};
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file = write::insert_file(&db, svc, "src/a.rs", "/tmp/t/src/a.rs", "rust", 0.0).unwrap();
+    let sym = write::insert_symbol(
+        &db, file, "f", "a::f", "function", 1, 5, true, false, "", "", None,
+    )
+    .unwrap();
+
+    // Break the substrate describe reads couplings from: a query error must
+    // surface as Err, not render as "no couplings" on a live dashboard.
+    db.conn()
+        .execute_batch("DROP TABLE coupling")
+        .expect("drop table");
+
+    let result = describe_symbol(&db, sym);
+    assert!(
+        result.is_err(),
+        "describe_symbol must propagate DB errors instead of rendering empty metrics"
+    );
+}

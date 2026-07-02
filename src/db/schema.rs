@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS files (
     language TEXT NOT NULL,
     last_modified REAL NOT NULL,
     last_indexed REAL NOT NULL,
-    community_id INTEGER
+    community_id INTEGER,
+    parse_error_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- Symbols table
@@ -211,6 +212,21 @@ CREATE INDEX IF NOT EXISTS idx_files_relative_path ON files(path);
 /// Create all schema tables and indexes.
 pub fn create_tables(conn: &Connection) -> anyhow::Result<()> {
     conn.execute_batch(SCHEMA_SQL)?;
+
+    // files.parse_error_count postdates shipped databases. CREATE TABLE IF NOT
+    // EXISTS skips existing tables, so bring older DBs forward here — this runs
+    // on every open, covering CLI, MCP, LSP, and dashboard alike.
+    let has_parse_error_count: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('files') WHERE name = 'parse_error_count'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_parse_error_count {
+        conn.execute(
+            "ALTER TABLE files ADD COLUMN parse_error_count INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
 
     // FTS5 virtual table for hybrid search
     let fts_exists: bool = conn.query_row(

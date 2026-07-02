@@ -561,7 +561,10 @@ impl LanguageParser for RustParser {
             .ok_or_else(|| anyhow::anyhow!("Failed to parse {}", file_path))?;
 
         let root = tree.root_node();
-        let mut result = ParseResult::default();
+        let mut result = ParseResult {
+            syntax_error_count: crate::parse::count_syntax_errors(root),
+            ..ParseResult::default()
+        };
 
         Self::extract_symbols(root, source, &mut result, None, false, false);
 

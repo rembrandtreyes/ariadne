@@ -31,10 +31,10 @@ pub fn describe_symbol(db: &Database, symbol_id: i64) -> anyhow::Result<Describe
     let sym = query::symbol_by_id(db, symbol_id)?
         .ok_or_else(|| anyhow::anyhow!("Symbol not found: {}", symbol_id))?;
 
-    let file_path = query::file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
-    let callers = query::get_dependents(db, sym.id).unwrap_or_default();
-    let callees = query::get_dependencies(db, sym.id).unwrap_or_default();
-    let couplings = query::get_file_couplings(db, sym.file_id).unwrap_or_default();
+    let file_path = query::file_path_by_id(db, sym.file_id)?;
+    let callers = query::get_dependents(db, sym.id)?;
+    let callees = query::get_dependencies(db, sym.id)?;
+    let couplings = query::get_file_couplings(db, sym.file_id)?;
 
     // Blast radius counts every transitive caller. Graceful on graph-build failure
     // so a describe request never crashes on a partially-indexed DB.

@@ -41,6 +41,15 @@ pub fn insert_file(
     Ok(db.conn().last_insert_rowid())
 }
 
+/// Record how many syntax-error nodes the parser saw for a file.
+pub fn set_file_parse_error_count(db: &Database, file_id: i64, count: usize) -> anyhow::Result<()> {
+    db.conn().execute(
+        "UPDATE files SET parse_error_count = ?1 WHERE id = ?2",
+        params![count as i64, file_id],
+    )?;
+    Ok(())
+}
+
 /// Insert a single symbol record and return its row id.
 // TODO(P3): Refactor into a SymbolInsert builder struct to reduce argument count.
 #[allow(clippy::too_many_arguments)]

@@ -71,6 +71,7 @@ impl AriadneService {
             let imports = query::get_file_imports(db, file.id).unwrap_or_default();
             Ok::<_, anyhow::Error>(serde_json::json!({
                 "file": file.path, "language": file.language,
+                "parse_error_count": query::get_file_parse_error_count(db, file.id)?,
                 "symbols": symbols.iter().map(|s| serde_json::json!({
                     "name": s.name, "kind": s.kind,
                     "line_start": s.line_start, "line_end": s.line_end, "is_dead": s.is_dead,

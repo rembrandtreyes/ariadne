@@ -397,7 +397,143 @@ fn test_javascript_jsx_ternary_prop_not_tracked_as_identifier() {
     );
 }
 
-// Note: test_typescript_jsx_prop_bare_identifier_tracked_as_call is omitted here
-// because the TypeScript parser uses LANGUAGE_TYPESCRIPT (not LANGUAGE_TSX), so JSX
-// nodes never appear in its parse tree. The A2 code in typescript.rs is correct and
-// will be exercised once TSX grammar support is wired up.
+// ---------------------------------------------------------------------------
+// TSX grammar dispatch — .tsx files parse with LANGUAGE_TSX so the JSX
+// extraction shipped for TypeScript (extract_jsx_call) is reachable.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_typescript_jsx_prop_bare_identifier_tracked_as_call() {
+    // A2 twin of the JavaScript test above. Previously omitted because the
+    // parser hardcoded LANGUAGE_TYPESCRIPT, which cannot parse JSX.
+    let parser = get_parser(Language::TypeScript);
+    let source = r#"function MyComponent() {
+    function handleClick() {}
+    return <Button onClick={handleClick} />;
+}"#
+    .to_string();
+    let result = parser
+        .parse_file(&source, "test.tsx")
+        .expect("parse succeeds");
+    let has_edge = result.calls.iter().any(|c| c.callee_name == "handleClick");
+    assert!(
+        has_edge,
+        "Expected call edge to handleClick from TSX prop — got calls: {:?}",
+        result
+            .calls
+            .iter()
+            .map(|c| &c.callee_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_typescript_tsx_component_render_edge() {
+    let parser = get_parser(Language::TypeScript);
+    let source = r#"function Page() {
+    return <Button label="go" />;
+}"#
+    .to_string();
+    let result = parser
+        .parse_file(&source, "page.tsx")
+        .expect("parse succeeds");
+    assert!(
+        result.symbols.iter().any(|s| s.name == "Page"),
+        "Expected Page symbol from .tsx source — got: {:?}",
+        result.symbols.iter().map(|s| &s.name).collect::<Vec<_>>()
+    );
+    assert!(
+        result.calls.iter().any(|c| c.callee_name == "Button"),
+        "Expected component render edge to Button — got calls: {:?}",
+        result
+            .calls
+            .iter()
+            .map(|c| &c.callee_name)
+            .collect::<Vec<_>>()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Syntax-error accounting — parse-health visibility across all 9 parsers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_typescript_type_assertion_still_parses_in_ts() {
+    // .ts must stay on LANGUAGE_TYPESCRIPT: `<T>expr` type assertions are legal
+    // TS but illegal TSX — the ambiguity upstream ships two grammars for.
+    let parser = get_parser(Language::TypeScript);
+    let source = r#"function convert(value: unknown): number {
+    const n = <number>value;
+    return n;
+}"#;
+    let result = parser
+        .parse_file(source, "convert.ts")
+        .expect("parse succeeds");
+    assert!(result.symbols.iter().any(|s| s.name == "convert"));
+    assert_eq!(
+        result.syntax_error_count, 0,
+        "angle-bracket type assertion must parse cleanly in .ts"
+    );
+}
+
+#[test]
+fn test_typescript_generic_arrow_still_parses_in_tsx() {
+    // The trap case for the TSX grammar: generic arrows need `<T,>`.
+    let parser = get_parser(Language::TypeScript);
+    let source = r#"export const identity = <T,>(x: T): T => x;
+function App() {
+    return <Main />;
+}"#;
+    let result = parser
+        .parse_file(source, "app.tsx")
+        .expect("parse succeeds");
+    assert_eq!(
+        result.syntax_error_count, 0,
+        "generic arrow with trailing comma must parse cleanly in .tsx"
+    );
+    assert!(result.calls.iter().any(|c| c.callee_name == "Main"));
+}
+
+#[test]
+fn test_all_parsers_report_syntax_errors_on_garbage() {
+    // parse_error_count == 0 must mean "clean parse", not "parser forgot the
+    // wiring". Structural tripwire: a 10th parser that skips the shared
+    // counter fails here.
+    for lang in [
+        Language::Python,
+        Language::JavaScript,
+        Language::TypeScript,
+        Language::Go,
+        Language::Java,
+        Language::Rust,
+        Language::CSharp,
+        Language::Ruby,
+        Language::Php,
+    ] {
+        // PHP treats bare text as inline HTML, so garbage must live inside
+        // a <?php block to reach the parser proper.
+        let garbage = match lang {
+            Language::Php => "<?php ]]]] {{{{ ;;",
+            _ => "]]]] this is not valid syntax <<<<< ;;;",
+        };
+        let parser = get_parser(lang);
+        let ext = lang.extensions()[0];
+        let result = parser
+            .parse_file(garbage, &format!("garbage.{ext}"))
+            .expect("error-tolerant parse returns Ok");
+        assert!(
+            result.syntax_error_count > 0,
+            "{lang} parser should report syntax errors on garbage input"
+        );
+    }
+}
+
+#[test]
+fn test_clean_source_reports_zero_syntax_errors() {
+    let parser = get_parser(Language::TypeScript);
+    let source = "export function add(a: number, b: number): number { return a + b; }";
+    let result = parser
+        .parse_file(source, "clean.ts")
+        .expect("parse succeeds");
+    assert_eq!(result.syntax_error_count, 0);
+}

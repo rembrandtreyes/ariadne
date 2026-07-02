@@ -610,7 +610,10 @@ impl LanguageParser for JavaScriptParser {
             .ok_or_else(|| anyhow::anyhow!("Failed to parse {}", file_path))?;
 
         let root = tree.root_node();
-        let mut result = ParseResult::default();
+        let mut result = ParseResult {
+            syntax_error_count: crate::parse::count_syntax_errors(root),
+            ..ParseResult::default()
+        };
 
         // Synthetic symbol that anchors module-level call edges.
         // Calls made at file scope have caller_name = "<module>"; without a

@@ -83,6 +83,11 @@ pub struct ParseResult {
     pub calls: Vec<ParsedCall>,
     pub api_endpoints: Vec<ApiEndpoint>,
     pub api_calls: Vec<ApiCallSite>,
+    /// ERROR/MISSING nodes tree-sitter produced for this file. Non-zero means
+    /// extraction was partial: symbols and calls under error nodes are absent,
+    /// so graph answers for this file may be incomplete.
+    #[serde(default)]
+    pub syntax_error_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

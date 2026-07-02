@@ -181,3 +181,36 @@ fn test_framework_detection_express() {
         config.frameworks
     );
 }
+
+/// End-to-end TSX truth: indexing a Next.js fixture with real JSX must extract
+/// component render edges and record zero syntax errors for every file.
+#[test]
+fn test_nextjs_tsx_files_index_with_component_edges_and_clean_parse() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let db_path = dir.path().join("test.db");
+    let db = Database::open(&db_path).unwrap();
+    let config = RepoConfig::default();
+
+    run_full_pipeline(&db, Path::new("tests/fixtures/nextjs_app"), &config).unwrap();
+
+    // Component render edge from real JSX in page.tsx.
+    let edge_count: i64 = db
+        .conn()
+        .query_row(
+            "SELECT COUNT(*) FROM calls WHERE callee_name = 'Timestamp'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(
+        edge_count >= 1,
+        "Page should have a JSX render edge to Timestamp"
+    );
+
+    // All fixture files parse cleanly under the TSX-aware dispatch.
+    let error_files = ariadne::db::query::get_files_with_parse_errors(&db).unwrap();
+    assert!(
+        error_files.is_empty(),
+        "nextjs_app fixture should have zero parse errors, got: {error_files:?}"
+    );
+}

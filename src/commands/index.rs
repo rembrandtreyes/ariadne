@@ -66,6 +66,26 @@ pub fn cmd_index(path: &Path, full: bool) -> anyhow::Result<()> {
         stats.duration_ms as f64 / 1000.0,
     );
 
+    if !stats.parse_error_files.is_empty() {
+        let shown = stats
+            .parse_error_files
+            .iter()
+            .take(5)
+            .map(|(path, n)| format!("{path} ({n})"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let suffix = if stats.parse_error_files.len() > 5 {
+            ", …"
+        } else {
+            ""
+        };
+        println!(
+            "{} {} file(s) had syntax errors — graph may be incomplete: {shown}{suffix}",
+            style("⚠").yellow().bold(),
+            stats.parse_error_files.len(),
+        );
+    }
+
     if !stats.phase_durations.is_empty() && stats.duration_ms > 0 {
         println!();
         for phase in &stats.phase_durations {

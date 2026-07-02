@@ -20,7 +20,14 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
             let file_path = file.path.to_string_lossy().to_string();
             match parser.parse_file(&source, &file_path) {
                 Ok(result) => Some((file.path.clone(), result)),
-                Err(_) => None,
+                Err(e) => {
+                    // I/O-level parser failure (tree-sitter is error-tolerant, so
+                    // syntax problems come back Ok with a syntax_error_count).
+                    // Skip the file but say so — a silent drop leaves the graph
+                    // missing a file with no tell.
+                    tracing::warn!(path = %file_path, error = %e, "Parser failed; file skipped");
+                    None
+                }
             }
         })
         .collect();
@@ -70,6 +77,10 @@ pub fn parse_all(db: &Database, discovery: &DiscoveryResult) -> anyhow::Result<(
 
         if let Err(e) = write::insert_imports_batch(db, file_id, &result.imports) {
             errors.push(format!("Import insert error for {}: {}", abs_path, e));
+        }
+
+        if let Err(e) = write::set_file_parse_error_count(db, file_id, result.syntax_error_count) {
+            errors.push(format!("Parse-error-count update for {}: {}", abs_path, e));
         }
 
         // Insert calls: look up caller symbol IDs by name within this file
