@@ -162,6 +162,109 @@ fn test_changelog_unreleased_documents_recent_features() {
 }
 
 #[test]
+fn test_agent_guide_tool_count_matches_expected() {
+    // AGENT-GUIDE.md is the highest-blast-radius doc — every MCP agent reads
+    // the intro on first call. Tool-count drift here is the +1 drift pattern
+    // that slipped past Runs #16-#18 (intro said "31-tool" while reality was
+    // 32 after Run #16). Catch the stale value AND require the current one.
+    let guide = read_repo_file("docs/AGENT-GUIDE.md");
+
+    let stale_dash = format!("{}-tool", EXPECTED_TOOL_COUNT - 1);
+    let stale_space = format!("{} tools", EXPECTED_TOOL_COUNT - 1);
+    assert!(
+        !guide.contains(&stale_dash) && !guide.contains(&stale_space),
+        "AGENT-GUIDE.md contains stale tool count `{}` or `{}` — update to {} \
+         when shipping new tools so agents don't land on a +1 drift on first call",
+        stale_dash,
+        stale_space,
+        EXPECTED_TOOL_COUNT
+    );
+
+    let expected_dash = format!("{}-tool", EXPECTED_TOOL_COUNT);
+    let expected_space = format!("{} tools", EXPECTED_TOOL_COUNT);
+    assert!(
+        guide.contains(&expected_dash) || guide.contains(&expected_space),
+        "AGENT-GUIDE.md should reference current tool count ({}) — expected `{}` or `{}`",
+        EXPECTED_TOOL_COUNT,
+        expected_dash,
+        expected_space
+    );
+}
+
+#[test]
+fn test_agent_guide_mentions_rest_routes() {
+    // Run #15 shipped 4 REST routes; Run #18 shipped a 5th (`/api/propose_edit_plan`).
+    // AGENT-GUIDE pre-Run-#19 had zero `/api/` mentions — agents using
+    // Ariadne over the dashboard surface had no decision-tree guidance for
+    // REST vs MCP. This test asserts the agent-facing docs include a REST
+    // section once the surface is non-trivial.
+    let guide = read_repo_file("docs/AGENT-GUIDE.md");
+    assert!(
+        guide.contains("/api/"),
+        "AGENT-GUIDE.md should mention the `/api/` REST surface — there are 5+ \
+         REST routes mirroring MCP tools but agent docs ignore them"
+    );
+
+    // At least 2 specific REST routes must appear so the doc names the
+    // surface, not just gestures at it.
+    let rest_routes: &[&str] = &[
+        "/api/entry_points",
+        "/api/complexity_hotspots",
+        "/api/god_objects",
+        "/api/dependency_path",
+        "/api/propose_edit_plan",
+    ];
+    let hits: Vec<&str> = rest_routes
+        .iter()
+        .copied()
+        .filter(|r| guide.contains(r))
+        .collect();
+    assert!(
+        hits.len() >= 2,
+        "AGENT-GUIDE.md should mention at least 2 specific REST routes by name; \
+         found: {:?}",
+        hits
+    );
+}
+
+#[test]
+fn test_changelog_rest_parity_lists_all_mirrors() {
+    // CHANGELOG `[Unreleased]` "Dashboard REST parity" section pre-Run-#19
+    // listed 4 routes from Run #15 but missed Run #18's
+    // `/api/propose_edit_plan`. This test asserts every currently-shipped
+    // REST mirror appears in the [Unreleased] section so the next release
+    // notes don't go out as a shipped lie.
+    let changelog = read_repo_file("CHANGELOG.md");
+    let start = changelog
+        .find("## [Unreleased]")
+        .expect("CHANGELOG should contain '## [Unreleased]' section");
+    let section_after = &changelog[start..];
+    let end = section_after[3..]
+        .find("\n## ")
+        .map(|i| i + 3)
+        .unwrap_or(section_after.len());
+    let unreleased = &section_after[..end];
+
+    let rest_mirrors: &[&str] = &[
+        "/api/entry_points",
+        "/api/complexity_hotspots",
+        "/api/god_objects",
+        "/api/dependency_path",
+        "/api/propose_edit_plan",
+    ];
+
+    for route in rest_mirrors {
+        assert!(
+            unreleased.contains(route),
+            "CHANGELOG.md [Unreleased] should list `{}` — REST parity progress \
+             is invisible without it. Update CHANGELOG when shipping new REST \
+             routes so release notes accurately list new surfaces.",
+            route
+        );
+    }
+}
+
+#[test]
 fn test_readme_competitor_table_targets_current_threats() {
     // The README competitor table must mention at least 2 of the current
     // HIGH threats (from competitive landscape memory, as of 2026-04-24).

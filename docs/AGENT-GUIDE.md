@@ -1,7 +1,7 @@
 # Ariadne MCP — Agent Usage Guide
 
 This guide is for AI coding agents (Claude Code, Cursor, Continue, and any
-other MCP-compatible client) driving Ariadne's 31-tool MCP surface. It
+other MCP-compatible client) driving Ariadne's 32-tool MCP surface. It
 answers the question agents ask most often: **"which tool should I call?"**
 
 Ariadne returns pre-resolved structured data. A caller-trace that would
@@ -169,6 +169,37 @@ You're answering meta-questions about the codebase shape itself.
 Ariadne's resident MCP server keeps the call graph in memory between
 requests. Latencies are sub-5ms after the first call (<2ms for MCP
 tools that hit SQLite FTS, <5ms for graph traversal).
+
+---
+
+## When to use REST vs MCP
+
+Five MCP tools also ship as `GET /api/...` routes for use from the dashboard
+or from non-MCP clients. The MCP surface is canonical; the REST surface is
+the same data over HTTP for browsers, curl, and CI scripts.
+
+| MCP tool | REST mirror |
+|---|---|
+| `get_entry_points` | `GET /api/entry_points?category=&limit=` |
+| `get_complexity_hotspots` | `GET /api/complexity_hotspots?limit=` |
+| `get_god_objects` | `GET /api/god_objects?threshold=&limit=` |
+| `get_dependency_path` | `GET /api/dependency_path?from=&to=` |
+| `propose_edit_plan` | `GET /api/propose_edit_plan?symbol=` |
+
+**Use MCP from your agent.** Sub-5ms cached call graph, structured tool
+descriptions, no JSON parsing, and the full 32-tool surface.
+
+**Use REST when wiring the dashboard, scripting with curl, or testing latency
+from outside the MCP transport.** The five mirrored routes return identical
+data to their MCP counterparts but with `BTreeMap`-backed JSON for
+deterministic ordering across repeat queries (the MCP `HashMap` payloads are
+agent-consumed and order-tolerant). Missing-symbol queries return structured
+200 OK with a `summary` describing the miss, never 5xx — the same shape
+across all five routes. Measured latency: 1-34ms on a 1MB self-index.
+
+The remaining 27 MCP tools are MCP-only by design — they return rich nested
+structures (Mermaid call chains, multi-bucket impact reports) that fit MCP's
+structured-content model better than HTTP query strings.
 
 ---
 

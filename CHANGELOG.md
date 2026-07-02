@@ -68,14 +68,18 @@ Structural exploration:
   `.tsx`, `.ts`)
 - Edge-driven graph loading with batched N+1 query elimination
 
-**Dashboard REST parity** (Signal-view intelligence over HTTP)
+**Dashboard REST parity** (Signal-view intelligence over HTTP, 5 of 32 MCP tools mirrored)
 - `GET /api/entry_points?category=&limit=` mirrors `get_entry_points`
 - `GET /api/complexity_hotspots?limit=` mirrors `get_complexity_hotspots`
 - `GET /api/god_objects?threshold=&limit=` mirrors `get_god_objects`
 - `GET /api/dependency_path?from=&to=` mirrors `get_dependency_path`
+- `GET /api/propose_edit_plan?symbol=` mirrors `propose_edit_plan` —
+  typed response with deterministic `BTreeMap` JSON ordering for stable
+  repeat-query output (the MCP version's `HashMap` is agent-consumed and
+  order-tolerant)
 - Signal view "Entry Points" card surfaces 12 framework/HTTP/main entry
   points with click-through drill-down into the detail panel
-- All four routes measured at 22-34ms latency on a 1MB self-index;
+- All five routes measured at 1-34ms latency on a 1MB self-index;
   no per-request cache needed under the 200ms budget
 
 **Quality**
