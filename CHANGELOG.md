@@ -96,6 +96,9 @@ Structural exploration:
   dropping the file from the graph
 - Dashboard `describe` propagates DB errors instead of rendering them as
   empty metrics
+- LSP publishes a parse-health warning diagnostic on files whose last index
+  parse produced syntax errors; the diagnostics builder is extracted from the
+  LSP plumbing and behaviorally tested for the first time
 - Answer-bearing MCP tools (`blast_radius`, `diff_impact`, `affected_tests`,
   `propose_edit_plan`, `why_symbol`, `get_context`) carry a top-level
   `parse_warnings` block when the index contains parse-broken files — impact

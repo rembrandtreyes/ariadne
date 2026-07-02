@@ -44,124 +44,159 @@ impl AriadneLsp {
     }
 
     /// Build diagnostics for a given file URI.
-    /// Returns dead code warnings and architectural rule violation errors.
+    /// Returns dead code, rule violation, and parse-health diagnostics.
     fn build_diagnostics_for_file(&self, uri: &Url) -> Vec<Diagnostic> {
-        let mut diagnostics = Vec::new();
-
         let db = match self.open_db() {
             Some(db) => db,
-            None => return diagnostics,
+            None => return Vec::new(),
         };
-
         let suffix = match Self::uri_to_path_suffix(uri) {
             Some(s) => s,
-            None => return diagnostics,
+            None => return Vec::new(),
         };
+        build_diagnostics(&db, &suffix)
+    }
+}
 
-        let conn = db.conn();
-        let pattern = format!("%{}", crate::db::escape_like(&suffix));
+/// Build diagnostics for a file identified by its repo-path suffix.
+///
+/// Separated from the LSP plumbing (`Client`, `Url`) so the logic is testable
+/// against a plain `Database`. Sources: dead-code warnings, architectural
+/// rule violations, and parse-health warnings.
+pub fn build_diagnostics(db: &crate::db::Database, path_suffix: &str) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let conn = db.conn();
+    let pattern = format!("%{}", crate::db::escape_like(path_suffix));
 
-        // 1) Dead code symbols (is_dead = true) -> Warning severity
-        if let Ok(mut stmt) = conn.prepare(
-            "SELECT s.name, s.qualified_name, s.line_start, s.line_end
+    // 1) Dead code symbols (is_dead = true) -> Warning severity
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT s.name, s.qualified_name, s.line_start, s.line_end
              FROM symbols s
              JOIN files f ON s.file_id = f.id
              WHERE f.path LIKE ?1 ESCAPE '\\' AND s.is_dead = 1",
-        ) {
-            if let Ok(rows) = stmt.query_map(params![pattern], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, u32>(2)?,
-                    row.get::<_, u32>(3)?,
-                ))
-            }) {
-                for row in rows.flatten() {
-                    let (name, _qualified, line_start, line_end) = row;
-                    diagnostics.push(Diagnostic {
-                        range: Range {
-                            start: Position {
-                                line: line_start.saturating_sub(1),
-                                character: 0,
-                            },
-                            end: Position {
-                                line: line_end.saturating_sub(1),
-                                character: 0,
-                            },
+    ) {
+        if let Ok(rows) = stmt.query_map(params![pattern], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, u32>(2)?,
+                row.get::<_, u32>(3)?,
+            ))
+        }) {
+            for row in rows.flatten() {
+                let (name, _qualified, line_start, line_end) = row;
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: line_start.saturating_sub(1),
+                            character: 0,
                         },
-                        severity: Some(DiagnosticSeverity::WARNING),
-                        source: Some("ariadne".to_string()),
-                        message: format!(
-                            "Dead code: `{}` has no callers and is not exported",
-                            name
-                        ),
-                        ..Default::default()
-                    });
-                }
+                        end: Position {
+                            line: line_end.saturating_sub(1),
+                            character: 0,
+                        },
+                    },
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    source: Some("ariadne".to_string()),
+                    message: format!("Dead code: `{}` has no callers and is not exported", name),
+                    ..Default::default()
+                });
             }
         }
+    }
 
-        // 2) Architectural rule violations for this file -> Error or Warning severity
-        if let Ok(mut stmt) = conn.prepare(
-            "SELECT rv.rule_name, rv.from_symbol, rv.to_symbol, rv.line, rv.severity
+    // 2) Architectural rule violations for this file -> Error or Warning severity
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT rv.rule_name, rv.from_symbol, rv.to_symbol, rv.line, rv.severity
              FROM rule_violations rv
              JOIN files f ON rv.from_file_id = f.id
              WHERE f.path LIKE ?1 ESCAPE '\\'",
-        ) {
-            if let Ok(rows) = stmt.query_map(params![pattern], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, Option<u32>>(3)?,
-                    row.get::<_, String>(4)?,
-                ))
-            }) {
-                for row in rows.flatten() {
-                    let (rule_name, from_sym, to_sym, line, severity) = row;
-                    let diag_line = line.unwrap_or(1);
-                    let diag_severity = if severity == "error" {
-                        DiagnosticSeverity::ERROR
-                    } else {
-                        DiagnosticSeverity::WARNING
-                    };
-                    let message = match (&from_sym, &to_sym) {
-                        (Some(from), Some(to)) => {
-                            format!("Rule `{}` violated: `{}` -> `{}`", rule_name, from, to)
-                        }
-                        (_, Some(to)) => {
-                            format!(
-                                "Rule `{}` violated: forbidden dependency on `{}`",
-                                rule_name, to
-                            )
-                        }
-                        _ => {
-                            format!("Rule `{}` violated", rule_name)
-                        }
-                    };
-                    diagnostics.push(Diagnostic {
-                        range: Range {
-                            start: Position {
-                                line: diag_line.saturating_sub(1),
-                                character: 0,
-                            },
-                            end: Position {
-                                line: diag_line.saturating_sub(1),
-                                character: 0,
-                            },
+    ) {
+        if let Ok(rows) = stmt.query_map(params![pattern], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<u32>>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        }) {
+            for row in rows.flatten() {
+                let (rule_name, from_sym, to_sym, line, severity) = row;
+                let diag_line = line.unwrap_or(1);
+                let diag_severity = if severity == "error" {
+                    DiagnosticSeverity::ERROR
+                } else {
+                    DiagnosticSeverity::WARNING
+                };
+                let message = match (&from_sym, &to_sym) {
+                    (Some(from), Some(to)) => {
+                        format!("Rule `{}` violated: `{}` -> `{}`", rule_name, from, to)
+                    }
+                    (_, Some(to)) => {
+                        format!(
+                            "Rule `{}` violated: forbidden dependency on `{}`",
+                            rule_name, to
+                        )
+                    }
+                    _ => {
+                        format!("Rule `{}` violated", rule_name)
+                    }
+                };
+                diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: diag_line.saturating_sub(1),
+                            character: 0,
                         },
-                        severity: Some(diag_severity),
-                        source: Some("ariadne".to_string()),
-                        message,
-                        ..Default::default()
-                    });
-                }
+                        end: Position {
+                            line: diag_line.saturating_sub(1),
+                            character: 0,
+                        },
+                    },
+                    severity: Some(diag_severity),
+                    source: Some("ariadne".to_string()),
+                    message,
+                    ..Default::default()
+                });
             }
         }
-
-        diagnostics
     }
 
+    // 3) Parse health — the file's last index parse produced ERROR nodes, so
+    //    graph-backed answers about it (dead code, references, blast radius)
+    //    may be incomplete.
+    if let Ok(count) = conn.query_row(
+            "SELECT parse_error_count FROM files WHERE path LIKE ?1 ESCAPE '\\' AND parse_error_count > 0",
+            params![pattern],
+            |row| row.get::<_, i64>(0),
+        ) {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                    end: Position {
+                        line: 0,
+                        character: 0,
+                    },
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                source: Some("ariadne".to_string()),
+                message: format!(
+                    "Ariadne parsed this file with {count} syntax error(s) — its graph \
+                     data (dead code, references, blast radius) may be incomplete. \
+                     Re-index after fixing the syntax."
+                ),
+                ..Default::default()
+            });
+        }
+
+    diagnostics
+}
+
+impl AriadneLsp {
     /// Find the symbol at a given cursor position in a file.
     fn find_symbol_at_position(
         db: &Database,
