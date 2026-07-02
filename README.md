@@ -157,6 +157,22 @@ Visual exploration of your dependency graph with interactive force-directed layo
 ariadne dash --port 1337
 ```
 
+The dashboard also serves a small REST API: these MCP tools ship `GET /api/…`
+mirrors returning the same data over HTTP for browsers, curl, and CI scripts.
+MCP stays canonical; missing symbols return a structured 200 with a summary,
+never a 5xx.
+
+| MCP tool | REST mirror |
+|---|---|
+| `get_entry_points` | `GET /api/entry_points` |
+| `get_complexity_hotspots` | `GET /api/complexity_hotspots` |
+| `get_god_objects` | `GET /api/god_objects` |
+| `get_dependency_path` | `GET /api/dependency_path` |
+| `propose_edit_plan` | `GET /api/propose_edit_plan` |
+
+The rest of the MCP surface is MCP-only by design — see "When to use REST vs
+MCP" in [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md).
+
 ### Plugin System
 Extend Ariadne with WASM plugins for custom languages or analysis passes. Plugins implement a simple WIT interface:
 
@@ -232,7 +248,7 @@ Ariadne ships 32 MCP tools grouped by intent. See [`docs/AGENT-GUIDE.md`](docs/A
 | `search_symbol` | "Find anything named X across the whole codebase (FTS + fuzzy)." |
 | `get_context` | "Callers, callees, file, signature, dead status, coupled files." |
 | `get_imports` | "All imports for a file with resolution status." |
-| `get_file_summary` | "Every symbol and import in a file." |
+| `get_file_summary` | "Every symbol and import in a file, plus its `parse_error_count` parse-trust signal." |
 | `get_dependents` | "Upstream callers of a symbol." |
 | `get_dependencies` | "Downstream callees of a symbol." |
 | `get_file_dependencies` | "Files this file depends on (with connecting symbol pairs + transitive depth)." |

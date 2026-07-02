@@ -19,6 +19,18 @@ use std::path::PathBuf;
 /// in a single commit.
 const EXPECTED_TOOL_COUNT: usize = 32;
 
+/// Every currently-shipped MCP↔REST mirror route. Shared by the CHANGELOG and
+/// README invariants below so the docs cannot drift apart from each other.
+/// When a new REST route ships, add it here and update both docs (plus
+/// AGENT-GUIDE) in the same commit.
+const REST_MIRRORS: &[&str] = &[
+    "/api/entry_points",
+    "/api/complexity_hotspots",
+    "/api/god_objects",
+    "/api/dependency_path",
+    "/api/propose_edit_plan",
+];
+
 fn read_repo_file(relative: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative);
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {}: {}", path.display(), e))
@@ -245,15 +257,7 @@ fn test_changelog_rest_parity_lists_all_mirrors() {
         .unwrap_or(section_after.len());
     let unreleased = &section_after[..end];
 
-    let rest_mirrors: &[&str] = &[
-        "/api/entry_points",
-        "/api/complexity_hotspots",
-        "/api/god_objects",
-        "/api/dependency_path",
-        "/api/propose_edit_plan",
-    ];
-
-    for route in rest_mirrors {
+    for route in REST_MIRRORS {
         assert!(
             unreleased.contains(route),
             "CHANGELOG.md [Unreleased] should list `{}` — REST parity progress \
@@ -290,5 +294,60 @@ fn test_readme_competitor_table_targets_current_threats() {
          ({:?}); found: {:?}",
         current_threats,
         hits
+    );
+}
+
+#[test]
+fn test_readme_documents_rest_mirrors() {
+    // CHANGELOG and AGENT-GUIDE document the REST mirrors (guarded above and
+    // by test_agent_guide_mentions_rest_routes) but README — the front door —
+    // documented zero REST routes. Every shipped mirror must appear in README
+    // so the dashboard's HTTP surface is discoverable where users first look.
+    let readme = read_repo_file("README.md");
+    for route in REST_MIRRORS {
+        assert!(
+            readme.contains(route),
+            "README.md should document the `{}` REST mirror — the dashboard's \
+             HTTP surface is invisible at the front door without it",
+            route
+        );
+    }
+
+    // Parity-count invariant: the Web Dashboard section's REST table must have
+    // exactly one row per shipped mirror — a 6th route added to the const
+    // without a README table row (or vice versa) fails here.
+    let start = readme
+        .find("### Web Dashboard")
+        .expect("README should contain '### Web Dashboard' heading");
+    let section = &readme[start..];
+    let end = section[4..]
+        .find("\n### ")
+        .or_else(|| section[4..].find("\n## "))
+        .map(|i| i + 4)
+        .unwrap_or(section.len());
+    let dash_section = &section[..end];
+    let table_rows = dash_section
+        .lines()
+        .filter(|line| line.starts_with("| `") && line.contains("/api/"))
+        .count();
+    assert_eq!(
+        table_rows,
+        REST_MIRRORS.len(),
+        "README Web Dashboard REST table should have exactly {} rows (one per \
+         shipped mirror in REST_MIRRORS)",
+        REST_MIRRORS.len()
+    );
+}
+
+#[test]
+fn test_readme_file_summary_mentions_parse_error_count() {
+    // get_file_summary's response includes parse_error_count (the per-file
+    // parse-trust signal). The README table row is read as the tool's
+    // contract — it must mention the field.
+    let readme = read_repo_file("README.md");
+    assert!(
+        readme.contains("parse_error_count"),
+        "README.md should mention `parse_error_count` — get_file_summary's \
+         response exposes it as the per-file parse-trust signal"
     );
 }
