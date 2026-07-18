@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+**Deterministic output across runs** — identical input now produces identical
+output on every surface; the hash-iteration-order bug class was swept from the
+whole pipeline (each fix carries a red-first regression test):
+
+- Community IDs were minted in `HashMap` key order and differed on every
+  index run; BFS seeds are now sorted (verified: 3 consecutive full indexes
+  of the same repo produce byte-identical `communities --json`)
+- `services.primary_language` was a random pick from a language set on
+  multi-language repos; languages are now ordered (file count desc, name asc)
+  so the dominant language wins deterministically
+- `blast_radius` `affected_files` and `affected-tests` `test_files` were raw
+  hash-set drains; both are now sorted
+- Circular-dependency output followed randomized petgraph `NodeIndex`
+  assignment; cycles are now canonical (members and cycle list sorted), and
+  graph node loading no longer follows hash-set drain order
+- Coupling queries ordered by `strength` alone — equal-strength ties plus
+  `LIMIT` could return a different row set across runs, feeding
+  `coupling_density` and the health grade; all three coupling readers now use
+  a total order and coupling inserts are sorted for stable database bytes
+
 ### Added
 
 **22 new MCP tools** (total now 32, up from 10 at 0.1.0) — grouped by intent
