@@ -123,7 +123,7 @@ const ALL_RULE_SETS: &[&FrameworkRuleSet] = &[
     &NODE_RULES,
 ];
 
-/// Phase 6.5: Mark framework-detected entry points.
+/// Phase 6: Mark framework-detected entry points.
 ///
 /// Uses detected frameworks to apply framework-specific rules that mark
 /// additional symbols as entry points before dead code analysis runs.

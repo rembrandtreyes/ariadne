@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::discovery::DiscoveryResult;
 
-/// Phase 2: Create database structure from discovered files.
+/// Phase 1: Create database structure from discovered files.
 ///
 /// Inserts a service record and a file record for each discovered source file.
 pub fn create_structure(

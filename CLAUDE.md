@@ -24,17 +24,17 @@ Universal dependency graph for AI coding agents. Indexes multi-language codebase
 src/
   main.rs          — CLI entry point (clap)
   lib.rs           — public module exports
-  pipeline/        — 14-phase indexing pipeline (parse -> resolve -> analyze)
+  commands/        — CLI subcommand handlers
+  pipeline/        — 15-phase indexing pipeline (parse -> resolve -> analyze)
   parse/           — tree-sitter parsers per language (Python, JS, TS, Go, Java, Rust, C#, Ruby, PHP)
   db/              — SQLite database wrapper, schema, queries
   graph/           — in-memory call graph, blast radius, call chains, circular detection
   analysis/        — dead code, community detection, arch rules, SCIP export
-  mcp/             — MCP server (10 tools, stdio transport only)
+  mcp/             — MCP server (32 tools, stdio transport only)
   lsp/             — LSP server (diagnostics, hover, code lens)
   dashboard/       — Axum REST API + embedded static frontend
   search/          — full-text and fuzzy symbol search
   config/          — workspace/repo config, language autodetection
-  output/          — formatters (text, JSON, Mermaid)
   watch/           — file watcher with debounce and incremental re-index
   plugins/         — WASM plugin runtime (optional)
 tests/             — integration tests (test_*.rs pattern)

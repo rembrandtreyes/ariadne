@@ -20,7 +20,7 @@ use crate::db::Database;
 use std::path::Path;
 use std::time::Instant;
 
-/// Run the full 14-phase indexing pipeline.
+/// Run the full 15-phase indexing pipeline (preceded by untimed discovery).
 pub fn run_full_pipeline(
     db: &Database,
     root: &Path,

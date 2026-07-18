@@ -53,6 +53,10 @@ pub fn watch_and_reindex(
     let db = crate::db::Database::open(db_path)?;
     let watcher = FileWatcher::new(root)?;
     let debounce = Duration::from_millis(debounce_ms);
+    // Same acceptance filter as full discovery — without it, saves inside
+    // target/, node_modules/, or user-excluded globs get indexed and pollute
+    // the graph (cargo build alone generates .rs files under target/).
+    let filter = crate::pipeline::discovery::PathFilter::new(root, config);
 
     tracing::info!(path = %root.display(), "Watching for changes");
 
@@ -65,13 +69,7 @@ pub fn watch_and_reindex(
 
             for event in &events {
                 for path in &event.paths {
-                    let is_indexable = path
-                        .extension()
-                        .and_then(|e| e.to_str())
-                        .map(|ext| crate::parse::types::Language::from_extension(ext).is_some())
-                        .unwrap_or(false);
-
-                    if !is_indexable {
+                    if filter.indexable_language(path).is_none() {
                         continue;
                     }
 
@@ -85,35 +83,46 @@ pub fn watch_and_reindex(
                 }
             }
 
-            let has_changes = !modified_paths.is_empty() || !deleted_paths.is_empty();
-
-            if !deleted_paths.is_empty() {
-                tracing::info!(count = deleted_paths.len(), "Cleaning up deleted files");
-                if let Err(e) = incremental::handle_deleted_files(&db, &deleted_paths) {
-                    tracing::error!(error = %e, "Delete cleanup error");
-                }
+            if modified_paths.is_empty() && deleted_paths.is_empty() {
+                continue;
             }
 
-            if !modified_paths.is_empty() {
-                tracing::info!(count = modified_paths.len(), "Re-indexing changed files");
-                if let Err(e) = incremental::reindex_files(&db, root, &modified_paths) {
-                    tracing::error!(error = %e, "Re-index error");
+            // One transaction per debounced batch: a branch switch touching
+            // hundreds of files becomes one WAL commit instead of thousands
+            // of autocommits, and readers (MCP, dashboard) never observe a
+            // half-applied batch. BEGIN IMMEDIATE takes the write lock up
+            // front so the transaction cannot deadlock on lock upgrade.
+            let batch = || -> anyhow::Result<()> {
+                if !deleted_paths.is_empty() {
+                    tracing::info!(count = deleted_paths.len(), "Cleaning up deleted files");
+                    incremental::handle_deleted_files(&db, &deleted_paths)?;
                 }
-            }
+                if !modified_paths.is_empty() {
+                    tracing::info!(count = modified_paths.len(), "Re-indexing changed files");
+                    incremental::reindex_files(&db, root, &modified_paths)?;
+                }
+                // Re-run resolution phases and bump generation so MCP cache refreshes
+                incremental::run_post_reindex_resolution(&db, root, config)?;
+                incremental::bump_generation(&db)?;
+                Ok(())
+            };
 
-            // Re-run resolution phases and bump generation so MCP cache refreshes
-            if has_changes {
-                if let Err(e) = incremental::run_post_reindex_resolution(&db, config) {
-                    tracing::error!(error = %e, "Post-reindex resolution error");
+            db.conn().execute_batch("BEGIN IMMEDIATE")?;
+            match batch() {
+                Ok(()) => {
+                    db.conn().execute_batch("COMMIT")?;
+                    let rate = crate::db::query::resolution_rate(&db).unwrap_or(0.0);
+                    tracing::info!(
+                        resolution_rate = format!("{:.0}%", rate * 100.0),
+                        "Incremental reindex complete"
+                    );
                 }
-                if let Err(e) = incremental::bump_generation(&db) {
-                    tracing::error!(error = %e, "Generation bump error");
+                Err(e) => {
+                    // Roll back so the index stays at the last consistent
+                    // state; the next save retries from scratch.
+                    let _ = db.conn().execute_batch("ROLLBACK");
+                    tracing::error!(error = %e, "Incremental reindex failed; batch rolled back");
                 }
-                let rate = crate::db::query::resolution_rate(&db).unwrap_or(0.0);
-                tracing::info!(
-                    resolution_rate = format!("{:.0}%", rate * 100.0),
-                    "Incremental reindex complete"
-                );
             }
         }
     }

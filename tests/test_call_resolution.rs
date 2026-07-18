@@ -158,3 +158,93 @@ fn test_resolve_calls_empty_db_succeeds() {
     let db = Database::open_in_memory().expect("Failed to open in-memory DB");
     resolve_calls(&db).expect("resolve_calls on empty DB should succeed without errors");
 }
+
+#[test]
+fn test_stale_resolution_labels_reset_when_target_symbol_vanishes() {
+    // Watch-mode reindexing deletes a file's symbols; calls.callee_symbol_id
+    // is ON DELETE SET NULL, which nulls the target but leaves the old
+    // resolution label and confidence behind. Re-running resolution must
+    // reset those rows — most passes skip anything not labeled 'unresolved',
+    // so a stale label otherwise pins the edge in a lying state forever
+    // (NULL target, 0.98 confidence, counted as resolved).
+    use ariadne::db::write;
+
+    let db = Database::open_in_memory().expect("Failed to open in-memory DB");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file_a = write::insert_file(&db, svc, "src/a.rs", "/tmp/t/src/a.rs", "rust", 0.0).unwrap();
+    let file_b = write::insert_file(&db, svc, "src/b.rs", "/tmp/t/src/b.rs", "rust", 0.0).unwrap();
+
+    write::insert_symbol(
+        &db, file_a, "foo", "a::foo", "function", 1, 3, true, false, "", "", None,
+    )
+    .unwrap();
+    let bar = write::insert_symbol(
+        &db, file_b, "bar", "b::bar", "function", 1, 5, true, false, "", "", None,
+    )
+    .unwrap();
+
+    // b.rs imports foo from a.rs (already resolved) and bar() calls foo().
+    // All interpolated values are i64 ids returned by the insert helpers.
+    db.conn()
+        .execute_batch(&format!(
+            "INSERT INTO imports (file_id, imported_name, module_path, resolved_file_id, line)
+             VALUES ({file_b}, 'foo', 'a', {file_a}, 1);
+             INSERT INTO calls (caller_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES ({bar}, 'foo', {file_b}, 2, 0.5, 'unresolved');"
+        ))
+        .unwrap();
+
+    resolve_calls(&db).expect("initial resolution should succeed");
+    let (resolution, callee): (String, Option<i64>) = db
+        .conn()
+        .query_row("SELECT resolution, callee_symbol_id FROM calls", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(
+        resolution, "import_guided",
+        "precondition: call resolves via the import"
+    );
+    assert!(callee.is_some(), "precondition: call points at foo");
+
+    // Simulate the watch path: a.rs is re-indexed, its old symbols deleted.
+    write::delete_file_data(&db, file_a).expect("delete file data");
+
+    let (stale_resolution, callee): (String, Option<i64>) = db
+        .conn()
+        .query_row("SELECT resolution, callee_symbol_id FROM calls", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert!(
+        callee.is_none(),
+        "FK SET NULL must clear the vanished target"
+    );
+    assert_eq!(
+        stale_resolution, "import_guided",
+        "precondition: the stale label survives the FK action — this is the lie"
+    );
+
+    // Re-running resolution must reset the label instead of skipping the row.
+    resolve_calls(&db).expect("re-resolution should succeed");
+    let (resolution, confidence, callee): (String, f64, Option<i64>) = db
+        .conn()
+        .query_row(
+            "SELECT resolution, confidence, callee_symbol_id FROM calls",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert!(
+        callee.is_none(),
+        "foo no longer exists; the call cannot re-resolve"
+    );
+    assert_ne!(
+        resolution, "import_guided",
+        "a NULL-target call must not keep a pointing label after re-resolution"
+    );
+    assert!(
+        confidence <= 0.5,
+        "confidence must drop with the reset, got {confidence}"
+    );
+}

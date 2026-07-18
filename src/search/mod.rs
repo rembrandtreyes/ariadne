@@ -49,9 +49,13 @@ pub fn search(
     let mut results = Vec::new();
 
     // Try FTS5 first
-    let fts_results = fts_search(db, query, limit);
-    if let Ok(fts) = fts_results {
-        results = fts;
+    match fts_search(db, query, limit) {
+        Ok(fts) => results = fts,
+        Err(e) => {
+            // LIKE below covers the miss, but a broken FTS index should not
+            // degrade search silently.
+            tracing::warn!(error = %e, "FTS search failed; falling back to LIKE");
+        }
     }
 
     // Fall back to LIKE-based search if FTS returns nothing
@@ -64,6 +68,13 @@ pub fn search(
         let remaining = limit - results.len();
         let fuzzy = fuzzy_search(db, query, remaining)?;
         results.extend(fuzzy);
+        // The fuzzy pass re-finds symbols the passes above already returned —
+        // keep the first (higher-priority) occurrence of each symbol id.
+        let mut seen = std::collections::HashSet::new();
+        results.retain(|r| match r.symbol_id {
+            Some(id) => seen.insert(id),
+            None => true,
+        });
     }
 
     // Apply fuzzy re-ranking if enabled

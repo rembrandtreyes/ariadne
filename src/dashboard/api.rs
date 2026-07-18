@@ -31,6 +31,16 @@ impl ApiError {
     }
 }
 
+/// Log the underlying error before flattening it into a client-safe
+/// ApiError. The static messages keep internals off the wire; without a
+/// server-side log line the real failure is undiagnosable in production.
+fn log_query_failure<E: std::fmt::Display>(message: &'static str) -> impl FnOnce(E) -> ApiError {
+    move |e| {
+        tracing::warn!(error = %e, message, "Dashboard query failed");
+        ApiError::query_failed(message)
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let status = match self.code {
@@ -127,14 +137,13 @@ pub struct DeadCodeEntry {
 
 pub async fn graph_data(State(db_path): State<DbState>) -> Result<Json<GraphData>, ApiError> {
     let db = open_db(&db_path)?;
-    let data =
-        build_graph_data(&db).map_err(|_| ApiError::query_failed("Failed to build graph data."))?;
+    let data = build_graph_data(&db).map_err(log_query_failure("Failed to build graph data."))?;
     Ok(Json(data))
 }
 
 pub async fn stats(State(db_path): State<DbState>) -> Result<Json<Stats>, ApiError> {
     let db = open_db(&db_path)?;
-    let s = build_stats(&db).map_err(|_| ApiError::query_failed("Failed to load stats."))?;
+    let s = build_stats(&db).map_err(log_query_failure("Failed to load stats."))?;
     Ok(Json(s))
 }
 
@@ -150,7 +159,7 @@ pub async fn search_symbols(
         return Ok(Json(vec![]));
     }
     let db = open_db(&db_path)?;
-    let results = do_search(&db, &q).map_err(|_| ApiError::query_failed("Search query failed."))?;
+    let results = do_search(&db, &q).map_err(log_query_failure("Search query failed."))?;
     Ok(Json(results))
 }
 
@@ -160,14 +169,13 @@ pub async fn neighborhood(
 ) -> Result<Json<GraphData>, ApiError> {
     let db = open_db(&db_path)?;
     let data = build_neighborhood(&db, &query.id.to_string(), query.depth)
-        .map_err(|_| ApiError::query_failed("Failed to build neighborhood graph."))?;
+        .map_err(log_query_failure("Failed to build neighborhood graph."))?;
     Ok(Json(data))
 }
 
 pub async fn insights(State(db_path): State<DbState>) -> Result<Json<Insights>, ApiError> {
     let db = open_db(&db_path)?;
-    let data =
-        build_insights(&db).map_err(|_| ApiError::query_failed("Failed to build insights."))?;
+    let data = build_insights(&db).map_err(log_query_failure("Failed to build insights."))?;
     Ok(Json(data))
 }
 
@@ -555,7 +563,7 @@ pub async fn source(
     let db = open_db(&db_path)?;
     let context = query.context.unwrap_or(0);
     let result = fetch_source(&db, query.id, context)
-        .map_err(|_| ApiError::query_failed("Failed to fetch source code."))?;
+        .map_err(log_query_failure("Failed to fetch source code."))?;
     Ok(Json(result))
 }
 
@@ -567,7 +575,7 @@ pub struct ModulesResponse {
 pub async fn modules(State(db_path): State<DbState>) -> Result<Json<ModulesResponse>, ApiError> {
     let db = open_db(&db_path)?;
     let mods = crate::db::query::get_module_summaries(&db)
-        .map_err(|_| ApiError::query_failed("Failed to build module summaries."))?;
+        .map_err(log_query_failure("Failed to build module summaries."))?;
     Ok(Json(ModulesResponse { modules: mods }))
 }
 
@@ -588,7 +596,7 @@ pub async fn coupling(
     let db = open_db(&db_path)?;
     let limit = query.limit.unwrap_or(10).min(50);
     let pairs = crate::db::query::get_top_coupling_pairs(&db, limit)
-        .map_err(|_| ApiError::query_failed("Failed to load coupling data."))?;
+        .map_err(log_query_failure("Failed to load coupling data."))?;
     Ok(Json(CouplingResponse { pairs }))
 }
 
@@ -603,7 +611,7 @@ pub async fn describe(
 ) -> Result<Json<crate::dashboard::describe::DescribeResult>, ApiError> {
     let db = open_db(&db_path)?;
     let result = crate::dashboard::describe::describe_symbol(&db, query.id)
-        .map_err(|_| ApiError::query_failed("Failed to generate description."))?;
+        .map_err(log_query_failure("Failed to generate description."))?;
     Ok(Json(result))
 }
 
@@ -629,7 +637,7 @@ pub async fn entry_points(
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let category = query.category.as_deref();
     let rows = crate::db::query::get_entry_points(&db, category, limit)
-        .map_err(|_| ApiError::query_failed("Failed to load entry points."))?;
+        .map_err(log_query_failure("Failed to load entry points."))?;
     Ok(Json(EntryPointsResponse { entry_points: rows }))
 }
 
@@ -650,7 +658,7 @@ pub async fn complexity_hotspots(
     let db = open_db(&db_path)?;
     let limit = query.limit.unwrap_or(20).clamp(1, 100);
     let rows = crate::db::query::get_complexity_hotspots(&db, limit)
-        .map_err(|_| ApiError::query_failed("Failed to load complexity hotspots."))?;
+        .map_err(log_query_failure("Failed to load complexity hotspots."))?;
     Ok(Json(HotspotsResponse { hotspots: rows }))
 }
 
@@ -673,7 +681,7 @@ pub async fn god_objects(
     let threshold = query.threshold.unwrap_or(20).max(0);
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let rows = crate::db::query::get_god_objects(&db, threshold, limit)
-        .map_err(|_| ApiError::query_failed("Failed to load god objects."))?;
+        .map_err(log_query_failure("Failed to load god objects."))?;
     Ok(Json(GodObjectsResponse { god_objects: rows }))
 }
 
@@ -708,9 +716,9 @@ pub async fn dependency_path(
     // Resolve symbol names to IDs; missing symbols return a structured miss
     // (HTTP 200) so dashboards can render "not found" without a 5xx.
     let from_sym = crate::db::query::find_symbol_by_name(&db, &query.from)
-        .map_err(|_| ApiError::query_failed("Failed to resolve 'from' symbol."))?;
+        .map_err(log_query_failure("Failed to resolve 'from' symbol."))?;
     let to_sym = crate::db::query::find_symbol_by_name(&db, &query.to)
-        .map_err(|_| ApiError::query_failed("Failed to resolve 'to' symbol."))?;
+        .map_err(log_query_failure("Failed to resolve 'to' symbol."))?;
 
     let (from_sym, to_sym) = match (from_sym, to_sym) {
         (Some(f), Some(t)) => (f, t),
@@ -733,7 +741,7 @@ pub async fn dependency_path(
     };
 
     let graph = crate::db::query::build_call_graph(&db, None)
-        .map_err(|_| ApiError::query_failed("Failed to build call graph."))?;
+        .map_err(log_query_failure("Failed to build call graph."))?;
 
     let path_ids = crate::graph::traversal::find_shortest_path(&graph, from_sym.id, to_sym.id);
 
@@ -848,7 +856,7 @@ pub async fn propose_edit_plan(
     // Resolve target — missing symbol returns a structured 200 (mirrors
     // dependency_path so dashboards can render "not found" without a 5xx).
     let target = crate::db::query::find_symbol_by_name(&db, &query.symbol)
-        .map_err(|_| ApiError::query_failed("Failed to resolve symbol."))?;
+        .map_err(log_query_failure("Failed to resolve symbol."))?;
     let target = match target {
         Some(t) => t,
         None => {
@@ -873,7 +881,7 @@ pub async fn propose_edit_plan(
     let flows = crate::db::query::get_execution_flows(&db, target.id).unwrap_or_default();
 
     let graph = crate::db::query::build_call_graph(&db, None)
-        .map_err(|_| ApiError::query_failed("Failed to build call graph."))?;
+        .map_err(log_query_failure("Failed to build call graph."))?;
 
     let plan = crate::mcp::tools::impact::build_edit_plan(&graph, target.id);
 

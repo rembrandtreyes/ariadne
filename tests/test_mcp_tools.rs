@@ -49,7 +49,7 @@ fn test_server_info() {
 }
 
 #[tokio::test]
-async fn test_list_tools_returns_ten() {
+async fn test_list_tools_returns_full_surface() {
     let service = make_service();
     let ctx = test_context();
     let result = service
@@ -691,5 +691,80 @@ async fn test_get_file_summary_propagates_db_errors() {
         result.is_error,
         Some(true),
         "get_file_summary must surface DB errors, not render an empty file"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Graph completeness — the cached MCP graph must never silently truncate
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_blast_radius_sees_edges_beyond_ten_thousand() {
+    use ariadne::db::write;
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test", "/tmp/t", "monolith", "rust").unwrap();
+    let file =
+        write::insert_file(&db, svc, "src/big.rs", "/tmp/t/src/big.rs", "rust", 0.0).unwrap();
+
+    let sym = |name: &str, line: u32| {
+        write::insert_symbol(
+            &db,
+            file,
+            name,
+            &format!("big::{name}"),
+            "function",
+            line,
+            line + 1,
+            true,
+            false,
+            "",
+            "",
+            None,
+        )
+        .unwrap()
+    };
+    let hub = sym("hub", 1);
+    let noise = sym("noise", 3);
+    let deep_target = sym("deep_target", 5);
+    let sentinel_caller = sym("sentinel_caller", 7);
+
+    // 10,049 noise edges first, then ONE sentinel edge inserted last. A graph
+    // built with an arbitrary 10K-edge LIMIT drops the sentinel, and
+    // blast_radius silently omits a real dependent — the worst possible
+    // failure for a change-impact tool. All interpolated values are i64s
+    // returned by insert_symbol, so building SQL by format! is safe here.
+    let insert = |rows: &[String]| {
+        db.conn()
+            .execute_batch(&format!(
+                "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, \
+                 file_id, line, confidence, resolution) VALUES {};",
+                rows.join(",")
+            ))
+            .unwrap();
+    };
+    let mut rows = Vec::with_capacity(500);
+    for i in 0..10_049u32 {
+        rows.push(format!(
+            "({hub}, {noise}, 'noise', {file}, {}, 0.95, 'same_file')",
+            10 + i
+        ));
+        if rows.len() == 500 {
+            insert(&rows);
+            rows.clear();
+        }
+    }
+    rows.push(format!(
+        "({sentinel_caller}, {deep_target}, 'deep_target', {file}, 9, 0.95, 'same_file')"
+    ));
+    insert(&rows);
+
+    let service = AriadneService::new(db);
+    let payload = call_symbol_tool(&service, "blast_radius", "deep_target").await;
+    assert!(
+        payload.contains("sentinel_caller"),
+        "blast_radius must compute on ALL resolved call edges — a truncated \
+         graph silently omits real dependents exactly on the large codebases \
+         where agents lean on it hardest. Got: {payload}"
     );
 }

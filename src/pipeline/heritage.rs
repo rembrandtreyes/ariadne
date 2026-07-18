@@ -1,4 +1,4 @@
-//! Pipeline Phase 6: Inheritance Heritage Resolution
+//! Pipeline Phase 5: Inheritance Heritage Resolution
 //!
 //! Reads: `heritage` (unresolved parent names), `symbols` (classes, interfaces, traits)
 //! Writes: `heritage` (updates `parent_symbol_id` for resolved entries)
@@ -9,7 +9,7 @@
 use crate::db::Database;
 use rusqlite::params;
 
-/// Phase 6: Build the class/type inheritance hierarchy.
+/// Phase 5: Build the class/type inheritance hierarchy.
 ///
 /// Scans symbols for classes and interfaces, then resolves
 /// parent-child relationships based on naming conventions.

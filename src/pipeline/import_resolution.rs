@@ -272,7 +272,7 @@ fn resolve_rust_module_path(
     None
 }
 
-/// Phase 4: Resolve import statements to their target files and symbols.
+/// Phase 3: Resolve import statements to their target files and symbols.
 ///
 /// For each unresolved internal import, this function:
 /// 1. Loads tsconfig.json path aliases for alias expansion

@@ -1,6 +1,6 @@
 use crate::db::Database;
 
-/// Phase 10: Build the FTS5 search index for fast symbol lookup.
+/// Phase 11: Build the FTS5 search index for fast symbol lookup.
 ///
 /// Rebuilds the symbols_fts virtual table to ensure it is in sync
 /// with the symbols table after all inserts and updates.

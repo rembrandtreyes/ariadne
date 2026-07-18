@@ -19,9 +19,7 @@
 </p>
 
 <p align="center">
-  <a href="https://crates.io/crates/ariadne"><img src="https://img.shields.io/crates/v/ariadne.svg" alt="Crates.io"></a>
   <a href="https://github.com/loremllc/ariadne/actions"><img src="https://github.com/loremllc/ariadne/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://docs.rs/ariadne"><img src="https://docs.rs/ariadne/badge.svg" alt="Docs"></a>
   <a href="https://github.com/loremllc/ariadne/blob/main/LICENSE-MIT"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License"></a>
 </p>
 
@@ -64,10 +62,14 @@ Ariadne's moat is the **fusion** — no single competitor combines a resolved de
 brew install loremllc/tap/ariadne
 ```
 
-**Cargo:**
+**Cargo (from git):**
 ```bash
-cargo install ariadne
+cargo install --git https://github.com/loremllc/ariadne
 ```
+
+> Not on crates.io yet — the `ariadne` crate name belongs to the
+> (excellent, unrelated) diagnostics library. A publish under a distinct
+> package name is planned; the binary will stay `ariadne`.
 
 **From source:**
 ```bash
@@ -89,7 +91,7 @@ ariadne search "UserService"
 ariadne blast-radius "auth::validate_token" --depth 5
 
 # Find dead code
-ariadne dead-code --threshold 80
+ariadne dead-code --json
 
 # Which tests need to run for your changes?
 ariadne affected-tests --diff origin/main..HEAD
@@ -144,7 +146,7 @@ Ariadne speaks the Model Context Protocol natively. Point your AI agent at Ariad
 ```
 
 ### LSP Server
-Get dependency-aware editor features: go-to-definition that understands your whole graph, find-all-references across languages, and hover information showing blast radius.
+Get dependency-aware editor features: go-to-definition that understands your whole graph, find-all-references across languages, hover cards with caller/callee counts, dead-code and parse-health diagnostics, and reference-count code lenses.
 
 ```bash
 ariadne lsp
@@ -173,8 +175,8 @@ never a 5xx.
 The rest of the MCP surface is MCP-only by design — see "When to use REST vs
 MCP" in [`docs/AGENT-GUIDE.md`](docs/AGENT-GUIDE.md).
 
-### Plugin System
-Extend Ariadne with WASM plugins for custom languages or analysis passes. Plugins implement a simple WIT interface:
+### Plugin System (experimental)
+A WASM plugin runtime (WIT interface below, behind the non-default `plugins` feature) ships with install/scaffold tooling via `ariadne plugin`. Parser plugins are **not yet invoked by the indexing pipeline** — the wiring from plugin runtime to language dispatch is still in progress, so today plugins can be built and validated but not used during `ariadne index`.
 
 ```wit
 get-info: func() -> language-info;
@@ -182,10 +184,10 @@ parse-file: func(source: string, file-path: string) -> parse-result;
 ```
 
 ### File Watcher
-Keep your index fresh automatically. Ariadne watches for file changes and incrementally re-indexes only what changed.
+Keep your index fresh automatically. Ariadne watches for file changes and incrementally re-indexes only what changed — one transaction per save batch, honoring the same exclude rules as full indexing. Each batch re-resolves imports, calls, heritage, entry points, dead code, and execution flows; the heavier analytical layers (coupling, git history, communities) refresh on the next full `ariadne index`.
 
 ```bash
-ariadne watch --serve --dash
+ariadne watch --serve
 ```
 
 ## Claude Code Integration
@@ -394,14 +396,17 @@ base_url = "http://localhost:8001"
 language = "typescript"
 ```
 
-## GitHub Actions
+## CI Integration
+
+Ariadne is a single static binary, so CI integration is three commands — no
+dedicated action required:
 
 ```yaml
-- uses: loremllc/ariadne/.github/actions/ariadne@main
-  with:
-    check-rules: 'true'
-    dead-code-threshold: '10'
-    affected-tests: 'true'
+- name: Enforce architecture rules
+  run: |
+    ariadne index .
+    ariadne check-rules
+    ariadne affected-tests --diff origin/main..HEAD
 ```
 
 ## Performance
@@ -412,7 +417,8 @@ Benchmarked on **voicepost** — a real-world Next.js/TypeScript codebase:
 | Operation | Ariadne | grep (text scan) | Notes |
 |---|---|---|---|
 | Cold index | 0.73s | — | tree-sitter parse + SQLite write, 267 files |
-| Re-index | ~0.7s | — | full re-parse (incremental tracking in progress) |
+| Re-run `ariadne index` | ~0.7s | — | full rebuild; per-file incremental updates are what `ariadne watch` is for |
+| Watch re-index (1 file save) | ms-scale | — | parse one file + re-resolve, single transaction per save batch |
 | Symbol search (MCP) | <2ms | 17ms | FTS5 SQLite vs. full text scan |
 | Blast radius (MCP) | <5ms | N/A | graph traversal, 82 dependents found |
 | Symbol search (CLI) | ~20ms | 17ms | includes binary cold-start; MCP server is resident |
@@ -423,6 +429,9 @@ Ariadne's query latency is **sub-millisecond** after the initial index because:
 - FTS5 full-text index on symbol names enables fuzzy search without scanning files
 
 ### Scale Projections
+
+> These are extrapolations from the measured voicepost numbers above, not
+> benchmark results — no committed benchmark harness produces them yet.
 
 | Codebase size | Index time | Search (MCP) | Blast radius (MCP) |
 |---|---|---|---|

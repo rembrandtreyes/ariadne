@@ -1,4 +1,4 @@
-//! Pipeline Phase 14: Schema Resolution
+//! Pipeline Phase 15: Schema Resolution
 //!
 //! Reads: `files`, `symbols`, `api_calls`, `api_endpoints`, filesystem (OpenAPI/protobuf files)
 //! Writes: `api_endpoints`, `metadata`, `api_calls` (boosts confidence), `service_edges`
@@ -12,7 +12,7 @@ use rusqlite::params;
 use std::fs;
 use std::path::Path;
 
-/// Phase 14: Resolve schema definitions and link them to symbols.
+/// Phase 15: Resolve schema definitions and link them to symbols.
 ///
 /// Scans for schema definition files (OpenAPI, protobuf) and parses them
 /// to extract API endpoint definitions. Links parsed endpoints to handler

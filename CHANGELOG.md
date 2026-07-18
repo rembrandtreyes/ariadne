@@ -114,8 +114,85 @@ Structural exploration:
 - `tests/test_docs_parity.rs` asserts README + lib.rs + AGENT-GUIDE.md +
   CHANGELOG stay in sync with `all_tools()` — shipped-docs lies now fail CI
 
+### Fixed
+
+**Graph you can trust**
+- **MCP graph tools no longer truncate silently at 10,000 call edges.** The
+  cached MCP call graph was built with an arbitrary `LIMIT 10000` on the
+  edges query, so on any repo past that size `blast_radius`,
+  `detect_cycles`, `get_call_chain`, `get_dependency_path`, and
+  `propose_edit_plan` computed on an arbitrary subgraph — `blast_radius`
+  could answer "nothing breaks" for a symbol with live callers. The MCP
+  server now builds the full graph like every other surface (CLI, LSP,
+  dashboard); regression-tested with a 10,050-edge fixture
+- **Stale resolution labels reset on re-resolution.** Deleting a symbol
+  (watch-mode reindex, file deletion) nulls inbound `calls.callee_symbol_id`
+  via FK `SET NULL` but left the old `resolution`/`confidence` in place —
+  rows claimed `import_guided`/0.98 while pointing at nothing, inflating
+  resolution stats, and most re-resolution passes skipped them forever. A
+  reset pass now runs first in `resolve_calls`
+- **`exclude` glob patterns work as documented.** `exclude =
+  ["generated/**"]` was compared by exact component-name equality and
+  matched nothing; patterns now compile to real globs (bare names keep the
+  historical exact-component behavior)
+- **Watch mode honors exclude rules.** The watcher accepted any file with a
+  known extension — saves under `target/`, `node_modules/`, `vendor/`, or
+  user-excluded paths got indexed (a `cargo build` alone injects generated
+  `.rs` files). Watch now shares discovery's `PathFilter`
+- **Watch-mode reindexing produces full-pipeline-identical data.** The
+  incremental path had drifted from `parse_all`: integration-test files
+  lost their `is_test` marking (skewing `affected_tests` and dead-code
+  seeds), call-insert failures were silently discarded, and files were
+  reassigned to the first service in the DB (breaking cross-service tracing
+  under watch — new files now match services by path prefix, existing files
+  keep their assignment). Both paths now share one `ingest_parse_result`
+- **Watch batches re-run entry-point marking, dead code, and flows.**
+  Post-reindex resolution previously skipped framework entry-point rules —
+  a route handler edited under watch could be flagged dead, the worst
+  possible advice to hand an agent. Coupling/git-history/communities still
+  refresh on full `ariadne index` (documented freshness contract)
+- Each watch batch commits in one `BEGIN IMMEDIATE` transaction: a branch
+  switch is one WAL commit instead of thousands of autocommits, readers
+  never observe half-applied batches, and failures roll back cleanly
+- `PRAGMA busy_timeout=5000` on file-backed connections — concurrent
+  watch writes and MCP/dashboard reads wait instead of failing with
+  instant `SQLITE_BUSY`
+- Unreadable/non-UTF8 source files are logged when skipped instead of
+  vanishing from the index without a tell
+
+**Docs made true**
+- README: removed crates.io/docs.rs badges and `cargo install ariadne`
+  (that crate name belongs to the unrelated diagnostics library — publish
+  under a distinct package name is planned); `dead-code --threshold` and
+  `watch --dash` phantom flags corrected; nonexistent GitHub Action replaced
+  with a plain-CLI CI recipe; LSP hover claim matched to what hover actually
+  shows; plugin system labeled experimental (runtime ships, indexer wiring
+  does not); scale projections labeled as extrapolations; watch-vs-index
+  incremental semantics stated precisely
+- `CLAUDE.md` structure map: 10 → 32 MCP tools, 14 → 15 pipeline phases,
+  dropped deleted `output/` module, added `commands/`
+- `docs/CONTEXT.md`: 15-phase, corrected dead `src/mcp/tools.rs` path
+- Pipeline phase doc-comments renumbered to a canonical scheme (discovery =
+  Phase 0 untimed; 1–15 timed in execution order) — previously two pairs of
+  phases shared numbers 6 and 10, which is how "14-phase" shipped while 15
+  phases ran
+- MCP `get_info` instructions: "31-tool quick-reference matrix" → 32
+- `serve --http` help text now states the flag is rejected by design
+  (no-auth transport), matching runtime behavior
+
 ### Changed
 
+- Call-resolution dotted pass prepares its three lookup statements once
+  instead of recompiling SQL per unresolved call
+- Removed dead `RESOLUTION_RESOLVED` constant
+- New doc-parity invariants: pipeline phase count checked against the
+  *executed* pipeline (`PipelineStats.phase_durations`), MCP `get_info`
+  instruction string checked against the tool count, CLAUDE.md checked for
+  tool count, and every `ariadne` invocation in README bash blocks verified
+  against the real binary's `--help` output — phantom flags now fail CI
+- New watch-mode regression suite: FTS freshness after reindex, test-file
+  marking parity, service preservation, stale-edge relabeling, dead-code
+  stability across incremental batches; plus discovery `PathFilter` tests
 - README competitor comparison updated from 2015-era tools
   (dependency-cruiser, Axon, Sourcegraph, CodeScene) to current 2025/2026
   HIGH threats (GitNexus, Codebase-Memory, Greptile, Potpie,

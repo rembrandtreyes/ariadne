@@ -36,15 +36,27 @@ pub fn handle_deleted_files(db: &Database, deleted_paths: &[&Path]) -> anyhow::R
 }
 
 /// Re-run downstream resolution phases after incremental reindex.
-/// This ensures calls are resolved, heritage is built, and dead code is re-detected.
+///
+/// Watch-mode freshness contract: imports, calls, heritage, framework
+/// entry-point marking, dead code, and execution flows are recomputed on
+/// every batch (entry points must precede dead code — a handler added under
+/// watch that isn't re-marked as an entry point would be flagged dead, the
+/// worst possible advice to hand an agent). The FTS search index stays fresh
+/// via insert_symbol/delete_file_data. The heavier analytical layers —
+/// coupling, git history, communities, api/schema resolution, service
+/// topology — refresh on the next full `ariadne index`.
 pub fn run_post_reindex_resolution(
     db: &Database,
+    root: &Path,
     config: &crate::config::RepoConfig,
 ) -> anyhow::Result<()> {
     crate::pipeline::import_resolution::resolve_imports(db)?;
     crate::pipeline::call_resolution::resolve_calls(db)?;
     crate::pipeline::heritage::build_heritage(db)?;
+    let frameworks = crate::pipeline::discovery::detect_frameworks(root);
+    crate::pipeline::framework_entry_points::apply_framework_rules(db, &frameworks, root)?;
     crate::pipeline::dead_code::detect_dead_code(db, config)?;
+    crate::pipeline::flow::trace_flows(db)?;
     Ok(())
 }
 
@@ -60,6 +72,36 @@ pub fn bump_generation(db: &Database) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolve which service a (possibly new) file belongs to: keep the
+/// assignment of a previously indexed file, else pick the service whose
+/// root path is the longest prefix of the file's path, else fall back to
+/// the first service. Errors when the index has no services at all —
+/// fabricating an ID would insert rows that join to nothing.
+fn resolve_service_id(db: &Database, abs_path: &str, previous: Option<i64>) -> anyhow::Result<i64> {
+    use rusqlite::OptionalExtension;
+
+    if let Some(sid) = previous {
+        return Ok(sid);
+    }
+    let by_prefix: Option<i64> = db
+        .conn()
+        .query_row(
+            "SELECT id FROM services WHERE ?1 LIKE repo_path || '%'
+             ORDER BY LENGTH(repo_path) DESC LIMIT 1",
+            rusqlite::params![abs_path],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(sid) = by_prefix {
+        return Ok(sid);
+    }
+    db.conn()
+        .query_row("SELECT id FROM services ORDER BY id LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .map_err(|_| anyhow::anyhow!("No services in index — run `ariadne index` before watching"))
+}
+
 fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Result<()> {
     let source = std::fs::read_to_string(path)?;
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -70,26 +112,23 @@ fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Resul
 
     let abs_path = path.to_string_lossy().to_string();
 
-    // Find and delete existing file data
-    let file_id: Option<i64> = db
+    // Find and delete existing file data, remembering its service assignment
+    let existing: Option<(i64, i64)> = db
         .conn()
         .query_row(
-            "SELECT id FROM files WHERE absolute_path = ?1",
+            "SELECT id, service_id FROM files WHERE absolute_path = ?1",
             rusqlite::params![abs_path],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .ok();
 
-    if let Some(fid) = file_id {
+    if let Some((fid, _)) = existing {
         crate::db::write::delete_file_data(db, fid)?;
     }
 
     // Re-insert file record
     let rel_path = path.strip_prefix(root).unwrap_or(path);
-    let service_id: i64 = db
-        .conn()
-        .query_row("SELECT id FROM services LIMIT 1", [], |row| row.get(0))
-        .unwrap_or(1);
+    let service_id = resolve_service_id(db, &abs_path, existing.map(|(_, sid)| sid))?;
 
     let modified = path
         .metadata()?
@@ -107,34 +146,13 @@ fn reindex_single_file(db: &Database, root: &Path, path: &Path) -> anyhow::Resul
         modified,
     )?;
 
-    // Parse the file
+    // Parse and ingest through the same path as the full pipeline, so
+    // watch-mode files get identical treatment (test marking, caller
+    // mapping, FTS upkeep via insert_symbol).
     let parser = crate::parse::get_parser(lang);
-    let result = parser.parse_file(&source, &abs_path)?;
-
-    // Insert symbols and imports
-    crate::db::write::insert_symbols_batch(db, new_file_id, &result.symbols)?;
-    crate::db::write::insert_imports_batch(db, new_file_id, &result.imports)?;
-    crate::db::write::set_file_parse_error_count(db, new_file_id, result.syntax_error_count)?;
-
-    // Insert calls with proper caller symbol IDs
-    if !result.calls.is_empty() {
-        let mut name_to_id = std::collections::HashMap::new();
-        if let Ok(syms) = crate::db::query::get_file_symbols(db, new_file_id) {
-            for s in &syms {
-                name_to_id.insert(s.name.clone(), s.id);
-                name_to_id.insert(s.qualified_name.clone(), s.id);
-            }
-        }
-
-        for call in &result.calls {
-            if let Some(&cid) = name_to_id.get(&call.caller_name) {
-                let _ = db.conn().execute(
-                    "INSERT INTO calls (caller_symbol_id, callee_name, file_id, line, confidence, resolution)
-                     VALUES (?1, ?2, ?3, ?4, 0.5, 'unresolved')",
-                    rusqlite::params![cid, call.callee_name, new_file_id, call.line],
-                );
-            }
-        }
+    let mut result = parser.parse_file(&source, &abs_path)?;
+    for err in crate::pipeline::parsing::ingest_parse_result(db, new_file_id, path, &mut result)? {
+        tracing::warn!(error = %err, "Incremental ingest error");
     }
 
     tracing::info!(path = %rel_path.display(), "Re-indexed file");

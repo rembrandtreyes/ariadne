@@ -224,7 +224,7 @@ fn is_builtin(name: &str) -> bool {
             .any(|prefix| name.starts_with(prefix))
 }
 
-/// Phase 5: Resolve call sites to their target symbols.
+/// Phase 4: Resolve call sites to their target symbols.
 ///
 /// Multi-pass approach:
 ///   Pass 0 - Import-guided resolution        (confidence 0.98)
@@ -242,6 +242,32 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
     let unresolved = crate::db::RESOLUTION_UNRESOLVED;
 
     let mut pass_start = std::time::Instant::now();
+
+    // ------------------------------------------------------------------
+    // Reset pass: un-label calls whose target symbol vanished.
+    //
+    // calls.callee_symbol_id is ON DELETE SET NULL, so watch-mode reindexing
+    // (which deletes and re-inserts a file's symbols) nulls the target but
+    // leaves the old resolution/confidence in place. Passes 2+ only touch
+    // rows labeled 'unresolved', so without this reset a renamed or deleted
+    // callee leaves a permanently mislabeled edge: NULL target, 0.98
+    // confidence, counted as resolved in every stat.
+    //
+    // The NULL-categorized labels (external/builtin/method_call/local) are
+    // legitimate terminal states for calls that never point at a local
+    // symbol — leave those alone.
+    // ------------------------------------------------------------------
+    conn.execute_batch(&format!(
+        "UPDATE calls SET resolution = '{unresolved}', confidence = 0.5
+         WHERE callee_symbol_id IS NULL
+           AND resolution NOT IN
+               ('{unresolved}', 'external', 'builtin', 'method_call', 'local')",
+    ))?;
+    tracing::info!(
+        "call_resolution pass_reset_stale: {}ms",
+        pass_start.elapsed().as_millis()
+    );
+    pass_start = std::time::Instant::now();
 
     // ------------------------------------------------------------------
     // Pass 0: Import-guided resolution (confidence 0.98)
@@ -315,6 +341,26 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
              WHERE id = ?4",
         )?;
 
+        // Prepare the three lookups once — this loop runs per unresolved
+        // dotted call, and re-compiling the SQL each iteration made
+        // resolution degrade super-linearly on large repos.
+        let mut same_file_stmt =
+            conn.prepare("SELECT id FROM symbols WHERE name = ?1 AND file_id = ?2 LIMIT 1")?;
+        let mut import_guided_stmt = conn.prepare(
+            "SELECT s.id FROM imports i
+             JOIN symbols s ON s.file_id = i.resolved_file_id AND s.name = ?1
+             WHERE i.file_id = ?2 AND i.imported_name = ?3
+             AND i.resolved_file_id IS NOT NULL
+             LIMIT 1",
+        )?;
+        let mut same_service_stmt = conn.prepare(
+            "SELECT s.id FROM symbols s
+             JOIN files f ON s.file_id = f.id
+             JOIN files cf ON cf.id = ?2
+             WHERE s.name = ?1 AND f.service_id = cf.service_id
+             LIMIT 1",
+        )?;
+
         for (call_id, callee_name, file_id) in &dotted_calls {
             let method_name = match callee_name.rsplit('.').next() {
                 Some(m) if !m.is_empty() => m,
@@ -322,12 +368,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             };
 
             // 2a: Same-file match on extracted method name
-            let found: Option<i64> = conn
-                .query_row(
-                    "SELECT id FROM symbols WHERE name = ?1 AND file_id = ?2 LIMIT 1",
-                    params![method_name, file_id],
-                    |row| row.get(0),
-                )
+            let found: Option<i64> = same_file_stmt
+                .query_row(params![method_name, file_id], |row| row.get(0))
                 .ok();
 
             if let Some(sym_id) = found {
@@ -339,16 +381,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             let parts: Vec<&str> = callee_name.splitn(2, '.').collect();
             if parts.len() == 2 {
                 let obj_name = parts[0];
-                let found: Option<i64> = conn
-                    .query_row(
-                        "SELECT s.id FROM imports i
-                         JOIN symbols s ON s.file_id = i.resolved_file_id AND s.name = ?1
-                         WHERE i.file_id = ?2 AND i.imported_name = ?3
-                         AND i.resolved_file_id IS NOT NULL
-                         LIMIT 1",
-                        params![method_name, file_id, obj_name],
-                        |row| row.get(0),
-                    )
+                let found: Option<i64> = import_guided_stmt
+                    .query_row(params![method_name, file_id, obj_name], |row| row.get(0))
                     .ok();
 
                 if let Some(sym_id) = found {
@@ -358,16 +392,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
             }
 
             // 2c: Same-service match on extracted method name
-            let found: Option<i64> = conn
-                .query_row(
-                    "SELECT s.id FROM symbols s
-                     JOIN files f ON s.file_id = f.id
-                     JOIN files cf ON cf.id = ?2
-                     WHERE s.name = ?1 AND f.service_id = cf.service_id
-                     LIMIT 1",
-                    params![method_name, file_id],
-                    |row| row.get(0),
-                )
+            let found: Option<i64> = same_service_stmt
+                .query_row(params![method_name, file_id], |row| row.get(0))
                 .ok();
 
             if let Some(sym_id) = found {

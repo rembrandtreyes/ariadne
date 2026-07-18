@@ -129,3 +129,30 @@ fn test_search_empty_query_does_not_panic() {
         result.err()
     );
 }
+
+#[test]
+fn test_search_never_returns_duplicate_symbols() {
+    // The fuzzy supplement pass re-finds symbols FTS already returned;
+    // without dedup the same symbol id appears twice in one result list
+    // (seen live: `ariadne search PathFilter` listed the class twice).
+    let (_dir, db) = setup_search_db();
+
+    let options = SearchOptions {
+        fuzzy: true,
+        limit: Some(50),
+        ..SearchOptions::default()
+    };
+    let results = search(&db, "greet", &options).unwrap();
+
+    let mut seen = std::collections::HashSet::new();
+    for r in &results {
+        if let Some(id) = r.symbol_id {
+            assert!(
+                seen.insert(id),
+                "symbol id {id} ({}) returned more than once — duplicate \
+                 rows make every downstream consumer look broken",
+                r.name
+            );
+        }
+    }
+}

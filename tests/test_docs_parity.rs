@@ -13,11 +13,15 @@ use std::fs;
 use std::path::PathBuf;
 
 /// Current MCP tool count. Must match `all_tools().len()` in
-/// `src/mcp/tools/mod.rs` — guarded by `test_list_tools_returns_ten` in
-/// `tests/test_mcp_tools.rs`. When tools are added, update this constant,
+/// `src/mcp/tools/mod.rs` — guarded by `test_list_tools_returns_full_surface`
+/// in `tests/test_mcp_tools.rs`. When tools are added, update this constant,
 /// `src/lib.rs` docstring, and the README "Available MCP Tools" table
 /// in a single commit.
 const EXPECTED_TOOL_COUNT: usize = 32;
+
+/// Timed pipeline phases (discovery runs untimed before the transaction).
+/// Guarded against executed truth by `test_pipeline_phase_count_matches_docs`.
+const EXPECTED_PHASE_COUNT: usize = 15;
 
 /// Every currently-shipped MCP↔REST mirror route. Shared by the CHANGELOG and
 /// README invariants below so the docs cannot drift apart from each other.
@@ -350,4 +354,171 @@ fn test_readme_file_summary_mentions_parse_error_count() {
         "README.md should mention `parse_error_count` — get_file_summary's \
          response exposes it as the per-file parse-trust signal"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline phase count — executed truth vs every doc that states the number
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_pipeline_phase_count_matches_docs() {
+    // Executed truth: the pipeline reports one PhaseTiming per timed phase.
+    let dir = tempfile::tempdir().expect("temp dir");
+    fs::write(dir.path().join("a.py"), "def alpha():\n    pass\n").unwrap();
+    let db = ariadne::db::Database::open_in_memory().expect("in-memory db");
+    let stats = ariadne::pipeline::run_full_pipeline(
+        &db,
+        dir.path(),
+        &ariadne::config::RepoConfig::default(),
+    )
+    .expect("pipeline");
+    assert_eq!(
+        stats.phase_durations.len(),
+        EXPECTED_PHASE_COUNT,
+        "the pipeline ran {} timed phases but EXPECTED_PHASE_COUNT says {} — \
+         update the constant AND every doc that states the number",
+        stats.phase_durations.len(),
+        EXPECTED_PHASE_COUNT
+    );
+
+    // Docs that state the number must agree with the executed count.
+    let phase_label = format!("{EXPECTED_PHASE_COUNT}-phase");
+    let stale_label = format!("{}-phase", EXPECTED_PHASE_COUNT - 1);
+    for file in [
+        "src/lib.rs",
+        "src/pipeline/mod.rs",
+        "docs/CONTEXT.md",
+        "CLAUDE.md",
+    ] {
+        let content = read_repo_file(file);
+        assert!(
+            content.contains(&phase_label),
+            "{file} must describe the pipeline as {phase_label}"
+        );
+        assert!(
+            !content.contains(&stale_label),
+            "{file} still says {stale_label} — phase-count drift"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MCP runtime instructions — the get_info string ships to every agent session
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_mcp_server_instructions_match_tool_count() {
+    use rmcp::ServerHandler;
+
+    let db = ariadne::db::Database::open_in_memory().expect("in-memory db");
+    let service = ariadne::mcp::tools::AriadneService::new(db);
+    let instructions = service
+        .get_info()
+        .instructions
+        .expect("server should ship instructions");
+
+    assert!(
+        instructions.contains(&format!("{EXPECTED_TOOL_COUNT} tools total")),
+        "get_info instructions must state the true tool count — agents plan \
+         tool use from this string"
+    );
+    let stale = format!("{}-tool", EXPECTED_TOOL_COUNT - 1);
+    assert!(
+        !instructions.contains(&stale),
+        "get_info instructions still reference `{stale}` — this string ships \
+         to every agent session and was previously missed by doc scans that \
+         only cover markdown files"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Project CLAUDE.md — the agent-facing structure map must not lie either
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_claude_md_matches_tool_count() {
+    let claude_md = read_repo_file("CLAUDE.md");
+    assert!(
+        claude_md.contains(&format!("{EXPECTED_TOOL_COUNT} tools")),
+        "CLAUDE.md's structure map must state the true MCP tool count — it \
+         previously said 10 while the server shipped 32"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// README CLI truthfulness — every documented invocation must exist in the
+// binary. Phantom flags (dead-code --threshold, watch --dash) shipped before;
+// this pins every ```bash block to `--help` reality.
+// ---------------------------------------------------------------------------
+
+fn readme_bash_invocations() -> Vec<(String, Vec<String>)> {
+    let readme = read_repo_file("README.md");
+    let mut invocations = Vec::new();
+    let mut in_bash = false;
+    for line in readme.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            in_bash = trimmed == "```bash";
+            continue;
+        }
+        if !in_bash || trimmed.starts_with('#') {
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("ariadne ") else {
+            continue;
+        };
+        let tokens: Vec<&str> = rest.split_whitespace().collect();
+        let Some(sub) = tokens.first() else { continue };
+        if sub.starts_with('-') {
+            continue;
+        }
+        let flags: Vec<String> = tokens
+            .iter()
+            .filter(|t| t.starts_with("--"))
+            .map(|t| t.split('=').next().unwrap_or(t).to_string())
+            .collect();
+        invocations.push((sub.to_string(), flags));
+    }
+    invocations
+}
+
+#[test]
+fn test_readme_cli_commands_and_flags_exist() {
+    use std::collections::HashMap;
+    use std::process::Command;
+
+    let bin = env!("CARGO_BIN_EXE_ariadne");
+    let invocations = readme_bash_invocations();
+    assert!(
+        !invocations.is_empty(),
+        "README should document at least one `ariadne` invocation in a bash block"
+    );
+
+    let mut help_cache: HashMap<String, String> = HashMap::new();
+    for (sub, flags) in invocations {
+        let help = help_cache.entry(sub.clone()).or_insert_with(|| {
+            let out = Command::new(bin)
+                .args([sub.as_str(), "--help"])
+                .output()
+                .expect("failed to run ariadne --help");
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        });
+        assert!(
+            help.contains(&format!("Usage: ariadne {sub}")),
+            "README documents `ariadne {sub}` but the binary does not accept \
+             that subcommand — help said:\n{help}"
+        );
+        for flag in flags {
+            assert!(
+                help.contains(&flag),
+                "README documents `ariadne {sub} {flag}` but `{flag}` is not \
+                 in `ariadne {sub} --help` — phantom flags erode every other \
+                 claim in the README"
+            );
+        }
+    }
 }

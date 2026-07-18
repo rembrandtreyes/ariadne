@@ -439,7 +439,12 @@ impl AriadneService {
                     .db
                     .lock()
                     .map_err(|e| anyhow::anyhow!("Database lock error: {e}"))?;
-                query::build_call_graph(&db, Some(10000))?
+                // No edge cap: a limit here silently truncates the graph and
+                // blast_radius/detect_cycles/propose_edit_plan omit real
+                // dependents on large codebases. Every other surface (CLI,
+                // LSP, dashboard) builds the full graph; the generation cache
+                // amortizes the build cost across calls.
+                query::build_call_graph(&db, None)?
             };
             *cache = Some(graph);
             *gen = db_generation;
@@ -528,7 +533,7 @@ impl ServerHandler for AriadneService {
                  `get_code_smells`. `get_symbol_health` is symbol-level, \
                  `compute_file_risk` is file-level.\n\n\
                  See docs/AGENT-GUIDE.md in the Ariadne repository for the full \
-                 decision tree and the 31-tool quick-reference matrix."
+                 decision tree and the 32-tool quick-reference matrix."
                     .to_string(),
             ),
         }

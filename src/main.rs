@@ -85,7 +85,10 @@ enum Commands {
 
     /// Start the MCP server for AI agent integration
     Serve {
-        /// Enable HTTP/SSE transport on the given address (e.g., "127.0.0.1:3000")
+        /// Not supported: HTTP/SSE transport is deliberately disabled (it
+        /// would expose all tools over the network with no authentication).
+        /// The flag is accepted for compatibility and ignored; the server
+        /// always speaks stdio.
         #[arg(long)]
         http: Option<String>,
     },

@@ -8,10 +8,6 @@ use std::path::Path;
 /// Resolution status for unresolved calls (not yet matched to a callee symbol).
 pub const RESOLUTION_UNRESOLVED: &str = "unresolved";
 
-/// Resolution status for resolved calls (successfully matched to a callee symbol).
-pub const RESOLUTION_RESOLVED: &str = "resolved";
-
-/// Database handle wrapping a SQLite connection for the Ariadne graph store.
 /// Escape special characters in a string for use in SQL LIKE patterns.
 /// The escaped string should be used with `ESCAPE '\'` in the SQL query.
 pub fn escape_like(s: &str) -> String {
@@ -20,6 +16,7 @@ pub fn escape_like(s: &str) -> String {
         .replace('_', "\\_")
 }
 
+/// Database handle wrapping a SQLite connection for the Ariadne graph store.
 pub struct Database {
     conn: Connection,
 }
@@ -30,8 +27,13 @@ impl Database {
     /// Creates the schema if the database is new.
     pub fn open(path: &Path) -> anyhow::Result<Self> {
         let conn = Connection::open(path)?;
+        // busy_timeout: watch-mode writes, the MCP server, and dashboard
+        // requests each hold their own connection to the same file. Without
+        // a timeout a reader that lands mid-write gets an instant
+        // SQLITE_BUSY instead of waiting out the write.
         conn.execute_batch(
-            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
+            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; \
+             PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000;",
         )?;
         schema::create_tables(&conn)?;
         Ok(Self { conn })

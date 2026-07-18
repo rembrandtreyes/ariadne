@@ -1,4 +1,4 @@
-//! Pipeline Phase 11: API Boundary Resolution
+//! Pipeline Phase 12: API Boundary Resolution
 //!
 //! Reads: `api_calls` (unresolved), `api_endpoints` (known endpoints)
 //! Writes: `api_calls` (updates `resolved_endpoint_id`, `resolved_service_id`)
@@ -9,7 +9,7 @@
 use crate::db::Database;
 use rusqlite::params;
 
-/// Phase 11: Resolve API boundaries between services.
+/// Phase 12: Resolve API boundaries between services.
 ///
 /// Matches API call sites (fetch, requests.get, etc.) to known
 /// API endpoints based on URL pattern matching.
