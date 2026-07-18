@@ -85,7 +85,9 @@ pub fn analyze_blast_radius(
     }
 
     let total_affected = direct.len() + transitive.len();
-    let affected_files: Vec<String> = file_set.into_iter().collect();
+    // Sorted: set iteration order must never reach serialized output.
+    let mut affected_files: Vec<String> = file_set.into_iter().collect();
+    affected_files.sort_unstable();
 
     BlastRadiusResult {
         total_affected,

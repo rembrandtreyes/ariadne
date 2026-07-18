@@ -145,6 +145,50 @@ fn test_detect_communities_idempotent() {
     assert_eq!(communities[0].symbol_count, 3);
 }
 
+/// Full symbol -> community-name mapping after a detection run.
+fn community_assignment(db: &Database, sym_ids: &[i64]) -> Vec<(i64, String)> {
+    let conn = db.conn();
+    sym_ids
+        .iter()
+        .map(|sym_id| {
+            let name: String = conn
+                .query_row(
+                    "SELECT c.name FROM symbols s JOIN communities c ON s.community_id = c.id
+                     WHERE s.id = ?1",
+                    params![sym_id],
+                    |row| row.get(0),
+                )
+                .expect("symbol should have a community");
+            (*sym_id, name)
+        })
+        .collect()
+}
+
+#[test]
+fn test_detect_communities_deterministic_across_runs() {
+    // 40 disconnected 3-symbol chains: enough components that unordered
+    // HashMap seed iteration would number them differently between runs.
+    let mut edges = Vec::new();
+    for c in 0..40 {
+        let base = c * 3;
+        edges.push((base, base + 1));
+        edges.push((base + 1, base + 2));
+    }
+    let (db, sym_ids) = setup_community_db(120, &edges);
+
+    detect_communities(&db).expect("run 1");
+    let first = community_assignment(&db, &sym_ids);
+
+    for run in 2..=4 {
+        detect_communities(&db).expect("re-run");
+        let next = community_assignment(&db, &sym_ids);
+        assert_eq!(
+            first, next,
+            "community assignment must be identical on run {run}"
+        );
+    }
+}
+
 #[test]
 fn test_detect_communities_empty_graph() {
     let db = Database::open_in_memory().expect("in-memory db");

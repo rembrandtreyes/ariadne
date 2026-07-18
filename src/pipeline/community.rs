@@ -42,7 +42,10 @@ pub fn detect_communities(db: &Database) -> anyhow::Result<()> {
     let mut visited: HashSet<i64> = HashSet::new();
     let mut community_id = 0i64;
 
-    let all_symbols: Vec<i64> = adjacency.keys().copied().collect();
+    // Sorted seed order: community numbering must not depend on HashMap
+    // iteration order, or IDs differ across runs on identical input.
+    let mut all_symbols: Vec<i64> = adjacency.keys().copied().collect();
+    all_symbols.sort_unstable();
 
     for seed in &all_symbols {
         if visited.contains(seed) {

@@ -153,3 +153,51 @@ fn test_discover_respects_builtin_excludes() {
         result.files
     );
 }
+
+/// languages must be ordered (file count desc, name asc): the first entry is
+/// persisted as the service's primary_language, so set iteration order must
+/// never decide it.
+#[test]
+fn test_discover_languages_deterministic_dominant_first() {
+    use ariadne::parse::types::Language;
+    use tempfile::TempDir;
+
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+
+    // Python dominates (3 files); seven other languages with 1 file each.
+    for name in ["a", "b", "c"] {
+        fs::write(root.join(format!("src/{name}.py")), "def f():\n    pass\n").unwrap();
+    }
+    for (file, content) in [
+        ("one.js", "function f() {}\n"),
+        ("two.ts", "export function f() {}\n"),
+        ("three.go", "package main\n"),
+        ("four.java", "class Four {}\n"),
+        ("five.rs", "fn f() {}\n"),
+        ("six.rb", "def f; end\n"),
+        ("seven.php", "<?php function f() {}\n"),
+    ] {
+        fs::write(root.join(format!("src/{file}")), content).unwrap();
+    }
+
+    let expected = vec![
+        Language::Python, // 3 files — dominant
+        Language::Go,     // the rest: 1 file each, name asc
+        Language::Java,
+        Language::JavaScript,
+        Language::Php,
+        Language::Ruby,
+        Language::Rust,
+        Language::TypeScript,
+    ];
+
+    for run in 1..=4 {
+        let result = discover(root, &RepoConfig::default()).expect("discover");
+        assert_eq!(
+            result.languages, expected,
+            "languages must be (count desc, name asc) on run {run}"
+        );
+    }
+}

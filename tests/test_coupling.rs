@@ -101,3 +101,45 @@ fn test_get_file_couplings_bidirectional() {
     // Both should reference the same coupling
     assert_eq!(from_a[0].co_changes, from_b[0].co_changes);
 }
+
+/// Equal-strength couplings must come back in a total order (strength desc,
+/// then file ids asc) — not rowid/insertion order, which upstream is driven
+/// by HashMap iteration and varies across runs.
+#[test]
+fn test_coupling_queries_total_order_on_ties() {
+    let (db, f1, f2, f3) = setup_coupling_db();
+    let svc = 1i64;
+    let f4 = write::insert_file(&db, svc, "src/d.py", "/tmp/test/src/d.py", "python", 0.0)
+        .expect("insert file d");
+    let f5 = write::insert_file(&db, svc, "src/e.py", "/tmp/test/src/e.py", "python", 0.0)
+        .expect("insert file e");
+    let f6 = write::insert_file(&db, svc, "src/f.py", "/tmp/test/src/f.py", "python", 0.0)
+        .expect("insert file f");
+
+    // All ties (same strength), inserted in DESCENDING id order.
+    write::insert_coupling(&db, f5, f6, 5, 0.5).expect("insert");
+    write::insert_coupling(&db, f3, f4, 5, 0.5).expect("insert");
+    write::insert_coupling(&db, f1, f2, 5, 0.5).expect("insert");
+
+    let top = query::get_top_couplings(&db, 10).expect("top couplings");
+    let got: Vec<(i64, i64)> = top.iter().map(|r| (r.file_a_id, r.file_b_id)).collect();
+    assert_eq!(
+        got,
+        vec![(f1, f2), (f3, f4), (f5, f6)],
+        "ties must be ordered by (file_a_id, file_b_id), not insertion order"
+    );
+
+    // Same contract for the per-file query.
+    write::insert_coupling(&db, f1, f6, 5, 0.5).expect("insert");
+    write::insert_coupling(&db, f1, f4, 5, 0.5).expect("insert");
+    let per_file = query::get_file_couplings(&db, f1).expect("file couplings");
+    let got: Vec<(i64, i64)> = per_file
+        .iter()
+        .map(|r| (r.file_a_id, r.file_b_id))
+        .collect();
+    assert_eq!(
+        got,
+        vec![(f1, f2), (f1, f4), (f1, f6)],
+        "per-file ties must be ordered by (file_a_id, file_b_id)"
+    );
+}

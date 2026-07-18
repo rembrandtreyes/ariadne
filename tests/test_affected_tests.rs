@@ -205,3 +205,79 @@ fn test_reverse_bfs_isolated_symbol_no_tests() {
         "test_x should not be reachable from orphan"
     );
 }
+
+/// test_files must be sorted: HashSet iteration order must never reach output.
+#[test]
+fn test_affected_test_files_sorted_deterministic() {
+    use ariadne::analysis::affected_tests::find_affected_tests_for_files;
+
+    let db = Database::open_in_memory().expect("in-memory db");
+    let svc = write::insert_service(&db, "test-svc", "/tmp/test", "monolith", "python")
+        .expect("insert service");
+    let src_file = write::insert_file(
+        &db,
+        svc,
+        "src/module.py",
+        "/tmp/test/src/module.py",
+        "python",
+        0.0,
+    )
+    .expect("insert src file");
+    let core = write::insert_symbol(
+        &db,
+        src_file,
+        "core",
+        "module.core",
+        "function",
+        1,
+        9,
+        true,
+        false,
+        "def core()",
+        "[]",
+        None,
+    )
+    .expect("insert core symbol");
+
+    // 30 test files, each with one test function calling `core`,
+    // inserted in reverse-alphabetical order.
+    let conn = db.conn();
+    let mut expected: Vec<String> = Vec::new();
+    for i in (0..30).rev() {
+        let path = format!("tests/test_{i:02}.py");
+        let tf = write::insert_file(&db, svc, &path, &format!("/tmp/test/{path}"), "python", 0.0)
+            .expect("insert test file");
+        let t_sym = write::insert_symbol(
+            &db,
+            tf,
+            &format!("test_{i:02}"),
+            &format!("tests.test_{i:02}"),
+            "function",
+            1,
+            9,
+            true,
+            true,
+            "def test()",
+            "[]",
+            None,
+        )
+        .expect("insert test symbol");
+        conn.execute(
+            "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line, confidence, resolution)
+             VALUES (?1, ?2, 'core', ?3, 3, 1.0, 'resolved')",
+            params![t_sym, core, tf],
+        )
+        .expect("insert call");
+        expected.push(path);
+    }
+    expected.sort();
+
+    let result: AffectedTestsResult =
+        find_affected_tests_for_files(&db, &["src/module.py".to_string()]).expect("affected tests");
+
+    assert_eq!(
+        result.test_files, expected,
+        "test_files must be sorted lexicographically"
+    );
+    assert_eq!(result.total_tests_affected, 30);
+}

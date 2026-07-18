@@ -12,10 +12,17 @@ pub struct AffectedTestsResult {
 }
 
 pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<AffectedTestsResult> {
-    let conn = db.conn();
-
     // 1. Get changed files from git diff
     let changed_files = get_changed_files(diff_ref)?;
+    find_affected_tests_for_files(db, &changed_files)
+}
+
+/// Core analysis over an explicit changed-file list (git-free, testable).
+pub fn find_affected_tests_for_files(
+    db: &Database,
+    changed_files: &[String],
+) -> anyhow::Result<AffectedTestsResult> {
+    let conn = db.conn();
     let changed_count = changed_files.len();
 
     if changed_files.is_empty() {
@@ -29,7 +36,7 @@ pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<Affe
 
     // 2. Find symbol IDs in changed files
     let mut changed_symbol_ids: Vec<i64> = Vec::new();
-    for file_path in &changed_files {
+    for file_path in changed_files {
         let mut stmt = conn.prepare(
             "SELECT id FROM files WHERE path LIKE '%' || ?1 OR absolute_path LIKE '%' || ?1",
         )?;
@@ -90,7 +97,9 @@ pub fn find_affected_tests(db: &Database, diff_ref: &str) -> anyhow::Result<Affe
         }
     }
 
-    let test_files: Vec<String> = test_file_set.into_iter().collect();
+    // Sorted: set iteration order must never reach serialized output.
+    let mut test_files: Vec<String> = test_file_set.into_iter().collect();
+    test_files.sort_unstable();
     let total = test_functions.len();
 
     Ok(AffectedTestsResult {

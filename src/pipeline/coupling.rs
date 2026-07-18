@@ -83,9 +83,13 @@ pub fn analyze_coupling(db: &Database, root: &Path) -> anyhow::Result<()> {
         }
     }
 
-    // Insert coupling records for pairs that co-changed multiple times
+    // Insert coupling records for pairs that co-changed multiple times.
+    // Sorted: insertion (rowid) order must not follow HashMap iteration order,
+    // so identical input produces identical database bytes.
+    let mut co_change_pairs: Vec<(&(String, String), &i32)> = co_changes.iter().collect();
+    co_change_pairs.sort_unstable_by_key(|(pair, _)| *pair);
     let conn = db.conn();
-    for ((file_a, file_b), changes) in &co_changes {
+    for ((file_a, file_b), changes) in co_change_pairs {
         if *changes < 2 {
             continue;
         }

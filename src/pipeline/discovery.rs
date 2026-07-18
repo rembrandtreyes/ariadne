@@ -1,6 +1,6 @@
 use crate::config::RepoConfig;
 use crate::parse::types::Language;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -147,9 +147,23 @@ pub fn discover(root: &Path, config: &RepoConfig) -> anyhow::Result<DiscoveryRes
         }
     }
 
+    // Order languages (file count desc, name asc): .first() is persisted as
+    // the service's primary_language, so set iteration order must never
+    // decide it — the dominant language should, deterministically.
+    let mut lang_counts: HashMap<Language, usize> = HashMap::new();
+    for file in &files {
+        *lang_counts.entry(file.language).or_insert(0) += 1;
+    }
+    let mut ordered: Vec<Language> = languages.into_iter().collect();
+    ordered.sort_unstable_by(|a, b| {
+        lang_counts[b]
+            .cmp(&lang_counts[a])
+            .then_with(|| a.display_name().cmp(b.display_name()))
+    });
+
     Ok(DiscoveryResult {
         files,
-        languages: languages.into_iter().collect(),
+        languages: ordered,
         frameworks: detect_frameworks(root),
     })
 }

@@ -198,3 +198,31 @@ fn test_batch_resolve_nonexistent_path() {
     let ids = query::resolve_paths_to_symbol_ids(&db, &paths).unwrap();
     assert!(ids.is_empty(), "nonexistent file should return empty");
 }
+
+/// Cycle output must be canonical: symbols sorted within each cycle, cycles
+/// sorted by first symbol — independent of NodeIndex assignment order.
+#[test]
+fn test_circular_detection_deterministic_canonical_order() {
+    let db = Database::open_in_memory().unwrap();
+    let file_id = setup_file(&db);
+
+    // 12 independent two-symbol cycles: P00<->Q00 ... P11<->Q11
+    let mut expected: Vec<Vec<String>> = Vec::new();
+    for i in 0..12 {
+        let p = insert_symbol(&db, &format!("P{i:02}"), file_id);
+        let q = insert_symbol(&db, &format!("Q{i:02}"), file_id);
+        insert_call(&db, p, q, &format!("Q{i:02}"), file_id);
+        insert_call(&db, q, p, &format!("P{i:02}"), file_id);
+        expected.push(vec![format!("mod::P{i:02}"), format!("mod::Q{i:02}")]);
+    }
+
+    for run in 1..=4 {
+        let graph = query::build_call_graph(&db, None).unwrap();
+        let cycles = detect_circular_dependencies(&graph);
+        let got: Vec<Vec<String>> = cycles.iter().map(|c| c.symbols.clone()).collect();
+        assert_eq!(
+            got, expected,
+            "cycle list must be canonical and identical on run {run}"
+        );
+    }
+}

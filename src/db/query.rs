@@ -393,7 +393,10 @@ pub fn build_call_graph(
 
     // Step 3: Load only referenced symbols (batch via IN clause, chunked for SQLite limit)
     let mut graph = CallGraph::new();
-    let id_vec: Vec<i64> = referenced_ids.into_iter().collect();
+    // Sorted: NodeIndex assignment must not follow HashSet iteration order,
+    // or index-ordered consumers (e.g. kosaraju_scc) vary across runs.
+    let mut id_vec: Vec<i64> = referenced_ids.into_iter().collect();
+    id_vec.sort_unstable();
     for chunk in id_vec.chunks(500) {
         let placeholders: String = chunk.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let sql = format!(
@@ -505,7 +508,7 @@ pub fn get_file_couplings(db: &Database, file_id: i64) -> anyhow::Result<Vec<Cou
          JOIN files fa ON c.file_a_id = fa.id
          JOIN files fb ON c.file_b_id = fb.id
          WHERE c.file_a_id = ?1 OR c.file_b_id = ?1
-         ORDER BY c.strength DESC",
+         ORDER BY c.strength DESC, c.file_a_id, c.file_b_id",
     )?;
     let rows = stmt
         .query_map(params![file_id], |row| {
@@ -619,7 +622,7 @@ pub fn get_top_couplings(db: &Database, limit: usize) -> anyhow::Result<Vec<Coup
          FROM coupling c
          JOIN files fa ON c.file_a_id = fa.id
          JOIN files fb ON c.file_b_id = fb.id
-         ORDER BY c.strength DESC
+         ORDER BY c.strength DESC, c.file_a_id, c.file_b_id
          LIMIT ?1",
     )?;
     let rows = stmt
@@ -1362,7 +1365,7 @@ pub fn get_top_coupling_pairs(
          FROM coupling c
          JOIN files fa ON c.file_a_id = fa.id
          JOIN files fb ON c.file_b_id = fb.id
-         ORDER BY c.strength DESC
+         ORDER BY c.strength DESC, c.file_a_id, c.file_b_id
          LIMIT ?1",
     )?;
 
