@@ -197,6 +197,7 @@ impl JavaScriptParser {
                             module_path: module.clone(),
                             line,
                             is_external,
+                            original_name: None,
                         });
                         found_any = true;
                     }
@@ -223,6 +224,7 @@ impl JavaScriptParser {
                 module_path: module,
                 line,
                 is_external,
+                original_name: None,
             });
         }
     }
@@ -251,6 +253,7 @@ impl JavaScriptParser {
                             module_path: module.to_string(),
                             line,
                             is_external,
+                            original_name: None,
                         });
                         *found_any = true;
                     }
@@ -269,6 +272,7 @@ impl JavaScriptParser {
                                     module_path: module.to_string(),
                                     line,
                                     is_external,
+                                    original_name: None,
                                 });
                                 *found_any = true;
                             }
@@ -279,29 +283,36 @@ impl JavaScriptParser {
                     let mut named_cursor = child.walk();
                     for spec in child.children(&mut named_cursor) {
                         if spec.kind() == "import_specifier" {
-                            let imported_name =
-                                if let Some(alias_node) = spec.child_by_field_name("alias") {
-                                    alias_node
-                                        .utf8_text(source.as_bytes())
-                                        .unwrap_or_default()
-                                        .to_string()
-                                } else if let Some(name_node) = spec.child_by_field_name("name") {
-                                    name_node
-                                        .utf8_text(source.as_bytes())
-                                        .unwrap_or_default()
-                                        .to_string()
-                                } else {
+                            // Alias = local binding; name = original exported
+                            // name (kept for symbol resolution).
+                            let name_text = spec.child_by_field_name("name").map(|n| {
+                                n.utf8_text(source.as_bytes())
+                                    .unwrap_or_default()
+                                    .to_string()
+                            });
+                            let alias_text = spec.child_by_field_name("alias").map(|n| {
+                                n.utf8_text(source.as_bytes())
+                                    .unwrap_or_default()
+                                    .to_string()
+                            });
+                            let (imported_name, original_name) = match (alias_text, name_text) {
+                                (Some(alias), orig) => (alias, orig),
+                                (None, Some(name)) => (name, None),
+                                (None, None) => (
                                     spec.utf8_text(source.as_bytes())
                                         .unwrap_or_default()
                                         .trim()
-                                        .to_string()
-                                };
+                                        .to_string(),
+                                    None,
+                                ),
+                            };
                             if !imported_name.is_empty() {
                                 result.imports.push(ParsedImport {
                                     imported_name,
                                     module_path: module.to_string(),
                                     line,
                                     is_external,
+                                    original_name,
                                 });
                                 *found_any = true;
                             }
@@ -352,7 +363,16 @@ impl JavaScriptParser {
                 };
 
                 let value_node = child.child_by_field_name("value");
-                let is_function = value_node.is_some_and(|v| {
+                let unwrapped_value = value_node.map(|mut v| {
+                    while v.kind() == "parenthesized_expression" {
+                        match v.named_child(0) {
+                            Some(inner) => v = inner,
+                            None => break,
+                        }
+                    }
+                    v
+                });
+                let is_function = unwrapped_value.is_some_and(|v| {
                     matches!(
                         v.kind(),
                         "arrow_function" | "function_expression" | "function"
@@ -390,6 +410,23 @@ impl JavaScriptParser {
                 if is_function {
                     if let Some(v) = value_node {
                         Self::extract_symbols(v, source, result, Some(&qualified));
+                    }
+                } else if let Some(v) = unwrapped_value
+                    .filter(|v| matches!(v.kind(), "identifier" | "member_expression"))
+                {
+                    // Aliased reference: `const sanitize = sanitizeForPrompt;`
+                    // — emit alias -> target so references through the alias
+                    // reach the target's caller list.
+                    let target = v
+                        .utf8_text(source.as_bytes())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !target.is_empty() {
+                        result.calls.push(ParsedCall {
+                            caller_name: name.clone(),
+                            callee_name: target,
+                            line: child.start_position().row as u32 + 1,
+                        });
                     }
                 } else {
                     Self::extract_symbols(child, source, result, parent_name);
@@ -537,6 +574,56 @@ impl JavaScriptParser {
             if child.kind() == "export_clause" {
                 has_export_clause = true;
             }
+        }
+
+        // Re-export: `export { a } from './b'` / `export * from './b'` —
+        // references the SOURCE module's symbols; record an import row and
+        // do NOT mark same-named local symbols as exported.
+        if let Some(source_node) = export_node.child_by_field_name("source") {
+            let module = source_node
+                .utf8_text(source.as_bytes())
+                .unwrap_or_default()
+                .trim_matches('\'')
+                .trim_matches('"')
+                .to_string();
+            let is_external = !module.starts_with('.') && !module.starts_with('/');
+            let line = export_node.start_position().row as u32 + 1;
+            let mut found_specifier = false;
+            let mut clause_cursor = export_node.walk();
+            for child in export_node.children(&mut clause_cursor) {
+                if child.kind() == "export_clause" {
+                    let mut spec_cursor = child.walk();
+                    for spec in child.children(&mut spec_cursor) {
+                        if spec.kind() == "export_specifier" {
+                            let name = spec
+                                .child_by_field_name("name")
+                                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                                .unwrap_or_default()
+                                .to_string();
+                            if !name.is_empty() {
+                                result.imports.push(ParsedImport {
+                                    imported_name: name,
+                                    module_path: module.clone(),
+                                    line,
+                                    is_external,
+                                    original_name: None,
+                                });
+                                found_specifier = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if !found_specifier {
+                result.imports.push(ParsedImport {
+                    imported_name: "*".to_string(),
+                    module_path: module,
+                    line,
+                    is_external,
+                    original_name: None,
+                });
+            }
+            return;
         }
 
         if has_export_clause {

@@ -272,21 +272,25 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
     // ------------------------------------------------------------------
     // Pass 0: Import-guided resolution (confidence 0.98)
     // ------------------------------------------------------------------
+    // The call site references the LOCAL binding (i.imported_name); the
+    // symbol in the target file carries the ORIGINAL exported name for
+    // renamed imports (`import { helper as h }`), hence the COALESCE.
     conn.execute_batch(
         "UPDATE calls SET callee_symbol_id = (
             SELECT s.id FROM imports i
             JOIN symbols s ON s.file_id = i.resolved_file_id
-                          AND s.name = i.imported_name
+                          AND s.name = COALESCE(i.original_name, i.imported_name)
             WHERE i.file_id = calls.file_id
               AND i.imported_name = calls.callee_name
               AND i.resolved_file_id IS NOT NULL
+            ORDER BY s.is_exported DESC, s.line_start ASC, s.id ASC
             LIMIT 1
          ), confidence = 0.98, resolution = 'import_guided'
          WHERE callee_symbol_id IS NULL
            AND EXISTS (
                SELECT 1 FROM imports i
                JOIN symbols s ON s.file_id = i.resolved_file_id
-                             AND s.name = i.imported_name
+                             AND s.name = COALESCE(i.original_name, i.imported_name)
                WHERE i.file_id = calls.file_id
                  AND i.imported_name = calls.callee_name
                  AND i.resolved_file_id IS NOT NULL
@@ -424,7 +428,9 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                       WHERE i.file_id = calls.file_id
                         AND i.resolved_file_id IS NOT NULL
                   )
-                ORDER BY s.is_exported DESC
+                ORDER BY s.is_exported DESC,
+                         (SELECT f2.path FROM files f2 WHERE f2.id = s.file_id) ASC,
+                         s.line_start ASC, s.id ASC
                 LIMIT 1
              ), confidence = 0.80, resolution = 'import_file_affinity'
              WHERE callee_symbol_id IS NULL
@@ -456,7 +462,7 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                 JOIN files cf ON calls.file_id = cf.id
                 WHERE s.name = calls.callee_name
                   AND f.service_id = cf.service_id
-                ORDER BY s.is_exported DESC
+                ORDER BY s.is_exported DESC, f.path ASC, s.line_start ASC, s.id ASC
                 LIMIT 1
              ), confidence = 0.75, resolution = 'same_service'
              WHERE callee_symbol_id IS NULL
@@ -483,7 +489,9 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
         "UPDATE calls SET callee_symbol_id = (
                 SELECT s.id FROM symbols s
                 WHERE s.name = calls.callee_name
-                ORDER BY s.is_exported DESC
+                ORDER BY s.is_exported DESC,
+                         (SELECT f2.path FROM files f2 WHERE f2.id = s.file_id) ASC,
+                         s.line_start ASC, s.id ASC
                 LIMIT 1
              ), confidence = 0.5, resolution = 'global'
              WHERE callee_symbol_id IS NULL

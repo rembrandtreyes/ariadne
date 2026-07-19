@@ -50,6 +50,10 @@ pub struct ParsedImport {
     pub module_path: String,
     pub line: u32,
     pub is_external: bool,
+    /// For renamed imports (`import { helper as h }`), the name as exported
+    /// by the source module ("helper"); `imported_name` holds the local
+    /// binding ("h"). None when the import is not renamed.
+    pub original_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

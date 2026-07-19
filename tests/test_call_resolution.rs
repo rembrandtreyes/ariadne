@@ -248,3 +248,180 @@ fn test_stale_resolution_labels_reset_when_target_symbol_vanishes() {
         "confidence must drop with the reset, got {confidence}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Gap 4/5 — renamed imports, route→lib alias edges, dangling imports,
+// deterministic name-fallback tie-breaks
+// ---------------------------------------------------------------------------
+
+/// Helper: run the full pipeline over an ad-hoc TS fixture written to a
+/// tempdir. Returns (db, tempdir guard).
+fn setup_ts_fixture(files: &[(&str, &str)]) -> (Database, tempfile::TempDir) {
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    for (rel, content) in files {
+        let path = tmp.path().join(rel);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, content).unwrap();
+    }
+    let db = Database::open_in_memory().expect("Failed to open in-memory DB");
+    run_full_pipeline(&db, tmp.path(), &RepoConfig::default()).expect("Pipeline should succeed");
+    (db, tmp)
+}
+
+#[test]
+fn test_renamed_import_call_resolves_to_original_symbol() {
+    // `import { helper as h }` + `h()` must produce a call edge to the
+    // `helper` symbol in the target file, import-guided.
+    let (db, _tmp) = setup_ts_fixture(&[
+        ("src/util.ts", "export function helper() { return 1; }\n"),
+        (
+            "src/app.ts",
+            "import { helper as h } from './util';\nexport function run() { return h(); }\n",
+        ),
+    ]);
+    let conn = db.conn();
+    let (resolution, callee_name): (String, String) = conn
+        .query_row(
+            "SELECT c.resolution, s.name FROM calls c
+             JOIN symbols s ON s.id = c.callee_symbol_id
+             WHERE c.callee_name = 'h'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("call h() must resolve to a symbol");
+    assert_eq!(
+        callee_name, "helper",
+        "h() must resolve to the original symbol"
+    );
+    assert_eq!(resolution, "import_guided");
+}
+
+#[test]
+fn test_route_to_lib_call_edge_via_alias_import() {
+    // Next.js shape: route handler imports lib fn via tsconfig alias; the
+    // call edge route→lib must land (this is the timbre analyzeVoice repro).
+    let (db, _tmp) = setup_ts_fixture(&[
+        (
+            "tsconfig.json",
+            r#"{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}"#,
+        ),
+        (
+            "src/lib/voice.ts",
+            "export function analyzeVoice(x: string) { return x; }\n",
+        ),
+        (
+            "src/app/api/voice/route.ts",
+            "import { analyzeVoice } from '@/lib/voice';\n\
+             export async function POST() { return analyzeVoice('a'); }\n",
+        ),
+    ]);
+    let conn = db.conn();
+    let (resolution, target_path): (String, String) = conn
+        .query_row(
+            "SELECT c.resolution, f.path FROM calls c
+             JOIN symbols s ON s.id = c.callee_symbol_id
+             JOIN files f ON f.id = s.file_id
+             JOIN files cf ON cf.id = c.file_id
+             WHERE c.callee_name = 'analyzeVoice' AND cf.path LIKE '%route.ts'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("route call to analyzeVoice must resolve");
+    assert_eq!(target_path, "src/lib/voice.ts");
+    assert_eq!(resolution, "import_guided");
+}
+
+#[test]
+fn test_dangling_import_after_rename_is_queryable() {
+    // After a rename, a stale import of the old name must resolve the FILE
+    // but leave resolved_symbol_id NULL — the queryable dangling signal.
+    let (db, _tmp) = setup_ts_fixture(&[
+        (
+            "src/post.ts",
+            "export function measureContractionRateV2() { return 2; }\n",
+        ),
+        (
+            "src/check.ts",
+            "import { measureContractionRate } from './post';\n\
+             export function probe() { return measureContractionRate; }\n",
+        ),
+    ]);
+    let conn = db.conn();
+    let (resolved_file, resolved_symbol): (Option<i64>, Option<i64>) = conn
+        .query_row(
+            "SELECT resolved_file_id, resolved_symbol_id FROM imports
+             WHERE imported_name = 'measureContractionRate'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("import row exists");
+    assert!(resolved_file.is_some(), "file must resolve");
+    assert!(
+        resolved_symbol.is_none(),
+        "stale symbol name must stay unresolved — that is the dangling-import signal"
+    );
+}
+
+#[test]
+fn test_same_service_fallback_tiebreak_is_path_ordered() {
+    // Two exported symbols share a name in one service; a call with no
+    // import context falls to pass 4 (same_service). The winner must be
+    // decided by (is_exported DESC, path ASC, ...) — never by insert order.
+    let db = Database::open_in_memory().expect("db");
+    let conn = db.conn();
+    conn.execute(
+        "INSERT INTO services (name, type, repo_path) VALUES ('svc', 'monolith', '/tmp/svc')",
+        [],
+    )
+    .unwrap();
+    let mut file_ids = std::collections::HashMap::new();
+    // Insert the LEXICOGRAPHICALLY LATER path first so lowest-rowid != path-asc.
+    for path in ["src/zz_dup.ts", "src/aa_dup.ts", "src/caller.ts"] {
+        conn.execute(
+            "INSERT INTO files (service_id, path, absolute_path, language, last_modified, last_indexed)
+             VALUES (1, ?1, ?1, 'typescript', 0.0, 0.0)",
+            rusqlite::params![path],
+        )
+        .unwrap();
+        file_ids.insert(path, conn.last_insert_rowid());
+    }
+    let mut sym_ids = std::collections::HashMap::new();
+    for (path, name) in [
+        ("src/zz_dup.ts", "dup"),
+        ("src/aa_dup.ts", "dup"),
+        ("src/caller.ts", "caller"),
+    ] {
+        conn.execute(
+            "INSERT INTO symbols (file_id, name, qualified_name, kind, line_start, line_end, is_exported)
+             VALUES (?1, ?2, ?2, 'function', 1, 5, 1)",
+            rusqlite::params![file_ids[path], name],
+        )
+        .unwrap();
+        sym_ids.insert(path, conn.last_insert_rowid());
+    }
+    conn.execute(
+        "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line)
+         VALUES (?1, NULL, 'dup', ?2, 3)",
+        rusqlite::params![sym_ids["src/caller.ts"], file_ids["src/caller.ts"]],
+    )
+    .unwrap();
+
+    resolve_calls(&db).expect("resolve");
+
+    let conn = db.conn();
+    let (winner_path, resolution): (String, String) = conn
+        .query_row(
+            "SELECT f.path, c.resolution FROM calls c
+             JOIN symbols s ON s.id = c.callee_symbol_id
+             JOIN files f ON f.id = s.file_id
+             WHERE c.callee_name = 'dup'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("dup call resolved");
+    assert_eq!(resolution, "same_service");
+    assert_eq!(
+        winner_path, "src/aa_dup.ts",
+        "tie-break must be path-ordered, not insert-ordered"
+    );
+}

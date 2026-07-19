@@ -537,3 +537,145 @@ fn test_clean_source_reports_zero_syntax_errors() {
         .expect("parse succeeds");
     assert_eq!(result.syntax_error_count, 0);
 }
+
+// ---------------------------------------------------------------------------
+// Gap 4 — missing reference edge types (aliased refs, renamed imports,
+// re-exports, const-only exports, type-only imports)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_ts_aliased_reference_emits_call_edge() {
+    // `const sanitize = sanitizeForPrompt;` must produce a reference edge
+    // (ParsedCall) from the alias to the target, or caller lists are floors.
+    let parser = get_parser(Language::TypeScript);
+    let source = "import { sanitizeForPrompt } from './sanitize';\n\
+                  const sanitize = sanitizeForPrompt;\n\
+                  export function run(x: string) { return sanitize(x); }\n";
+    let result = parser.parse_file(source, "aliased.ts").expect("parse");
+    assert!(
+        result
+            .calls
+            .iter()
+            .any(|c| c.callee_name == "sanitizeForPrompt" && c.caller_name == "sanitize"),
+        "alias declarator must emit a call edge alias -> target, got {:?}",
+        result.calls
+    );
+}
+
+#[test]
+fn test_ts_renamed_import_preserves_original_name() {
+    // `import { helper as h }` — the local binding is `h`, but resolution
+    // needs the exported name `helper` to find the symbol in the target file.
+    let parser = get_parser(Language::TypeScript);
+    let source = "import { helper as h } from './util';\nexport const use = () => h();\n";
+    let result = parser.parse_file(source, "renamed.ts").expect("parse");
+    let imp = result
+        .imports
+        .iter()
+        .find(|i| i.imported_name == "h")
+        .expect("local binding `h` must be the imported_name");
+    assert_eq!(
+        imp.original_name.as_deref(),
+        Some("helper"),
+        "renamed import must preserve the original exported name"
+    );
+}
+
+#[test]
+fn test_ts_reexport_creates_import_row_not_local_export() {
+    // `export { a } from './b'` is a RE-export: it must create an import row
+    // for dependency tracking and must NOT mark an unrelated local symbol
+    // named `a` as exported.
+    let parser = get_parser(Language::TypeScript);
+    let source = "const a = 1;\nexport { a } from './b';\n";
+    let result = parser.parse_file(source, "barrel.ts").expect("parse");
+    assert!(
+        result
+            .imports
+            .iter()
+            .any(|i| i.imported_name == "a" && i.module_path == "./b" && !i.is_external),
+        "re-export must create an import row for './b', got {:?}",
+        result.imports
+    );
+    let local = result
+        .symbols
+        .iter()
+        .find(|s| s.name == "a" && s.kind == SymbolKind::Constant)
+        .expect("local const a exists");
+    assert!(
+        !local.is_exported,
+        "re-export from another module must not mark the local `a` as exported"
+    );
+}
+
+#[test]
+fn test_ts_type_reexport_creates_import_row() {
+    let parser = get_parser(Language::TypeScript);
+    let source = "export type { T } from './types';\n";
+    let result = parser.parse_file(source, "barrel.ts").expect("parse");
+    assert!(
+        result
+            .imports
+            .iter()
+            .any(|i| i.imported_name == "T" && i.module_path == "./types"),
+        "type re-export must create an import row, got {:?}",
+        result.imports
+    );
+}
+
+#[test]
+fn test_ts_const_arrow_export_is_function_symbol() {
+    // Pin: `export const f = (x) => ...` is a Function-kind exported symbol.
+    let parser = get_parser(Language::TypeScript);
+    let source = "export const scoreFidelity = (x: number) => x * 2;\n";
+    let result = parser.parse_file(source, "score.ts").expect("parse");
+    let sym = result
+        .symbols
+        .iter()
+        .find(|s| s.name == "scoreFidelity")
+        .expect("symbol exists");
+    assert_eq!(
+        sym.kind,
+        SymbolKind::Function,
+        "arrow const must be Function"
+    );
+    assert!(sym.is_exported);
+}
+
+#[test]
+fn test_ts_satisfies_wrapped_arrow_is_function_symbol() {
+    // `export const f = ((x) => x) satisfies Foo` — unwrap satisfies/as/parens
+    // before deciding the symbol kind.
+    let parser = get_parser(Language::TypeScript);
+    let source = "type F = (x: number) => number;\n\
+                  export const wrapped = ((x: number) => x) satisfies F;\n";
+    let result = parser.parse_file(source, "wrapped.ts").expect("parse");
+    let sym = result
+        .symbols
+        .iter()
+        .find(|s| s.name == "wrapped")
+        .expect("symbol exists");
+    assert_eq!(
+        sym.kind,
+        SymbolKind::Function,
+        "satisfies-wrapped arrow must be Function, got {:?}",
+        sym.kind
+    );
+}
+
+#[test]
+fn test_ts_type_only_import_extracted() {
+    // Pin: `import type { T }` lands in the imports table like a value import.
+    let parser = get_parser(Language::TypeScript);
+    let source =
+        "import type { Config } from './config';\nexport const c: Config = {} as Config;\n";
+    let result = parser.parse_file(source, "typed.ts").expect("parse");
+    assert!(
+        result
+            .imports
+            .iter()
+            .any(|i| i.imported_name == "Config" && i.module_path == "./config"),
+        "type-only import must be extracted, got {:?}",
+        result.imports
+    );
+}

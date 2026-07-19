@@ -273,6 +273,7 @@ impl TypeScriptParser {
                             module_path: module.clone(),
                             line,
                             is_external,
+                            original_name: None,
                         });
                         found_any = true;
                     }
@@ -300,6 +301,7 @@ impl TypeScriptParser {
                 module_path: module,
                 line,
                 is_external,
+                original_name: None,
             });
         }
     }
@@ -329,6 +331,7 @@ impl TypeScriptParser {
                             module_path: module.to_string(),
                             line,
                             is_external,
+                            original_name: None,
                         });
                         *found_any = true;
                     }
@@ -349,6 +352,7 @@ impl TypeScriptParser {
                                     module_path: module.to_string(),
                                     line,
                                     is_external,
+                                    original_name: None,
                                 });
                                 *found_any = true;
                             }
@@ -360,32 +364,39 @@ impl TypeScriptParser {
                     let mut named_cursor = child.walk();
                     for spec in child.children(&mut named_cursor) {
                         if spec.kind() == "import_specifier" {
-                            // If there is an `alias` field, that is the local name.
-                            // The `name` field is the original exported name.
-                            let imported_name =
-                                if let Some(alias_node) = spec.child_by_field_name("alias") {
-                                    alias_node
-                                        .utf8_text(source.as_bytes())
-                                        .unwrap_or_default()
-                                        .to_string()
-                                } else if let Some(name_node) = spec.child_by_field_name("name") {
-                                    name_node
-                                        .utf8_text(source.as_bytes())
-                                        .unwrap_or_default()
-                                        .to_string()
-                                } else {
-                                    // Fallback: use the full text of the specifier
+                            // The `alias` field (if any) is the LOCAL binding;
+                            // the `name` field is the name as exported by the
+                            // source module. Resolution needs both: callers
+                            // reference the local name, but the symbol in the
+                            // target file carries the original name.
+                            let name_text = spec.child_by_field_name("name").map(|n| {
+                                n.utf8_text(source.as_bytes())
+                                    .unwrap_or_default()
+                                    .to_string()
+                            });
+                            let alias_text = spec.child_by_field_name("alias").map(|n| {
+                                n.utf8_text(source.as_bytes())
+                                    .unwrap_or_default()
+                                    .to_string()
+                            });
+                            let (imported_name, original_name) = match (alias_text, name_text) {
+                                (Some(alias), orig) => (alias, orig),
+                                (None, Some(name)) => (name, None),
+                                (None, None) => (
                                     spec.utf8_text(source.as_bytes())
                                         .unwrap_or_default()
                                         .trim()
-                                        .to_string()
-                                };
+                                        .to_string(),
+                                    None,
+                                ),
+                            };
                             if !imported_name.is_empty() {
                                 result.imports.push(ParsedImport {
                                     imported_name,
                                     module_path: module.to_string(),
                                     line,
                                     is_external,
+                                    original_name,
                                 });
                                 *found_any = true;
                             }
@@ -438,9 +449,13 @@ impl TypeScriptParser {
                     None => name.clone(),
                 };
 
-                // Check if the value is an arrow function or function expression
+                // Check if the value is an arrow function or function
+                // expression, unwrapping `satisfies`/`as`/parens first —
+                // `export const f = ((x) => x) satisfies F` is still a
+                // function.
                 let value_node = child.child_by_field_name("value");
-                let is_function = value_node.is_some_and(|v| {
+                let unwrapped_value = value_node.map(Self::unwrap_expression);
+                let is_function = unwrapped_value.is_some_and(|v| {
                     matches!(
                         v.kind(),
                         "arrow_function" | "function_expression" | "function"
@@ -480,12 +495,48 @@ impl TypeScriptParser {
                     if let Some(v) = value_node {
                         Self::extract_symbols(v, source, result, Some(&qualified));
                     }
+                } else if let Some(v) = unwrapped_value
+                    .filter(|v| matches!(v.kind(), "identifier" | "member_expression"))
+                {
+                    // Aliased reference: `const sanitize = sanitizeForPrompt;`
+                    // Emit a call edge alias -> target so references through
+                    // the alias reach the target's caller list instead of
+                    // silently vanishing.
+                    let target = v
+                        .utf8_text(source.as_bytes())
+                        .unwrap_or_default()
+                        .to_string();
+                    if !target.is_empty() {
+                        result.calls.push(ParsedCall {
+                            caller_name: name.clone(),
+                            callee_name: target,
+                            line: child.start_position().row as u32 + 1,
+                        });
+                    }
                 } else {
                     // Still recurse to find nested calls
                     Self::extract_symbols(child, source, result, parent_name);
                 }
             }
         }
+    }
+
+    /// Peel wrapper expressions that carry no runtime meaning for symbol
+    /// classification: `(expr)`, `expr satisfies T`, `expr as T`, `expr!`.
+    fn unwrap_expression(mut node: tree_sitter::Node) -> tree_sitter::Node {
+        while matches!(
+            node.kind(),
+            "parenthesized_expression"
+                | "satisfies_expression"
+                | "as_expression"
+                | "non_null_expression"
+        ) {
+            match node.named_child(0) {
+                Some(inner) => node = inner,
+                None => break,
+            }
+        }
+        node
     }
 
     /// Extract JSX element usage as a call expression.
@@ -579,6 +630,58 @@ impl TypeScriptParser {
             if child.kind() == "export_clause" {
                 has_export_clause = true;
             }
+        }
+
+        // Re-export: `export { a } from './b'` / `export type { T } from './b'`
+        // / `export * from './b'`. These reference the SOURCE module's symbols,
+        // not local ones — record an import row for dependency tracking and do
+        // NOT mark same-named local symbols as exported.
+        if let Some(source_node) = export_node.child_by_field_name("source") {
+            let module = source_node
+                .utf8_text(source.as_bytes())
+                .unwrap_or_default()
+                .trim_matches('\'')
+                .trim_matches('"')
+                .to_string();
+            let is_external = !module.starts_with('.') && !module.starts_with('/');
+            let line = export_node.start_position().row as u32 + 1;
+            let mut found_specifier = false;
+            let mut clause_cursor = export_node.walk();
+            for child in export_node.children(&mut clause_cursor) {
+                if child.kind() == "export_clause" {
+                    let mut spec_cursor = child.walk();
+                    for spec in child.children(&mut spec_cursor) {
+                        if spec.kind() == "export_specifier" {
+                            let name = spec
+                                .child_by_field_name("name")
+                                .and_then(|n| n.utf8_text(source.as_bytes()).ok())
+                                .unwrap_or_default()
+                                .to_string();
+                            if !name.is_empty() {
+                                result.imports.push(ParsedImport {
+                                    imported_name: name,
+                                    module_path: module.clone(),
+                                    line,
+                                    is_external,
+                                    original_name: None,
+                                });
+                                found_specifier = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if !found_specifier {
+                // `export * from './b'` (incl. `export * as ns from './b'`)
+                result.imports.push(ParsedImport {
+                    imported_name: "*".to_string(),
+                    module_path: module,
+                    line,
+                    is_external,
+                    original_name: None,
+                });
+            }
+            return;
         }
 
         if has_export_clause {

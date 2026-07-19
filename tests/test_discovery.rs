@@ -154,6 +154,107 @@ fn test_discover_respects_builtin_excludes() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// .gitignore honoring — root, nested, negation, watch parity
+// (No .git dir is created in these fixtures on purpose: rsync'd repo copies
+// have a .gitignore but no .git, and discovery must still honor it.)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_discover_honors_root_gitignore() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    fs::create_dir_all(root.join("src")).unwrap();
+    fs::create_dir_all(root.join(".claude/worktrees/copy/src")).unwrap();
+    fs::write(root.join(".gitignore"), ".claude/worktrees/\n").unwrap();
+    fs::write(root.join("src/app.ts"), "export function app() {}\n").unwrap();
+    fs::write(
+        root.join(".claude/worktrees/copy/src/app.ts"),
+        "export function app() {}\n",
+    )
+    .unwrap();
+
+    let result = discover(root, &RepoConfig::default()).expect("discover");
+    let paths: Vec<String> = result
+        .files
+        .iter()
+        .map(|f| f.path.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        result.files.len(),
+        1,
+        "gitignored worktree copies must not be discovered, got {paths:?}"
+    );
+}
+
+#[test]
+fn test_discover_honors_nested_gitignore() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    fs::create_dir_all(root.join("src/gen")).unwrap();
+    fs::write(root.join("src/gen/.gitignore"), "local.ts\n").unwrap();
+    fs::write(root.join("src/gen/local.ts"), "export const x = 1;\n").unwrap();
+    fs::write(root.join("src/gen/kept.ts"), "export const y = 2;\n").unwrap();
+
+    let result = discover(root, &RepoConfig::default()).expect("discover");
+    let names: Vec<String> = result
+        .files
+        .iter()
+        .filter_map(|f| f.path.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        !names.contains(&"local.ts".to_string()),
+        "nested .gitignore must exclude local.ts, got {names:?}"
+    );
+    assert!(names.contains(&"kept.ts".to_string()));
+}
+
+#[test]
+fn test_discover_gitignore_negation_reincludes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    fs::create_dir_all(root.join("gen")).unwrap();
+    fs::write(root.join(".gitignore"), "gen/*.py\n!gen/keep.py\n").unwrap();
+    fs::write(root.join("gen/skip.py"), "def skip():\n    pass\n").unwrap();
+    fs::write(root.join("gen/keep.py"), "def keep():\n    pass\n").unwrap();
+
+    let result = discover(root, &RepoConfig::default()).expect("discover");
+    let names: Vec<String> = result
+        .files
+        .iter()
+        .filter_map(|f| f.path.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        names.contains(&"keep.py".to_string()),
+        "negated pattern must re-include keep.py, got {names:?}"
+    );
+    assert!(
+        !names.contains(&"skip.py".to_string()),
+        "gen/*.py must exclude skip.py, got {names:?}"
+    );
+}
+
+#[test]
+fn test_path_filter_gitignore_watch_parity() {
+    // Watch mode admits files through the same PathFilter — a gitignored file
+    // must be rejected by indexable_language, not just by full discovery.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path();
+    fs::create_dir_all(root.join("scratch")).unwrap();
+    fs::write(root.join(".gitignore"), "scratch/\n").unwrap();
+    fs::write(root.join("scratch/tmp.ts"), "export const t = 1;\n").unwrap();
+    fs::write(root.join("main.ts"), "export const m = 1;\n").unwrap();
+
+    let filter = PathFilter::new(root, &RepoConfig::default());
+    assert!(
+        filter
+            .indexable_language(&root.join("scratch/tmp.ts"))
+            .is_none(),
+        "watch path must reject gitignored files"
+    );
+    assert!(filter.indexable_language(&root.join("main.ts")).is_some());
+}
+
 /// languages must be ordered (file count desc, name asc): the first entry is
 /// persisted as the service's primary_language, so set iteration order must
 /// never decide it.

@@ -7,16 +7,9 @@ use super::{get_int_param, get_string_param, AriadneService};
 impl AriadneService {
     pub(crate) fn tool_get_call_chain(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
         match self.with_cached_graph(|graph| {
             Ok(crate::graph::call_chain::extract_call_chain(
@@ -30,16 +23,9 @@ impl AriadneService {
 
     pub(crate) fn tool_blast_radius(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
         match self.with_cached_graph(|graph| {
             Ok(crate::graph::blast_radius::analyze_blast_radius(
@@ -82,27 +68,13 @@ impl AriadneService {
         let from_name = get_string_param(params, "from_symbol");
         let to_name = get_string_param(params, "to_symbol");
 
-        let from_sym = match self.with_db(|db| query::find_symbol_by_name(db, &from_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {from_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let from_sym = match self.resolve_symbol_param(&from_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
-        let to_sym = match self.with_db(|db| query::find_symbol_by_name(db, &to_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {to_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let to_sym = match self.resolve_symbol_param(&to_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
 
         match self.with_cached_graph(|graph| {

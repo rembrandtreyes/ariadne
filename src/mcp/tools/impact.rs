@@ -9,6 +9,20 @@ use crate::db::query;
 
 use super::{get_string_param, AriadneService};
 
+/// Skeleton propose_edit_plan payload for the miss and ambiguity soft replies.
+fn empty_plan_json(summary: String) -> serde_json::Value {
+    serde_json::json!({
+        "symbol": serde_json::Value::Null,
+        "total_dependents": 0,
+        "edit_order": [],
+        "affected_tests": [],
+        "execution_flows": {},
+        "cycle_detected": false,
+        "ordering_strategy": "topological",
+        "summary": summary,
+    })
+}
+
 /// Compute a 0.0–1.0 risk score from raw file signals, with confidence tracking.
 fn compute_risk(data: &query::FileRiskData) -> (f64, f64, String, Vec<&'static str>) {
     let mut available_signals: Vec<&'static str> = Vec::new();
@@ -350,22 +364,32 @@ impl AriadneService {
             return CallToolResult::error(vec![Content::text("symbol parameter is required")]);
         }
 
-        // Resolve the target symbol (structured summary on miss — never tool error).
-        let target = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                let mut result = serde_json::json!({
-                    "symbol": serde_json::Value::Null,
-                    "total_dependents": 0,
-                    "edit_order": [],
-                    "affected_tests": [],
-                    "execution_flows": {},
-                    "cycle_detected": false,
-                    "ordering_strategy": "topological",
-                    "summary": format!("Symbol not found: {symbol_name}"),
-                });
+        // Resolve the target symbol (structured summary on miss or ambiguity —
+        // never tool error).
+        let target = match self.with_db(|db| query::resolve_symbol_by_name(db, &symbol_name, None))
+        {
+            Ok(Ok(query::SymbolResolution::Unique(s))) => s,
+            Ok(Ok(query::SymbolResolution::NotFound)) => {
+                let mut result = empty_plan_json(format!("Symbol not found: {symbol_name}"));
                 // A miss on a dirty index deserves the warning most: the symbol
                 // may be unindexed precisely because its file failed to parse.
+                if let Err(e) = self.attach_parse_warnings(&mut result) {
+                    return CallToolResult::error(vec![Content::text(format!("{e}"))]);
+                }
+                let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
+                return CallToolResult::success(vec![Content::text(json)]);
+            }
+            Ok(Ok(query::SymbolResolution::Ambiguous(candidates))) => {
+                let mut result = empty_plan_json(format!(
+                    "Ambiguous symbol '{symbol_name}': {} matches — re-call with the qualified name of the intended candidate.",
+                    candidates.len()
+                ));
+                if let Some(obj) = result.as_object_mut() {
+                    obj.insert(
+                        "candidates".to_string(),
+                        super::symbol_candidates_json(&candidates),
+                    );
+                }
                 if let Err(e) = self.attach_parse_warnings(&mut result) {
                     return CallToolResult::error(vec![Content::text(format!("{e}"))]);
                 }

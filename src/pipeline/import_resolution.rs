@@ -42,10 +42,19 @@ fn normalize_path(path: &Path) -> PathBuf {
 /// Expand a module path through tsconfig path aliases.
 ///
 /// Given `module_path = "@/components/Button"` and aliases containing
-/// `"@/*" -> "src/*"`, returns `"src/components/Button"`.
+/// `"@/*" -> "src/*"`, returns `Some("src/components/Button")`.
 ///
-/// Returns the original path unchanged if no alias matches.
-fn expand_alias(module_path: &str, aliases: &[(String, String)]) -> String {
+/// Returns `None` when no alias matches. A matched expansion is always
+/// ROOT-relative (tsconfig paths resolve against baseUrl, never against the
+/// importing file), so a leading `./` — common in real tsconfigs, e.g.
+/// `"@/*": ["./src/*"]` — is trimmed off.
+fn expand_alias(module_path: &str, aliases: &[(String, String)]) -> Option<String> {
+    fn root_relative(expanded: String) -> String {
+        expanded
+            .strip_prefix("./")
+            .map(str::to_string)
+            .unwrap_or(expanded)
+    }
     for (pattern, replacement) in aliases {
         if let Some(wildcard_pos) = pattern.find('*') {
             let prefix = &pattern[..wildcard_pos];
@@ -53,17 +62,20 @@ fn expand_alias(module_path: &str, aliases: &[(String, String)]) -> String {
                 if let Some(rep_wildcard_pos) = replacement.find('*') {
                     let rep_prefix = &replacement[..rep_wildcard_pos];
                     let rep_suffix = &replacement[rep_wildcard_pos + 1..];
-                    return format!("{}{}{}", rep_prefix, rest, rep_suffix);
+                    return Some(root_relative(format!(
+                        "{}{}{}",
+                        rep_prefix, rest, rep_suffix
+                    )));
                 } else {
-                    return replacement.clone();
+                    return Some(root_relative(replacement.clone()));
                 }
             }
         } else if module_path == pattern {
             // Exact match (no wildcard)
-            return replacement.clone();
+            return Some(root_relative(replacement.clone()));
         }
     }
-    module_path.to_string()
+    None
 }
 
 /// Load path aliases from tsconfig.json for the first service in the database.
@@ -149,15 +161,20 @@ fn resolve_module_path(
     aliases: &[(String, String)],
     file_paths: &HashMap<String, i64>,
 ) -> Option<i64> {
-    // Step 1: Expand aliases (only for non-relative paths)
-    let expanded = if module_path.starts_with('.') {
-        module_path.to_string()
+    // Step 1: Expand aliases (only for non-relative paths). A matched alias
+    // expansion is root-relative by definition and must NEVER be joined to
+    // the importing file's directory, even if it begins with "./".
+    let (expanded, alias_matched) = if module_path.starts_with('.') {
+        (module_path.to_string(), false)
     } else {
-        expand_alias(module_path, aliases)
+        match expand_alias(module_path, aliases) {
+            Some(e) => (e, true),
+            None => (module_path.to_string(), false),
+        }
     };
 
     // Step 2: Resolve relative path against importing file's directory
-    let resolved = if expanded.starts_with('.') {
+    let resolved = if !alias_matched && expanded.starts_with('.') {
         let base_dir = Path::new(importing_file_path).parent()?;
         base_dir.join(&expanded)
     } else {
@@ -316,15 +333,21 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
         map
     };
 
-    // Get all unresolved internal imports, including the importing file's path
+    // Get all unresolved imports, including the importing file's path.
+    // External-marked rows are included on purpose: parsers classify any
+    // specifier not starting with '.' or '/' as external, which mislabels
+    // tsconfig-alias imports ("@/lib/x"). Those are filtered below to the
+    // alias-matching subset, resolved, and reclassified internal.
     let mut import_stmt = conn.prepare(
-        "SELECT i.id, i.module_path, i.imported_name, i.file_id, f.path
+        "SELECT i.id, i.module_path, i.imported_name, i.file_id, f.path, i.is_external,
+                i.original_name
          FROM imports i
          JOIN files f ON i.file_id = f.id
-         WHERE i.resolved_file_id IS NULL AND i.is_external = 0",
+         WHERE i.resolved_file_id IS NULL",
     )?;
 
-    let imports: Vec<(i64, String, String, i64, String)> = import_stmt
+    #[allow(clippy::type_complexity)]
+    let imports: Vec<(i64, String, String, i64, String, bool, Option<String>)> = import_stmt
         .query_map([], |row| {
             Ok((
                 row.get(0)?,
@@ -332,6 +355,8 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -339,7 +364,23 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
     let mut resolved_count: usize = 0;
     let mut symbol_count: usize = 0;
 
-    for (import_id, module_path, imported_name, file_id, importing_file_path) in &imports {
+    for (
+        import_id,
+        module_path,
+        imported_name,
+        file_id,
+        importing_file_path,
+        is_external,
+        original_name,
+    ) in &imports
+    {
+        // External-marked rows get exactly one chance: a tsconfig alias
+        // match. Bare package specifiers ("react") match no alias and stay
+        // external without any filesystem-shaped lookup.
+        if *is_external && expand_alias(module_path, &aliases).is_none() {
+            continue;
+        }
+
         // Dispatch to language-appropriate resolution
         let lang = file_languages
             .get(file_id)
@@ -353,19 +394,22 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
 
         if let Some(fid) = resolved_file {
             conn.execute(
-                "UPDATE imports SET resolved_file_id = ?1 WHERE id = ?2",
+                "UPDATE imports SET resolved_file_id = ?1, is_external = 0 WHERE id = ?2",
                 params![fid, import_id],
             )?;
             resolved_count += 1;
 
             // Try to resolve the specific symbol within the resolved file.
-            // Match by exported name; for default imports try "default" as well.
+            // The symbol in the target file carries the ORIGINAL exported
+            // name — for renamed imports (`import { helper as h }`) the local
+            // binding "h" won't match, so look up by original_name when set.
+            let lookup_name = original_name.as_deref().unwrap_or(imported_name);
             let resolved_sym: Option<i64> = conn
                 .query_row(
                     "SELECT id FROM symbols
                      WHERE file_id = ?1 AND name = ?2 AND is_exported = 1
                      LIMIT 1",
-                    params![fid, imported_name],
+                    params![fid, lookup_name],
                     |row| row.get(0),
                 )
                 .ok();
@@ -375,7 +419,7 @@ pub fn resolve_imports(db: &Database) -> anyhow::Result<()> {
             let resolved_sym = resolved_sym.or_else(|| {
                 conn.query_row(
                     "SELECT id FROM symbols WHERE file_id = ?1 AND name = ?2 LIMIT 1",
-                    params![fid, imported_name],
+                    params![fid, lookup_name],
                     |row| row.get(0),
                 )
                 .ok()
@@ -502,8 +546,8 @@ mod tests {
     fn expand_alias_matches_wildcard() {
         let aliases = vec![("@/*".to_string(), "src/*".to_string())];
         assert_eq!(
-            expand_alias("@/components/Button", &aliases),
-            "src/components/Button"
+            expand_alias("@/components/Button", &aliases).as_deref(),
+            Some("src/components/Button")
         );
     }
 
@@ -514,21 +558,36 @@ mod tests {
             ("@/*".to_string(), "src/*".to_string()),
         ];
         assert_eq!(
-            expand_alias("@components/Button", &aliases),
-            "src/components/Button"
+            expand_alias("@components/Button", &aliases).as_deref(),
+            Some("src/components/Button")
         );
     }
 
     #[test]
-    fn expand_alias_no_match_returns_original() {
+    fn expand_alias_no_match_returns_none() {
         let aliases = vec![("@/*".to_string(), "src/*".to_string())];
-        assert_eq!(expand_alias("lodash", &aliases), "lodash");
+        assert_eq!(expand_alias("lodash", &aliases), None);
     }
 
     #[test]
     fn expand_alias_exact_match() {
         let aliases = vec![("@config".to_string(), "src/config/index".to_string())];
-        assert_eq!(expand_alias("@config", &aliases), "src/config/index");
+        assert_eq!(
+            expand_alias("@config", &aliases).as_deref(),
+            Some("src/config/index")
+        );
+    }
+
+    #[test]
+    fn expand_alias_trims_dot_slash_replacement() {
+        // Real-world tsconfig form: "@/*": ["./src/*"] — the expansion is
+        // root-relative and must not keep the "./" that would make it look
+        // importer-relative downstream.
+        let aliases = vec![("@/*".to_string(), "./src/*".to_string())];
+        assert_eq!(
+            expand_alias("@/lib/ai/sanitize", &aliases).as_deref(),
+            Some("src/lib/ai/sanitize")
+        );
     }
 
     // --- resolve_module_path tests ---
@@ -680,6 +739,112 @@ mod tests {
         resolve_imports(&db).unwrap();
 
         assert_eq!(get_resolved_file(&db, import_id), Some(index_id));
+    }
+
+    /// A db whose service points at an isolated tempdir carrying a
+    /// timbre-shaped tsconfig ("@/*" -> "./src/*"). Returns the TempDir
+    /// guard so the tsconfig outlives the test body.
+    fn setup_alias_db() -> (Database, tempfile::TempDir) {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("tsconfig.json"),
+            r#"{"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}"#,
+        )
+        .unwrap();
+        let db = Database::open_in_memory().expect("should open in-memory db");
+        db.conn()
+            .execute(
+                "INSERT INTO services (name, type, repo_path) VALUES ('test', 'monolith', ?1)",
+                params![tmp.path().to_string_lossy()],
+            )
+            .unwrap();
+        (db, tmp)
+    }
+
+    #[test]
+    fn integration_resolves_alias_with_dot_slash_replacement() {
+        // timbre-shaped tsconfig: "@/*" -> "./src/*". The expansion begins
+        // with "./" but is ROOT-relative, not importer-relative — resolving
+        // it against the importing file's directory is the bug this test
+        // pins down.
+        let (db, _tmp) = setup_alias_db();
+        let lib_id = insert_file(&db, "src/lib/ai/sanitize.ts");
+        let route_id = insert_file(&db, "src/app/api/generate/route.ts");
+        let sym_id = insert_symbol(&db, lib_id, "sanitizeForPrompt", true);
+        let import_id = insert_import(&db, route_id, "@/lib/ai/sanitize", "sanitizeForPrompt");
+
+        resolve_imports(&db).unwrap();
+
+        assert_eq!(
+            get_resolved_file(&db, import_id),
+            Some(lib_id),
+            "alias expansion with a ./ replacement must resolve root-relative"
+        );
+        assert_eq!(get_resolved_symbol(&db, import_id), Some(sym_id));
+    }
+
+    #[test]
+    fn integration_resolves_alias_import_marked_external() {
+        // Parsers classify any non-'.'/'/' import as external, so "@/lib/x"
+        // arrives with is_external = 1. Resolution must still try alias
+        // expansion for these rows and reclassify them internal on success.
+        let (db, _tmp) = setup_alias_db();
+        let lib_id = insert_file(&db, "src/lib/voice.ts");
+        let route_id = insert_file(&db, "src/app/api/voice/route.ts");
+        let _sym = insert_symbol(&db, lib_id, "analyzeVoice", true);
+        let conn = db.conn();
+        conn.execute(
+            "INSERT INTO imports (file_id, imported_name, module_path, line, is_external)
+             VALUES (?1, 'analyzeVoice', '@/lib/voice', 1, 1)",
+            params![route_id],
+        )
+        .unwrap();
+        let import_id = conn.last_insert_rowid();
+
+        resolve_imports(&db).unwrap();
+
+        assert_eq!(
+            get_resolved_file(&db, import_id),
+            Some(lib_id),
+            "external-marked alias imports must be resolved"
+        );
+        let is_external: i64 = db
+            .conn()
+            .query_row(
+                "SELECT is_external FROM imports WHERE id = ?1",
+                params![import_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            is_external, 0,
+            "resolved alias import must be reclassified internal"
+        );
+    }
+
+    #[test]
+    fn integration_bare_specifier_stays_external() {
+        // A real package import must never be captured by alias resolution,
+        // even when a file with a matching name exists at repo root.
+        let (db, _tmp) = setup_alias_db();
+        let _decoy = insert_file(&db, "react.ts");
+        let app_id = insert_file(&db, "src/App.tsx");
+        let conn = db.conn();
+        conn.execute(
+            "INSERT INTO imports (file_id, imported_name, module_path, line, is_external)
+             VALUES (?1, 'useState', 'react', 1, 1)",
+            params![app_id],
+        )
+        .unwrap();
+        let import_id = conn.last_insert_rowid();
+
+        resolve_imports(&db).unwrap();
+
+        assert_eq!(
+            get_resolved_file(&db, import_id),
+            None,
+            "bare package specifiers must stay unresolved/external"
+        );
     }
 
     #[test]

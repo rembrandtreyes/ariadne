@@ -131,8 +131,8 @@ pub fn insert_imports_batch(
     imports: &[ParsedImport],
 ) -> anyhow::Result<()> {
     let mut stmt = db.conn().prepare(
-        "INSERT INTO imports (file_id, imported_name, module_path, line, is_external)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO imports (file_id, imported_name, module_path, line, is_external, original_name)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
     )?;
 
     for imp in imports {
@@ -142,6 +142,7 @@ pub fn insert_imports_batch(
             imp.module_path,
             imp.line,
             imp.is_external,
+            imp.original_name,
         ])?;
     }
 

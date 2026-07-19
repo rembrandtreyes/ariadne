@@ -45,8 +45,9 @@ pub fn describe_symbol(db: &Database, symbol_id: i64) -> anyhow::Result<Describe
         })
         .unwrap_or(0);
 
-    // Get health data if available
-    let health = query::get_symbol_health_data(db, &sym.name).ok().flatten();
+    // Get health data if available — by resolved symbol, so a bare-name
+    // collision elsewhere in the index can't swap in another symbol's health.
+    let health = query::get_symbol_health_data_for(db, &sym).ok();
 
     let fan_in = health
         .as_ref()

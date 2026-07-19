@@ -256,6 +256,7 @@ impl GoParser {
                     module_path: path_text,
                     line: child.start_position().row as u32 + 1,
                     is_external,
+                    original_name: None,
                 });
             } else if child.kind() == "interpreted_string_literal" {
                 // Single import without import_spec wrapper (e.g., import "fmt")
@@ -270,6 +271,7 @@ impl GoParser {
                         module_path: text,
                         line: child.start_position().row as u32 + 1,
                         is_external: true,
+                        original_name: None,
                     });
                 }
             } else if child.kind() == "import_spec_list" {

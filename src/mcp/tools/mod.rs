@@ -320,6 +320,45 @@ pub(crate) fn get_int_param(params: &CallToolRequestParam, key: &str) -> Option<
         .and_then(|v| v.as_i64())
 }
 
+/// JSON array of resolution candidates, in the resolver's deterministic order.
+pub(crate) fn symbol_candidates_json(candidates: &[query::SymbolCandidate]) -> serde_json::Value {
+    serde_json::Value::Array(
+        candidates
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "id": c.symbol.id,
+                    "name": c.symbol.name,
+                    "qualified_name": c.symbol.qualified_name,
+                    "file": c.file_path,
+                    "line": c.symbol.line_start,
+                    "kind": c.symbol.kind,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Structured error reply for an ambiguous symbol parameter — lists every
+/// candidate so the agent can re-call with a qualified name.
+fn ambiguous_symbol_reply(
+    symbol_name: &str,
+    candidates: &[query::SymbolCandidate],
+) -> CallToolResult {
+    let body = serde_json::json!({
+        "error": "ambiguous_symbol",
+        "symbol": symbol_name,
+        "message": format!(
+            "Ambiguous symbol '{symbol_name}': {} matches. Re-call with the qualified name (or module:name) of the intended candidate.",
+            candidates.len()
+        ),
+        "candidates": symbol_candidates_json(candidates),
+    });
+    CallToolResult::error(vec![Content::text(
+        serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into()),
+    )])
+}
+
 /// Index-wide parse-health block for answer-bearing tools, or `None` when the
 /// index is clean. Files that parsed with syntax errors have missing graph
 /// edges, so impact answers built on them may undercount — the block tells
@@ -389,6 +428,26 @@ impl AriadneService {
             db: Arc::new(Mutex::new(db)),
             graph_cache: Arc::new(Mutex::new(None)),
             cached_generation: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    /// Resolve a `symbol` tool parameter to a unique symbol row, or produce
+    /// the ready-to-send reply for the miss, ambiguous, and error cases.
+    pub(crate) fn resolve_symbol_param(
+        &self,
+        symbol_name: &str,
+    ) -> Result<query::SymbolRow, CallToolResult> {
+        match self.with_db(|db| query::resolve_symbol_by_name(db, symbol_name, None)) {
+            Ok(Ok(query::SymbolResolution::Unique(sym))) => Ok(sym),
+            Ok(Ok(query::SymbolResolution::NotFound)) => {
+                Err(CallToolResult::error(vec![Content::text(format!(
+                    "Symbol not found: {symbol_name}"
+                ))]))
+            }
+            Ok(Ok(query::SymbolResolution::Ambiguous(candidates))) => {
+                Err(ambiguous_symbol_reply(symbol_name, &candidates))
+            }
+            Ok(Err(e)) | Err(e) => Err(CallToolResult::error(vec![Content::text(format!("{e}"))])),
         }
     }
 

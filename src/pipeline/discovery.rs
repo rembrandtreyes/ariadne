@@ -41,16 +41,75 @@ const EXCLUDED_DIRS: &[&str] = &[
 /// Path-acceptance filter shared by full discovery and watch mode, so the
 /// two ingestion paths cannot disagree about what belongs in the index.
 ///
-/// Three layers, all of which must pass for a file to be indexable:
+/// Four layers, all of which must pass for a file to be indexable:
 /// 1. no path component is on the built-in EXCLUDED_DIRS list,
 /// 2. no path component exactly equals a user exclude pattern (the
 ///    historical `exclude = ["vendor"]` form),
 /// 3. the path relative to the root does not match any user glob pattern
-///    (the documented `exclude = ["vendor/**", "generated/**"]` form).
+///    (the documented `exclude = ["vendor/**", "generated/**"]` form),
+/// 4. the path is not ignored by the repo's .gitignore files (root or
+///    nested). Only in-repo .gitignore files are honored — never the user's
+///    global gitignore or .git/info/exclude, which vary by machine and would
+///    make two indexes of the same tree disagree. A .git directory is NOT
+///    required (rsync'd repo copies carry .gitignore but no .git).
 pub struct PathFilter {
     root: PathBuf,
     extra_names: Vec<String>,
     globs: Option<globset::GlobSet>,
+    /// (base dir, matcher) pairs, deepest base first so the most specific
+    /// .gitignore is consulted first — the first definitive verdict wins.
+    gitignores: Vec<(PathBuf, ignore::gitignore::Gitignore)>,
+}
+
+/// Collect every .gitignore in the tree (pruning built-in excluded dirs) and
+/// compile each with its containing directory as the match base. A .gitignore
+/// that is itself inside a gitignored directory is skipped, so a vendored or
+/// worktree-copied repo cannot re-include its own files.
+fn collect_gitignores(root: &Path) -> Vec<(PathBuf, ignore::gitignore::Gitignore)> {
+    let mut gitignore_paths: Vec<PathBuf> = WalkDir::new(root)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            e.depth() == 0 || !EXCLUDED_DIRS.contains(&name.as_ref())
+        })
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file() && e.file_name() == ".gitignore")
+        .map(|e| e.path().to_path_buf())
+        .collect();
+    // Shallowest first so parent matchers exist before nested ones are vetted.
+    gitignore_paths.sort_by_key(|p| (p.components().count(), p.clone()));
+
+    let mut matchers: Vec<(PathBuf, ignore::gitignore::Gitignore)> = Vec::new();
+    for gi_path in gitignore_paths {
+        let base = match gi_path.parent() {
+            Some(b) => b.to_path_buf(),
+            None => continue,
+        };
+        // Skip .gitignore files living under an already-ignored directory.
+        let ignored_by_parents = matchers.iter().any(|(mbase, m)| {
+            gi_path
+                .strip_prefix(mbase)
+                .ok()
+                .map(|rel| m.matched_path_or_any_parents(rel, false).is_ignore())
+                .unwrap_or(false)
+        });
+        if ignored_by_parents {
+            continue;
+        }
+        let (matcher, err) = ignore::gitignore::Gitignore::new(&gi_path);
+        if let Some(err) = err {
+            tracing::warn!(path = %gi_path.display(), error = %err, "partially invalid .gitignore");
+        }
+        matchers.push((base, matcher));
+    }
+    // Deepest base first for lookups: most specific .gitignore wins.
+    matchers.sort_by(|a, b| {
+        b.0.components()
+            .count()
+            .cmp(&a.0.components().count())
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    matchers
 }
 
 impl PathFilter {
@@ -75,7 +134,30 @@ impl PathFilter {
             root: root.to_path_buf(),
             extra_names: patterns,
             globs,
+            gitignores: collect_gitignores(root),
         }
+    }
+
+    /// True when the path is excluded by a .gitignore. Matchers are consulted
+    /// deepest-first; the first definitive verdict (ignore or whitelist) wins.
+    pub fn is_gitignored(&self, path: &Path, is_dir: bool) -> bool {
+        let abs;
+        let path = if path.is_absolute() {
+            path
+        } else {
+            abs = self.root.join(path);
+            &abs
+        };
+        for (base, matcher) in &self.gitignores {
+            if let Ok(rel) = path.strip_prefix(base) {
+                match matcher.matched_path_or_any_parents(rel, is_dir) {
+                    ignore::Match::Ignore(_) => return true,
+                    ignore::Match::Whitelist(_) => return false,
+                    ignore::Match::None => {}
+                }
+            }
+        }
+        false
     }
 
     /// True when a single path component (directory or file name) is
@@ -101,6 +183,9 @@ impl PathFilter {
             if globs.is_match(relative) {
                 return None;
             }
+        }
+        if self.is_gitignored(path, false) {
+            return None;
         }
         Some(lang)
     }
@@ -130,10 +215,15 @@ pub fn discover(root: &Path, config: &RepoConfig) -> anyhow::Result<DiscoveryRes
     let filter = PathFilter::new(root, config);
 
     for entry in WalkDir::new(root).into_iter().filter_entry(|e| {
-        // Name-based pruning only — glob patterns are checked per file below,
-        // where the root-relative path is available.
+        // Name-based + gitignore pruning — glob patterns are checked per file
+        // below, where the root-relative path is available. Gitignored
+        // directories are pruned here so huge ignored trees (worktree copies,
+        // build output) are never descended into.
         let name = e.file_name().to_string_lossy();
-        !filter.is_excluded_component(&name)
+        if filter.is_excluded_component(&name) {
+            return false;
+        }
+        e.depth() == 0 || !filter.is_gitignored(e.path(), e.file_type().is_dir())
     }) {
         let entry = entry?;
         if entry.file_type().is_file() {

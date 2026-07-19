@@ -40,16 +40,136 @@ fn row_to_symbol(row: &rusqlite::Row<'_>) -> rusqlite::Result<SymbolRow> {
     })
 }
 
-/// Find symbols by exact name.
-pub fn get_symbol_by_name(db: &Database, name: &str) -> anyhow::Result<Vec<SymbolRow>> {
-    let mut stmt = db.conn().prepare(
-        "SELECT id, file_id, name, qualified_name, kind, line_start, line_end, is_dead, is_test
-         FROM symbols WHERE name = ?1",
-    )?;
+/// A resolution candidate: the symbol row plus the file path an agent or user
+/// needs to tell same-name symbols apart.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolCandidate {
+    pub symbol: SymbolRow,
+    pub file_path: String,
+}
+
+/// Outcome of resolving a symbol name against the index.
+#[derive(Debug, Clone)]
+pub enum SymbolResolution {
+    Unique(SymbolRow),
+    Ambiguous(Vec<SymbolCandidate>),
+    NotFound,
+}
+
+const CANDIDATE_SELECT: &str = "SELECT s.id, s.file_id, s.name, s.qualified_name, s.kind, \
+     s.line_start, s.line_end, s.is_dead, s.is_test, f.path \
+     FROM symbols s JOIN files f ON f.id = s.file_id";
+
+const CANDIDATE_ORDER: &str = "ORDER BY f.path, s.line_start, s.id";
+
+fn row_to_candidate(row: &rusqlite::Row<'_>) -> rusqlite::Result<SymbolCandidate> {
+    Ok(SymbolCandidate {
+        symbol: row_to_symbol(row)?,
+        file_path: row.get(9)?,
+    })
+}
+
+/// All candidates for a name, in deterministic (file path, line, id) order.
+///
+/// Pass 1 matches exact name or qualified_name. On a miss, pass 2 takes the
+/// trailing `:`-segment ("module:func" → "func") and matches it as a bare
+/// name or as a separator-bounded qualified_name suffix.
+fn symbol_candidates(db: &Database, name: &str) -> anyhow::Result<Vec<SymbolCandidate>> {
+    let mut stmt = db.conn().prepare(&format!(
+        "{CANDIDATE_SELECT} WHERE s.name = ?1 OR s.qualified_name = ?1 {CANDIDATE_ORDER}"
+    ))?;
     let rows = stmt
-        .query_map(params![name], row_to_symbol)?
+        .query_map(params![name], row_to_candidate)?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !rows.is_empty() {
+        return Ok(rows);
+    }
+
+    let suffix = name.split(':').next_back().unwrap_or(name);
+    if suffix.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut stmt2 = db.conn().prepare(&format!(
+        "{CANDIDATE_SELECT} WHERE s.name = ?1 \
+         OR s.qualified_name LIKE '%.' || ?1 \
+         OR s.qualified_name LIKE '%:' || ?1 \
+         OR s.qualified_name LIKE '%/' || ?1 {CANDIDATE_ORDER}"
+    ))?;
+    let rows = stmt2
+        .query_map(params![suffix], row_to_candidate)?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
+}
+
+/// Fold `::`, `:`, and `/` qualifiers into `.` so "orders:process" can be
+/// compared against a stored qualified_name like "orders.process".
+fn normalize_qualifiers(s: &str) -> String {
+    s.replace("::", ".").replace([':', '/'], ".")
+}
+
+/// Resolve a symbol name to `Unique`, `Ambiguous` (all candidates, ordered by
+/// file path, line, id), or `NotFound`.
+///
+/// Before declaring ambiguity, two narrowing steps run: a candidate whose
+/// qualified_name matches the query (exactly, or qualifier-normalized as a
+/// full name or dot-bounded suffix) wins when it is the only such match; then
+/// `file_hint` (path suffix match) filters the field — a hint that eliminates
+/// every candidate is ignored rather than turning a collision into a miss.
+pub fn resolve_symbol_by_name(
+    db: &Database,
+    name: &str,
+    file_hint: Option<&str>,
+) -> anyhow::Result<SymbolResolution> {
+    let mut candidates = symbol_candidates(db, name)?;
+    if candidates.is_empty() {
+        return Ok(SymbolResolution::NotFound);
+    }
+    if candidates.len() == 1 {
+        return Ok(SymbolResolution::Unique(candidates.remove(0).symbol));
+    }
+
+    let exact: Vec<usize> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.symbol.qualified_name == name)
+        .map(|(i, _)| i)
+        .collect();
+    if let [only] = exact[..] {
+        return Ok(SymbolResolution::Unique(candidates.remove(only).symbol));
+    }
+
+    let normalized = normalize_qualifiers(name);
+    let qualified: Vec<usize> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| {
+            let q = normalize_qualifiers(&c.symbol.qualified_name);
+            q == normalized || q.ends_with(&format!(".{normalized}"))
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if let [only] = qualified[..] {
+        return Ok(SymbolResolution::Unique(candidates.remove(only).symbol));
+    }
+
+    if let Some(hint) = file_hint {
+        let narrowed: Vec<SymbolCandidate> = candidates
+            .iter()
+            .filter(|c| c.file_path.ends_with(hint))
+            .cloned()
+            .collect();
+        match narrowed.len() {
+            0 => {}
+            1 => {
+                return Ok(SymbolResolution::Unique(
+                    narrowed.into_iter().next().expect("len checked").symbol,
+                ))
+            }
+            _ => return Ok(SymbolResolution::Ambiguous(narrowed)),
+        }
+    }
+
+    Ok(SymbolResolution::Ambiguous(candidates))
 }
 
 /// Returns symbols that CALL `symbol_id` (upstream callers / dependents).
@@ -235,30 +355,15 @@ pub fn symbol_by_id(db: &Database, symbol_id: i64) -> anyhow::Result<Option<Symb
     }
 }
 
-/// Find a symbol by name (first match).
+/// Find a symbol by name. Collisions resolve to the first candidate in
+/// deterministic (file path, line, id) order — callers that need to surface
+/// ambiguity should use [`resolve_symbol_by_name`] instead.
 pub fn find_symbol_by_name(db: &Database, name: &str) -> anyhow::Result<Option<SymbolRow>> {
-    // Try exact match first
-    let mut stmt = db.conn().prepare(
-        "SELECT id, file_id, name, qualified_name, kind, line_start, line_end, is_dead, is_test
-         FROM symbols WHERE name = ?1 OR qualified_name = ?1 LIMIT 1",
-    )?;
-    let mut rows = stmt.query(params![name])?;
-    match rows.next()? {
-        Some(row) => Ok(Some(row_to_symbol(row)?)),
-        None => {
-            // Try suffix match (e.g., "module:func" -> qualified_name LIKE "%func")
-            let suffix = name.split(':').next_back().unwrap_or(name);
-            let mut stmt2 = db.conn().prepare(
-                "SELECT id, file_id, name, qualified_name, kind, line_start, line_end, is_dead, is_test
-                 FROM symbols WHERE name = ?1 LIMIT 1",
-            )?;
-            let mut rows2 = stmt2.query(params![suffix])?;
-            match rows2.next()? {
-                Some(row) => Ok(Some(row_to_symbol(row)?)),
-                None => Ok(None),
-            }
-        }
-    }
+    Ok(match resolve_symbol_by_name(db, name, None)? {
+        SymbolResolution::Unique(sym) => Some(sym),
+        SymbolResolution::Ambiguous(mut candidates) => Some(candidates.remove(0).symbol),
+        SymbolResolution::NotFound => None,
+    })
 }
 
 /// Get the file path for a given file_id.
@@ -948,15 +1053,23 @@ pub struct SymbolHealthData {
 }
 
 /// Get health signal data for a symbol by name: fan-in, fan-out, and temporal history.
+/// Name collisions resolve to the first candidate in deterministic order; use
+/// [`resolve_symbol_by_name`] + [`get_symbol_health_data_for`] to surface ambiguity.
 pub fn get_symbol_health_data(
     db: &Database,
     name: &str,
 ) -> anyhow::Result<Option<SymbolHealthData>> {
-    let sym = find_symbol_by_name(db, name)?;
-    let sym = match sym {
-        Some(s) => s,
-        None => return Ok(None),
-    };
+    match find_symbol_by_name(db, name)? {
+        Some(sym) => Ok(Some(get_symbol_health_data_for(db, &sym)?)),
+        None => Ok(None),
+    }
+}
+
+/// Get health signal data for an already-resolved symbol.
+pub fn get_symbol_health_data_for(
+    db: &Database,
+    sym: &SymbolRow,
+) -> anyhow::Result<SymbolHealthData> {
     let file_path = file_path_by_id(db, sym.file_id).unwrap_or_else(|_| "unknown".into());
 
     let fan_in: i64 = db.conn().query_row(
@@ -986,11 +1099,11 @@ pub fn get_symbol_health_data(
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )?;
 
-    Ok(Some(SymbolHealthData {
+    Ok(SymbolHealthData {
         id: sym.id,
-        name: sym.name,
-        qualified_name: sym.qualified_name,
-        kind: sym.kind,
+        name: sym.name.clone(),
+        qualified_name: sym.qualified_name.clone(),
+        kind: sym.kind.clone(),
         file_path,
         line_start: sym.line_start,
         line_end: sym.line_end,
@@ -1001,7 +1114,7 @@ pub fn get_symbol_health_data(
         author_count,
         is_volatile,
         has_history,
-    }))
+    })
 }
 
 /// Get symbols ranked by combined complexity signals (fan-in + fan-out + volatility).

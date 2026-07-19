@@ -151,6 +151,7 @@ impl PhpParser {
                         module_path: module,
                         line: child.start_position().row as u32 + 1,
                         is_external: true,
+                        original_name: None,
                     });
                 }
                 "trait_declaration" => {

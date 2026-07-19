@@ -268,6 +268,7 @@ impl RustParser {
                                     module_path: format!("{}::{}", base_path, name),
                                     line,
                                     is_external,
+                                    original_name: None,
                                 });
                             }
                         }
@@ -279,6 +280,7 @@ impl RustParser {
                             module_path: module,
                             line,
                             is_external,
+                            original_name: None,
                         });
                     }
                 }

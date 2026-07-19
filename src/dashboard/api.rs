@@ -15,11 +15,24 @@ use crate::db::Database;
 /// We open a fresh read connection per request since rusqlite::Connection is !Send.
 pub type DbState = Arc<PathBuf>;
 
+/// A symbol-resolution candidate surfaced when a queried name is ambiguous.
+#[derive(Debug, Clone, Serialize)]
+pub struct SymbolCandidateJson {
+    pub id: i64,
+    pub name: String,
+    pub qualified_name: String,
+    pub file: String,
+    pub line: u32,
+    pub kind: String,
+}
+
 /// API error with sanitized message — never leaks file paths or internals.
 #[derive(Debug, Serialize)]
 pub struct ApiError {
     pub code: &'static str,
     pub message: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub candidates: Option<Vec<SymbolCandidateJson>>,
 }
 
 impl ApiError {
@@ -27,6 +40,27 @@ impl ApiError {
         Self {
             code: "query_failed",
             message,
+            candidates: None,
+        }
+    }
+
+    fn ambiguous_symbol(candidates: &[crate::db::query::SymbolCandidate]) -> Self {
+        Self {
+            code: "ambiguous_symbol",
+            message: "Ambiguous symbol name. Re-request with the qualified name of the intended candidate.",
+            candidates: Some(
+                candidates
+                    .iter()
+                    .map(|c| SymbolCandidateJson {
+                        id: c.symbol.id,
+                        name: c.symbol.name.clone(),
+                        qualified_name: c.symbol.qualified_name.clone(),
+                        file: c.file_path.clone(),
+                        line: c.symbol.line_start,
+                        kind: c.symbol.kind.clone(),
+                    })
+                    .collect(),
+            ),
         }
     }
 }
@@ -45,6 +79,7 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let status = match self.code {
             "db_unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+            "ambiguous_symbol" => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, Json(self)).into_response()
@@ -55,7 +90,27 @@ fn open_db(state: &DbState) -> Result<Database, ApiError> {
     Database::open(state.as_ref()).map_err(|_| ApiError {
         code: "db_unavailable",
         message: "Database is unavailable. Ensure ariadne index has been run.",
+        candidates: None,
     })
+}
+
+/// Resolve a symbol name for a dashboard endpoint: `Ok(Some)` on a unique
+/// match, `Ok(None)` on a miss (handlers keep their structured-200 miss
+/// contract), `Err(409)` with the candidate list on ambiguity.
+fn resolve_endpoint_symbol(
+    db: &Database,
+    name: &str,
+    context: &'static str,
+) -> Result<Option<crate::db::query::SymbolRow>, ApiError> {
+    match crate::db::query::resolve_symbol_by_name(db, name, None)
+        .map_err(log_query_failure(context))?
+    {
+        crate::db::query::SymbolResolution::Unique(sym) => Ok(Some(sym)),
+        crate::db::query::SymbolResolution::NotFound => Ok(None),
+        crate::db::query::SymbolResolution::Ambiguous(candidates) => {
+            Err(ApiError::ambiguous_symbol(&candidates))
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -714,11 +769,10 @@ pub async fn dependency_path(
     let db = open_db(&db_path)?;
 
     // Resolve symbol names to IDs; missing symbols return a structured miss
-    // (HTTP 200) so dashboards can render "not found" without a 5xx.
-    let from_sym = crate::db::query::find_symbol_by_name(&db, &query.from)
-        .map_err(log_query_failure("Failed to resolve 'from' symbol."))?;
-    let to_sym = crate::db::query::find_symbol_by_name(&db, &query.to)
-        .map_err(log_query_failure("Failed to resolve 'to' symbol."))?;
+    // (HTTP 200) so dashboards can render "not found" without a 5xx, while an
+    // ambiguous name is a 409 listing the candidates.
+    let from_sym = resolve_endpoint_symbol(&db, &query.from, "Failed to resolve 'from' symbol.")?;
+    let to_sym = resolve_endpoint_symbol(&db, &query.to, "Failed to resolve 'to' symbol.")?;
 
     let (from_sym, to_sym) = match (from_sym, to_sym) {
         (Some(f), Some(t)) => (f, t),
@@ -854,9 +908,9 @@ pub async fn propose_edit_plan(
     let db = open_db(&db_path)?;
 
     // Resolve target — missing symbol returns a structured 200 (mirrors
-    // dependency_path so dashboards can render "not found" without a 5xx).
-    let target = crate::db::query::find_symbol_by_name(&db, &query.symbol)
-        .map_err(log_query_failure("Failed to resolve symbol."))?;
+    // dependency_path so dashboards can render "not found" without a 5xx);
+    // an ambiguous name is a 409 listing the candidates.
+    let target = resolve_endpoint_symbol(&db, &query.symbol, "Failed to resolve symbol.")?;
     let target = match target {
         Some(t) => t,
         None => {

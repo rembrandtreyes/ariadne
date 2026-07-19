@@ -32,10 +32,11 @@ impl AriadneService {
 
     pub(crate) fn tool_get_context(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
+        };
         match self.with_db(|db| {
-            let sym = query::find_symbol_by_name(db, &symbol_name)?;
-            let sym = sym.ok_or_else(|| anyhow::anyhow!("Symbol not found: {symbol_name}"))?;
-
             let file_path = query::file_path_by_id(db, sym.file_id)?;
             let dependents = query::get_dependents(db, sym.id)?;
             let dependencies = query::get_dependencies(db, sym.id)?;
@@ -80,11 +81,11 @@ impl AriadneService {
 
     pub(crate) fn tool_get_dependents(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        match self.with_db(|db| {
-            let sym = query::find_symbol_by_name(db, &symbol_name)?
-                .ok_or_else(|| anyhow::anyhow!("Symbol not found: {symbol_name}"))?;
-            query::get_dependents(db, sym.id)
-        }) {
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
+        };
+        match self.with_db(|db| query::get_dependents(db, sym.id)) {
             Ok(Ok(deps)) => {
                 let json = serde_json::to_string_pretty(&deps).unwrap_or_else(|_| "[]".into());
                 CallToolResult::success(vec![Content::text(json)])
@@ -96,11 +97,11 @@ impl AriadneService {
 
     pub(crate) fn tool_get_dependencies(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        match self.with_db(|db| {
-            let sym = query::find_symbol_by_name(db, &symbol_name)?
-                .ok_or_else(|| anyhow::anyhow!("Symbol not found: {symbol_name}"))?;
-            query::get_dependencies(db, sym.id)
-        }) {
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
+        };
+        match self.with_db(|db| query::get_dependencies(db, sym.id)) {
             Ok(Ok(deps)) => {
                 let json = serde_json::to_string_pretty(&deps).unwrap_or_else(|_| "[]".into());
                 CallToolResult::success(vec![Content::text(json)])
@@ -112,16 +113,9 @@ impl AriadneService {
 
     pub(crate) fn tool_why_symbol(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
 
         // Get callers, callees, and file path from DB — errors surface rather
@@ -185,16 +179,9 @@ impl AriadneService {
 
     pub(crate) fn tool_get_heritage(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
         match self.with_db(|db| query::get_heritage(db, sym.id)) {
             Ok(Ok(rows)) => {
@@ -240,16 +227,9 @@ impl AriadneService {
 
     pub(crate) fn tool_get_symbol_history(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
 
         let file_path = match self.with_db(|db| query::file_path_by_id(db, sym.file_id)) {
@@ -302,16 +282,9 @@ impl AriadneService {
 
     pub(crate) fn tool_get_execution_flows(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        let sym = match self.with_db(|db| query::find_symbol_by_name(db, &symbol_name)) {
-            Ok(Ok(Some(s))) => s,
-            Ok(Ok(None)) => {
-                return CallToolResult::error(vec![Content::text(format!(
-                    "Symbol not found: {symbol_name}"
-                ))])
-            }
-            Ok(Err(e)) | Err(e) => {
-                return CallToolResult::error(vec![Content::text(format!("{e}"))])
-            }
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
         };
         match self.with_db(|db| query::get_execution_flows(db, sym.id)) {
             Ok(Ok(steps)) => {
@@ -349,8 +322,12 @@ impl AriadneService {
 
     pub(crate) fn tool_get_symbol_health(&self, params: &CallToolRequestParam) -> CallToolResult {
         let symbol_name = get_string_param(params, "symbol");
-        match self.with_db(|db| query::get_symbol_health_data(db, &symbol_name)) {
-            Ok(Ok(Some(data))) => {
+        let sym = match self.resolve_symbol_param(&symbol_name) {
+            Ok(s) => s,
+            Err(reply) => return reply,
+        };
+        match self.with_db(|db| query::get_symbol_health_data_for(db, &sym)) {
+            Ok(Ok(data)) => {
                 let stability_score = 1.0
                     - ((data.modification_count as f64 / 30.0) * 0.5
                         + (data.author_count as f64 / 10.0) * 0.3
@@ -425,9 +402,6 @@ impl AriadneService {
                 let json = serde_json::to_string_pretty(&result).unwrap_or_else(|_| "{}".into());
                 CallToolResult::success(vec![Content::text(json)])
             }
-            Ok(Ok(None)) => CallToolResult::error(vec![Content::text(format!(
-                "Symbol not found: {symbol_name}"
-            ))]),
             Ok(Err(e)) => {
                 CallToolResult::error(vec![Content::text(format!("Health query failed: {e}"))])
             }

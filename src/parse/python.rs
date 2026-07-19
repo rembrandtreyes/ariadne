@@ -88,6 +88,7 @@ impl PythonParser {
                         module_path: module_path.clone(),
                         line,
                         is_external: !is_relative,
+                        original_name: None,
                     });
                 }
                 "aliased_import" => {
@@ -108,6 +109,7 @@ impl PythonParser {
                         module_path: module_path.clone(),
                         line,
                         is_external: !is_relative,
+                        original_name: None,
                     });
                 }
                 "wildcard_import" => {
@@ -116,6 +118,7 @@ impl PythonParser {
                         module_path: module_path.clone(),
                         line,
                         is_external: !is_relative,
+                        original_name: None,
                     });
                 }
                 _ => {}
@@ -129,6 +132,7 @@ impl PythonParser {
                 module_path,
                 line,
                 is_external: !is_relative,
+                original_name: None,
             });
         }
 
@@ -153,6 +157,7 @@ impl PythonParser {
                         module_path: module,
                         line,
                         is_external: true,
+                        original_name: None,
                     });
                 }
                 "aliased_import" => {
@@ -172,6 +177,7 @@ impl PythonParser {
                         module_path: module,
                         line,
                         is_external: true,
+                        original_name: None,
                     });
                 }
                 _ => {}

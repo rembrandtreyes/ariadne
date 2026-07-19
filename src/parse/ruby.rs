@@ -152,6 +152,7 @@ impl RubyParser {
                                     module_path: text,
                                     line: child.start_position().row as u32 + 1,
                                     is_external: !is_relative,
+                                    original_name: None,
                                 });
                             }
                         } else if callee == "attr_accessor"

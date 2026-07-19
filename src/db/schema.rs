@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS imports (
     resolved_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
     resolved_symbol_id INTEGER REFERENCES symbols(id) ON DELETE SET NULL,
     line INTEGER NOT NULL,
-    is_external BOOLEAN DEFAULT FALSE
+    is_external BOOLEAN DEFAULT FALSE,
+    original_name TEXT
 );
 
 -- Calls table
@@ -226,6 +227,17 @@ pub fn create_tables(conn: &Connection) -> anyhow::Result<()> {
             "ALTER TABLE files ADD COLUMN parse_error_count INTEGER NOT NULL DEFAULT 0",
             [],
         )?;
+    }
+
+    // imports.original_name postdates shipped databases (renamed-import
+    // support: `import { helper as h }` stores local binding + original name).
+    let has_original_name: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('imports') WHERE name = 'original_name'",
+        [],
+        |row| row.get(0),
+    )?;
+    if !has_original_name {
+        conn.execute("ALTER TABLE imports ADD COLUMN original_name TEXT", [])?;
     }
 
     // FTS5 virtual table for hybrid search
