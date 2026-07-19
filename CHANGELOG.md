@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+**Five reference-truth substrate gaps** (each with red-first regression tests;
+found by a blinded head-to-head eval against agent+ripgrep on a real Next.js
+repo):
+
+- Discovery and watch mode now honor in-repo `.gitignore` files (root and
+  nested, negation patterns, no `.git` directory required) — a gitignored
+  worktree tree no longer pollutes the index with duplicate repo copies.
+  The user's global gitignore and `.git/info/exclude` are deliberately NOT
+  honored: they vary by machine and would make identical trees index
+  differently
+- tsconfig path-alias imports (`@/lib/x`) now resolve end-to-end: parsers
+  classify them external (they can't know the aliases), so resolution now
+  gives external-marked rows one alias-match chance and reclassifies them
+  internal on success; alias expansions are root-relative (a `./src/*`
+  replacement is no longer joined to the importing file's directory). On a
+  790-file Next.js repo this took `@/` import resolution from 0 to 2,579/2,579
+  and made route→lib call edges land (no more false "test-only caller"
+  verdicts)
+- Symbol-name collisions no longer resolve silently to the lowest rowid:
+  a collision-aware resolver returns Unique/Ambiguous/NotFound with
+  deterministic (path, line, id) candidate order; the CLI prints the candidate
+  list and exits nonzero, MCP tools return a structured `ambiguous_symbol`
+  payload, and the dashboard returns 409 with candidates
+- Missing reference edge types: aliased references (`const x = fn`) now emit
+  an edge; renamed imports (`import { helper as h }`) keep the original
+  exported name (new `imports.original_name` column + migration) through
+  import and call resolution; re-exports (`export { a } from './b'`) create
+  import rows instead of wrongly marking same-named locals as exported;
+  `satisfies`/`as`/parenthesized arrow values still classify as functions
+- Name-fallback resolution passes (import-file-affinity, same-service,
+  global) gained total deterministic tie-breaks (is_exported, path, line, id)
+  instead of implicit rowid order
+
 **Deterministic output across runs** — identical input now produces identical
 output on every surface; the hash-iteration-order bug class was swept from the
 whole pipeline (each fix carries a red-first regression test):
