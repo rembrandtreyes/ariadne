@@ -657,8 +657,12 @@ impl JavaScriptParser {
         } else {
             Self::extract_symbols(export_node, source, result, parent_name);
 
+            // Only symbols declared at this export's scope — never nested
+            // body locals (see typescript.rs extract_export).
             for sym in result.symbols[symbols_before..].iter_mut() {
-                sym.is_exported = true;
+                if sym.parent_name.as_deref() == parent_name {
+                    sym.is_exported = true;
+                }
             }
 
             if has_default && result.symbols.len() == symbols_before {

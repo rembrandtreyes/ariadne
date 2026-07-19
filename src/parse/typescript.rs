@@ -719,9 +719,14 @@ impl TypeScriptParser {
             // Recurse into the export statement to extract child declarations
             Self::extract_symbols(export_node, source, result, parent_name);
 
-            // Mark all symbols that were added during this export as exported
+            // Mark only the symbols declared at THIS export's scope as
+            // exported — never the locals nested inside an exported function's
+            // body (wrongly-exported locals become name-fallback resolution
+            // magnets for the whole service).
             for sym in result.symbols[symbols_before..].iter_mut() {
-                sym.is_exported = true;
+                if sym.parent_name.as_deref() == parent_name {
+                    sym.is_exported = true;
+                }
             }
 
             // For `export default expression` where expression is an identifier (not a declaration),

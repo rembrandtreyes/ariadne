@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+**Reference surfaces now expose import-edge references** — file dependents/
+dependencies and symbol dependents union resolved import rows (const-only,
+fn-import-without-call, type-only) with call edges; each connection carries a
+`kind` ("call"/"import"), renamed imports surface the original exported name,
+and output order is fully deterministic. Two resolution-truth bugs found by
+the same probe: `export function` no longer marks its body locals as exported
+(they were name-fallback resolution magnets), and cross-file name-fallback
+passes (same-service/global) can no longer resolve to unexported symbols. On
+the eval fixture this takes "who references sanitize.ts" from 16/18 to 18/18
+and the module-boundary partition to exact ground truth.
+
 **Five reference-truth substrate gaps** (each with red-first regression tests;
 found by a blinded head-to-head eval against agent+ripgrep on a real Next.js
 repo):

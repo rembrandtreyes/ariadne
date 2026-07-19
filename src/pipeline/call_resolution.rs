@@ -461,8 +461,9 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                 JOIN files f ON s.file_id = f.id
                 JOIN files cf ON calls.file_id = cf.id
                 WHERE s.name = calls.callee_name
+                  AND s.is_exported = 1
                   AND f.service_id = cf.service_id
-                ORDER BY s.is_exported DESC, f.path ASC, s.line_start ASC, s.id ASC
+                ORDER BY f.path ASC, s.line_start ASC, s.id ASC
                 LIMIT 1
              ), confidence = 0.75, resolution = 'same_service'
              WHERE callee_symbol_id IS NULL
@@ -472,6 +473,7 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                    JOIN files f ON s.file_id = f.id
                    JOIN files cf ON calls.file_id = cf.id
                    WHERE s.name = calls.callee_name
+                     AND s.is_exported = 1
                      AND f.service_id = cf.service_id
                )",
     ))?;
@@ -489,8 +491,8 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
         "UPDATE calls SET callee_symbol_id = (
                 SELECT s.id FROM symbols s
                 WHERE s.name = calls.callee_name
-                ORDER BY s.is_exported DESC,
-                         (SELECT f2.path FROM files f2 WHERE f2.id = s.file_id) ASC,
+                  AND s.is_exported = 1
+                ORDER BY (SELECT f2.path FROM files f2 WHERE f2.id = s.file_id) ASC,
                          s.line_start ASC, s.id ASC
                 LIMIT 1
              ), confidence = 0.5, resolution = 'global'
@@ -499,6 +501,7 @@ pub fn resolve_calls(db: &Database) -> anyhow::Result<()> {
                AND EXISTS (
                    SELECT 1 FROM symbols s
                    WHERE s.name = calls.callee_name
+                     AND s.is_exported = 1
                )",
     ))?;
     tracing::info!(

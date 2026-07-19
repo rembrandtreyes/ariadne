@@ -425,3 +425,59 @@ fn test_same_service_fallback_tiebreak_is_path_ordered() {
         "tie-break must be path-ordered, not insert-ordered"
     );
 }
+
+#[test]
+fn test_name_fallback_never_resolves_to_unexported_symbols() {
+    // Cross-file name-only fallback (passes 4/5) must not land on a symbol
+    // that is not exported — a cross-file call to a file-private symbol is
+    // impossible in every supported language's semantics.
+    let db = Database::open_in_memory().expect("db");
+    let conn = db.conn();
+    conn.execute(
+        "INSERT INTO services (name, type, repo_path) VALUES ('svc', 'monolith', '/tmp/svc')",
+        [],
+    )
+    .unwrap();
+    for (id, path) in [(1, "src/private_home.ts"), (2, "src/caller.ts")] {
+        conn.execute(
+            "INSERT INTO files (id, service_id, path, absolute_path, language, last_modified, last_indexed)
+             VALUES (?1, 1, ?2, ?2, 'typescript', 0.0, 0.0)",
+            rusqlite::params![id, path],
+        )
+        .unwrap();
+    }
+    // `t` is a NON-exported local in private_home.ts.
+    conn.execute(
+        "INSERT INTO symbols (id, file_id, name, qualified_name, kind, line_start, line_end, is_exported)
+         VALUES (1, 1, 't', 't', 'constant', 3, 3, 0)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO symbols (id, file_id, name, qualified_name, kind, line_start, line_end, is_exported)
+         VALUES (2, 2, 'Caller', 'Caller', 'function', 1, 9, 1)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO calls (caller_symbol_id, callee_symbol_id, callee_name, file_id, line)
+         VALUES (2, NULL, 't', 2, 5)",
+        [],
+    )
+    .unwrap();
+
+    resolve_calls(&db).expect("resolve");
+
+    let resolved: Option<i64> = db
+        .conn()
+        .query_row(
+            "SELECT callee_symbol_id FROM calls WHERE callee_name = 't'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        resolved, None,
+        "name fallback must not resolve a cross-file call to an unexported symbol"
+    );
+}

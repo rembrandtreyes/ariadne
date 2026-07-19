@@ -177,11 +177,21 @@ pub fn resolve_symbol_by_name(
 /// Example: if `login()` calls `hash_password()`, then `login` is a dependent of `hash_password`.
 /// Use this to find what code would break if `symbol_id` changes.
 pub fn get_dependents(db: &Database, symbol_id: i64) -> anyhow::Result<Vec<SymbolRow>> {
+    // Callers by call edge, unioned with module-scope import references:
+    // a file that IMPORTS the symbol without calling it (const-only or
+    // type-only use) still depends on it — represented by the importing
+    // file's `<module>` symbol.
     let mut stmt = db.conn().prepare(
-        "SELECT s.id, s.file_id, s.name, s.qualified_name, s.kind, s.line_start, s.line_end, s.is_dead, s.is_test
+        "SELECT DISTINCT s.id, s.file_id, s.name, s.qualified_name, s.kind, s.line_start, s.line_end, s.is_dead, s.is_test
          FROM symbols s
          JOIN calls c ON c.caller_symbol_id = s.id
-         WHERE c.callee_symbol_id = ?1",
+         WHERE c.callee_symbol_id = ?1
+         UNION
+         SELECT DISTINCT s.id, s.file_id, s.name, s.qualified_name, s.kind, s.line_start, s.line_end, s.is_dead, s.is_test
+         FROM symbols s
+         JOIN imports i ON i.file_id = s.file_id
+         WHERE i.resolved_symbol_id = ?1
+           AND s.name = '<module>'",
     )?;
     let rows = stmt
         .query_map(params![symbol_id], row_to_symbol)?
@@ -799,31 +809,45 @@ pub struct FileDependency {
     pub connections: Vec<SymbolConnection>,
 }
 
-/// A pair of symbols that creates a dependency edge between two files.
+/// A reference that creates a dependency edge between two files.
+///
+/// `kind` is "call" (resolved call edge) or "import" (resolved import row —
+/// covers const-only, fn-import-without-call, and type-only references that
+/// the calls table cannot see).
 #[derive(Debug, Clone, Serialize)]
 pub struct SymbolConnection {
     pub from_symbol: String,
     pub to_symbol: String,
+    pub kind: String,
 }
 
-/// Get files that `file_id` depends on (files containing symbols called by symbols in this file).
-///
-/// Returns each dependent file with the connecting symbol pairs.
-/// Only includes resolved calls (callee_symbol_id IS NOT NULL).
+/// Get files that `file_id` depends on: files containing symbols this file
+/// CALLS, unioned with files this file IMPORTS (resolved imports only).
 pub fn get_file_dependencies(db: &Database, file_id: i64) -> anyhow::Result<Vec<FileDependency>> {
     let mut stmt = db.conn().prepare(
-        "SELECT DISTINCT f.id, f.path, f.language, caller_s.name, callee_s.name
-         FROM calls c
-         JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
-         JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
-         JOIN files f ON callee_s.file_id = f.id
-         WHERE caller_s.file_id = ?1
-           AND callee_s.file_id != ?1
-           AND c.callee_symbol_id IS NOT NULL
-         ORDER BY f.path, caller_s.name",
+        "SELECT id, path, language, from_sym, to_sym, kind FROM (
+           SELECT DISTINCT f.id AS id, f.path AS path, f.language AS language,
+                  caller_s.name AS from_sym, callee_s.name AS to_sym, 'call' AS kind
+           FROM calls c
+           JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
+           JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
+           JOIN files f ON callee_s.file_id = f.id
+           WHERE caller_s.file_id = ?1
+             AND callee_s.file_id != ?1
+             AND c.callee_symbol_id IS NOT NULL
+           UNION
+           SELECT DISTINCT f.id, f.path, f.language,
+                  i.imported_name, COALESCE(i.original_name, i.imported_name), 'import'
+           FROM imports i
+           JOIN files f ON i.resolved_file_id = f.id
+           WHERE i.file_id = ?1
+             AND i.resolved_file_id IS NOT NULL
+             AND i.resolved_file_id != ?1
+         )
+         ORDER BY path, kind, from_sym, to_sym",
     )?;
 
-    let rows: Vec<(i64, String, String, String, String)> = stmt
+    let rows: Vec<(i64, String, String, String, String, String)> = stmt
         .query_map(params![file_id], |row| {
             Ok((
                 row.get(0)?,
@@ -831,6 +855,7 @@ pub fn get_file_dependencies(db: &Database, file_id: i64) -> anyhow::Result<Vec<
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -838,24 +863,33 @@ pub fn get_file_dependencies(db: &Database, file_id: i64) -> anyhow::Result<Vec<
     group_file_connections(rows)
 }
 
-/// Get files that depend on `file_id` (files containing symbols that call symbols in this file).
-///
-/// Returns each dependent file with the connecting symbol pairs.
-/// Only includes resolved calls (callee_symbol_id IS NOT NULL).
+/// Get files that depend on `file_id`: files containing symbols that CALL
+/// symbols in this file, unioned with files that IMPORT from it (resolved
+/// imports only — a const-only importer is a real dependent).
 pub fn get_file_dependents(db: &Database, file_id: i64) -> anyhow::Result<Vec<FileDependency>> {
     let mut stmt = db.conn().prepare(
-        "SELECT DISTINCT f.id, f.path, f.language, caller_s.name, callee_s.name
-         FROM calls c
-         JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
-         JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
-         JOIN files f ON caller_s.file_id = f.id
-         WHERE callee_s.file_id = ?1
-           AND caller_s.file_id != ?1
-           AND c.callee_symbol_id IS NOT NULL
-         ORDER BY f.path, caller_s.name",
+        "SELECT id, path, language, from_sym, to_sym, kind FROM (
+           SELECT DISTINCT f.id AS id, f.path AS path, f.language AS language,
+                  caller_s.name AS from_sym, callee_s.name AS to_sym, 'call' AS kind
+           FROM calls c
+           JOIN symbols caller_s ON c.caller_symbol_id = caller_s.id
+           JOIN symbols callee_s ON c.callee_symbol_id = callee_s.id
+           JOIN files f ON caller_s.file_id = f.id
+           WHERE callee_s.file_id = ?1
+             AND caller_s.file_id != ?1
+             AND c.callee_symbol_id IS NOT NULL
+           UNION
+           SELECT DISTINCT f.id, f.path, f.language,
+                  i.imported_name, COALESCE(i.original_name, i.imported_name), 'import'
+           FROM imports i
+           JOIN files f ON i.file_id = f.id
+           WHERE i.resolved_file_id = ?1
+             AND i.file_id != ?1
+         )
+         ORDER BY path, kind, from_sym, to_sym",
     )?;
 
-    let rows: Vec<(i64, String, String, String, String)> = stmt
+    let rows: Vec<(i64, String, String, String, String, String)> = stmt
         .query_map(params![file_id], |row| {
             Ok((
                 row.get(0)?,
@@ -863,6 +897,7 @@ pub fn get_file_dependents(db: &Database, file_id: i64) -> anyhow::Result<Vec<Fi
                 row.get(2)?,
                 row.get(3)?,
                 row.get(4)?,
+                row.get(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -870,14 +905,15 @@ pub fn get_file_dependents(db: &Database, file_id: i64) -> anyhow::Result<Vec<Fi
     group_file_connections(rows)
 }
 
-/// Group raw (file_id, path, language, from_sym, to_sym) rows into FileDependency structs.
+/// Group raw (file_id, path, language, from_sym, to_sym, kind) rows into
+/// FileDependency structs.
 fn group_file_connections(
-    rows: Vec<(i64, String, String, String, String)>,
+    rows: Vec<(i64, String, String, String, String, String)>,
 ) -> anyhow::Result<Vec<FileDependency>> {
     use std::collections::BTreeMap;
 
     let mut grouped: BTreeMap<i64, FileDependency> = BTreeMap::new();
-    for (fid, path, lang, from_sym, to_sym) in rows {
+    for (fid, path, lang, from_sym, to_sym, kind) in rows {
         let entry = grouped.entry(fid).or_insert_with(|| FileDependency {
             file_id: fid,
             path,
@@ -887,6 +923,7 @@ fn group_file_connections(
         entry.connections.push(SymbolConnection {
             from_symbol: from_sym,
             to_symbol: to_sym,
+            kind,
         });
     }
 

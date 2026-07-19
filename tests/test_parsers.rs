@@ -679,3 +679,31 @@ fn test_ts_type_only_import_extracted() {
         result.imports
     );
 }
+
+#[test]
+fn test_ts_export_does_not_mark_nested_body_symbols_exported() {
+    // `export function outer()` must export outer — NOT the locals inside its
+    // body. Wrongly-exported locals become name-fallback resolution magnets.
+    let parser = get_parser(Language::TypeScript);
+    let source = "export function outer() {\n  const inner = 1;\n  return inner;\n}\n";
+    let result = parser.parse_file(source, "scope.ts").expect("parse");
+    let outer = result.symbols.iter().find(|s| s.name == "outer").unwrap();
+    let inner = result.symbols.iter().find(|s| s.name == "inner").unwrap();
+    assert!(outer.is_exported, "outer must be exported");
+    assert!(
+        !inner.is_exported,
+        "function-body locals must NOT be marked exported"
+    );
+}
+
+#[test]
+fn test_js_export_does_not_mark_nested_body_symbols_exported() {
+    let parser = get_parser(Language::JavaScript);
+    let source = "export function outer() {\n  const inner = 1;\n  return inner;\n}\n";
+    let result = parser.parse_file(source, "scope.js").expect("parse");
+    let inner = result.symbols.iter().find(|s| s.name == "inner").unwrap();
+    assert!(
+        !inner.is_exported,
+        "function-body locals must NOT be marked exported (JS)"
+    );
+}

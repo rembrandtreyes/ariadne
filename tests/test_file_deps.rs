@@ -190,3 +190,179 @@ fn multiple_connections_between_same_files_grouped() {
     assert_eq!(deps.len(), 1, "should be one file dependency");
     assert_eq!(deps[0].connections.len(), 2, "should have 2 connections");
 }
+
+// ---------------------------------------------------------------------------
+// Import-edge union (a2 fix): references that exist only as resolved imports
+// (const-only, type-only, fn-import-without-call) must appear in the
+// file-level dependency surfaces, labeled by kind.
+// ---------------------------------------------------------------------------
+
+/// Two files where e.py imports a symbol from a.py but never CALLS anything:
+/// the classic const-only import that the call-edge join misses.
+fn add_import_only_file(db: &Database) -> i64 {
+    let conn = db.conn();
+    conn.execute(
+        "INSERT INTO files (id, service_id, path, absolute_path, language, last_modified, last_indexed) \
+         VALUES (5, 1, 'src/e.py', '/test/src/e.py', 'python', 0.0, 0.0)",
+        [],
+    )
+    .unwrap();
+    // e.py imports CONST_A (symbol id 10) from a.py — resolved, no call rows.
+    conn.execute(
+        "INSERT INTO symbols (id, file_id, name, qualified_name, kind, line_start, line_end) \
+         VALUES (10, 1, 'CONST_A', 'a.CONST_A', 'constant', 8, 8)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO imports (file_id, imported_name, module_path, line, is_external, resolved_file_id, resolved_symbol_id) \
+         VALUES (5, 'CONST_A', './a', 1, 0, 1, 10)",
+        [],
+    )
+    .unwrap();
+    5
+}
+
+#[test]
+fn test_file_dependents_includes_import_only_references() {
+    let db = setup_db_with_file_deps();
+    let importer_id = add_import_only_file(&db);
+
+    // a.py (file 1) is imported by e.py but never called by it.
+    let dependents = query::get_file_dependents(&db, 1).expect("query");
+    let importer = dependents.iter().find(|d| d.file_id == importer_id);
+    assert!(
+        importer.is_some(),
+        "a file that IMPORTS the target without calling it must be a dependent, got {:?}",
+        dependents.iter().map(|d| &d.path).collect::<Vec<_>>()
+    );
+    let conn = importer.unwrap();
+    assert!(
+        conn.connections
+            .iter()
+            .any(|c| c.kind == "import" && c.to_symbol == "CONST_A"),
+        "the connection must be kind=import to CONST_A, got {:?}",
+        conn.connections
+    );
+}
+
+#[test]
+fn test_file_dependencies_includes_outgoing_imports() {
+    let db = setup_db_with_file_deps();
+    let importer_id = add_import_only_file(&db);
+
+    // e.py depends on a.py through its import even with zero calls.
+    let deps = query::get_file_dependencies(&db, importer_id).expect("query");
+    let target = deps.iter().find(|d| d.file_id == 1);
+    assert!(
+        target.is_some(),
+        "an imported file must appear in dependencies, got {:?}",
+        deps.iter().map(|d| &d.path).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn test_call_connections_are_kind_call_and_not_duplicated() {
+    let db = setup_db_with_file_deps();
+    // b.py (file 2) calls func_a in a.py (call edge), and we ALSO give b.py a
+    // resolved import of func_a — same pair via both tables.
+    add_call(&db, 2, 1, 2);
+    db.conn()
+        .execute(
+            "INSERT INTO imports (file_id, imported_name, module_path, line, is_external, resolved_file_id, resolved_symbol_id) \
+             VALUES (2, 'func_a', './a', 1, 0, 1, 1)",
+            [],
+        )
+        .unwrap();
+
+    let dependents = query::get_file_dependents(&db, 1).expect("query");
+    let b = dependents
+        .iter()
+        .find(|d| d.file_id == 2)
+        .expect("b.py is a dependent");
+    let call_rows: Vec<_> = b.connections.iter().filter(|c| c.kind == "call").collect();
+    let import_rows: Vec<_> = b
+        .connections
+        .iter()
+        .filter(|c| c.kind == "import")
+        .collect();
+    assert!(!call_rows.is_empty(), "call edge must remain kind=call");
+    assert!(
+        import_rows.len() <= 1,
+        "no duplicated import connections, got {:?}",
+        b.connections
+    );
+    // No exact duplicates overall
+    let mut seen = std::collections::HashSet::new();
+    for c in &b.connections {
+        assert!(
+            seen.insert((c.kind.clone(), c.from_symbol.clone(), c.to_symbol.clone())),
+            "duplicate connection row: {:?}",
+            c
+        );
+    }
+}
+
+#[test]
+fn test_renamed_import_connection_shows_original_name() {
+    let db = setup_db_with_file_deps();
+    let conn = db.conn();
+    conn.execute(
+        "INSERT INTO files (id, service_id, path, absolute_path, language, last_modified, last_indexed) \
+         VALUES (6, 1, 'src/f.py', '/test/src/f.py', 'python', 0.0, 0.0)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO imports (file_id, imported_name, module_path, line, is_external, resolved_file_id, resolved_symbol_id, original_name) \
+         VALUES (6, 'aliased_a', './a', 1, 0, 1, 1, 'func_a')",
+        [],
+    )
+    .unwrap();
+
+    let dependents = query::get_file_dependents(&db, 1).expect("query");
+    let f = dependents
+        .iter()
+        .find(|d| d.file_id == 6)
+        .expect("f.py is a dependent via renamed import");
+    assert!(
+        f.connections
+            .iter()
+            .any(|c| c.kind == "import" && c.to_symbol == "func_a"),
+        "renamed import must surface the ORIGINAL exported name, got {:?}",
+        f.connections
+    );
+}
+
+#[test]
+fn test_symbol_dependents_include_module_scope_import_references() {
+    let db = setup_db_with_file_deps();
+    let conn = db.conn();
+    // Importing file with a <module> symbol (TS/JS convention) importing func_a.
+    conn.execute(
+        "INSERT INTO files (id, service_id, path, absolute_path, language, last_modified, last_indexed) \
+         VALUES (7, 1, 'src/g.ts', '/test/src/g.ts', 'typescript', 0.0, 0.0)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO symbols (id, file_id, name, qualified_name, kind, line_start, line_end) \
+         VALUES (20, 7, '<module>', '<module>', 'module', 0, 0)",
+        [],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO imports (file_id, imported_name, module_path, line, is_external, resolved_file_id, resolved_symbol_id) \
+         VALUES (7, 'func_a', '../a', 1, 0, 1, 1)",
+        [],
+    )
+    .unwrap();
+
+    // Symbol-level: func_a (id 1) — g.ts imports it but never calls it.
+    let dependents = query::get_dependents(&db, 1).expect("query");
+    assert!(
+        dependents.iter().any(|s| s.file_id == 7),
+        "an import-only referencing file must surface among symbol dependents, got file_ids {:?}",
+        dependents.iter().map(|s| s.file_id).collect::<Vec<_>>()
+    );
+}
