@@ -1585,7 +1585,9 @@ fn compute_god_objects_per_module(
 }
 
 /// Extract module name from a file path (e.g., "src/pipeline/foo.rs" → "pipeline").
-fn extract_module_name(path: &str) -> String {
+/// The single server-side source of module identity — dashboard endpoints include
+/// this so clients never re-derive modules by slicing paths.
+pub fn extract_module_name(path: &str) -> String {
     let path = path.strip_prefix("src/").unwrap_or(path);
     match path.split('/').next() {
         Some(first) if path.contains('/') => first.to_string(),

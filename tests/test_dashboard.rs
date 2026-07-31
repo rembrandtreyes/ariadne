@@ -922,3 +922,172 @@ fn test_describe_symbol_propagates_db_errors() {
         "describe_symbol must propagate DB errors instead of rendering empty metrics"
     );
 }
+
+// ── F8 API-alignment endpoints (dashboard rebuild, P1) ──────────────────────
+
+#[tokio::test]
+async fn test_overview_endpoint_serves_server_health() {
+    use ariadne::dashboard::api::overview;
+    let (_dir, state) = setup_indexed_db();
+
+    let result = overview(State(state))
+        .await
+        .expect("overview should succeed");
+    let o = result.0;
+
+    assert!(o.symbols > 0, "expected symbols > 0");
+    assert!(o.files > 0, "expected files > 0");
+    assert!(
+        ["A", "B", "C", "D", "F"].contains(&o.health.grade.as_str()),
+        "grade must be a letter grade, got {}",
+        o.health.grade
+    );
+    // The score must be server-computed and present for a real index.
+    let score = o
+        .health
+        .score
+        .expect("score should be computed for an indexed repo");
+    assert!(
+        (0.0..=100.0).contains(&score),
+        "score out of range: {score}"
+    );
+    assert!(!o.health.summary.is_empty(), "summary must be non-empty");
+    // Metric breakdown backs the UI disclosure (ISC-12).
+    assert!(
+        o.health.metric_scores.dead_code.is_some(),
+        "dead_code metric score should be available"
+    );
+}
+
+#[tokio::test]
+async fn test_cycles_endpoint_uses_engine_scc() {
+    use ariadne::dashboard::api::{cycles, CyclesQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    let result = cycles(State(state), Query(CyclesQuery { limit: None }))
+        .await
+        .expect("cycles should succeed");
+    let c = result.0;
+
+    // Every reported cycle must be a real SCC of length >= 2 — never the
+    // legacy SQL mutual-pair subset's shape.
+    for cycle in &c.cycles {
+        assert!(
+            cycle.cycle_length >= 2,
+            "SCC cycles must have length >= 2, got {}",
+            cycle.cycle_length
+        );
+        assert_eq!(cycle.symbols.len(), cycle.cycle_length);
+    }
+    assert!(
+        c.total >= c.cycles.len(),
+        "total must cover returned cycles"
+    );
+}
+
+#[tokio::test]
+async fn test_churn_endpoint_ranks_by_modifications() {
+    use ariadne::dashboard::api::{churn, ChurnQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    let result = churn(State(state), Query(ChurnQuery { limit: Some(10) }))
+        .await
+        .expect("churn should succeed");
+    let entries = result.0.entries;
+
+    // The fixture may or may not carry git history; when entries exist they
+    // must be ranked and carry server-derived module identity.
+    for pair in entries.windows(2) {
+        assert!(
+            pair[0].modification_count >= pair[1].modification_count,
+            "churn must be ranked most-modified first"
+        );
+    }
+    for e in &entries {
+        assert!(
+            !e.module.is_empty(),
+            "module identity must be server-derived"
+        );
+        assert!(
+            e.modification_count > 0,
+            "zero-churn symbols must be excluded"
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_symbol_search_fts_with_filters() {
+    use ariadne::dashboard::api::{symbol_search, SymbolSearchQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    // Unfiltered: should find the fixture's symbols.
+    let result = symbol_search(
+        State(state.clone()),
+        Query(SymbolSearchQuery {
+            q: Some("greet".into()),
+            kind: None,
+            lang: None,
+            limit: None,
+        }),
+    )
+    .await
+    .expect("search should succeed");
+    assert!(
+        !result.0.results.is_empty(),
+        "expected results for 'greet' in the python fixture"
+    );
+    for r in &result.0.results {
+        assert!(
+            !r.module.is_empty(),
+            "module identity must be server-derived"
+        );
+    }
+
+    // Kind filter: only functions come back.
+    let funcs = symbol_search(
+        State(state.clone()),
+        Query(SymbolSearchQuery {
+            q: Some("greet".into()),
+            kind: Some("function".into()),
+            lang: None,
+            limit: None,
+        }),
+    )
+    .await
+    .expect("kind-filtered search should succeed");
+    assert!(
+        funcs.0.results.iter().all(|r| r.result.kind == "function"),
+        "kind filter must exclude non-function symbols"
+    );
+
+    // Language filter that matches nothing must return empty, not error.
+    let none = symbol_search(
+        State(state.clone()),
+        Query(SymbolSearchQuery {
+            q: Some("greet".into()),
+            kind: None,
+            lang: Some("go".into()),
+            limit: None,
+        }),
+    )
+    .await
+    .expect("lang-filtered search should succeed");
+    assert!(
+        none.0.results.is_empty(),
+        "a language filter with no matches must return empty"
+    );
+
+    // Empty query stays a structured empty response.
+    let empty = symbol_search(
+        State(state),
+        Query(SymbolSearchQuery {
+            q: None,
+            kind: None,
+            lang: None,
+            limit: None,
+        }),
+    )
+    .await
+    .expect("empty query should succeed");
+    assert!(empty.0.results.is_empty());
+}

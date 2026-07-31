@@ -66,6 +66,13 @@ pub async fn serve(config: DashboardConfig, db_path: &Path) -> anyhow::Result<()
             "/api/propose_edit_plan",
             axum::routing::get(api::propose_edit_plan),
         )
+        .route("/api/overview", axum::routing::get(api::overview))
+        .route("/api/cycles", axum::routing::get(api::cycles))
+        .route("/api/churn", axum::routing::get(api::churn))
+        .route("/api/symbol_search", axum::routing::get(api::symbol_search))
+        .route("/next", axum::routing::get(next_ui_root))
+        .route("/next/", axum::routing::get(next_ui_root))
+        .route("/next/{*path}", axum::routing::get(next_ui_asset))
         .route(
             "/graph-renderer.js",
             axum::routing::get(graph_renderer_js_handler),
@@ -123,6 +130,74 @@ async fn health_handler(
 
 async fn index_handler() -> axum::response::Html<&'static str> {
     axum::response::Html(INDEX_HTML)
+}
+
+/// The rebuilt dashboard (Svelte + Vite, bun-built at compile time by
+/// build.rs into OUT_DIR) — embedded so the binary stays self-contained.
+/// Mounted at /next until it reaches capability parity with the legacy UI.
+#[derive(rust_embed::RustEmbed)]
+#[folder = "$OUT_DIR/dashboard-dist"]
+struct NextUiAssets;
+
+fn mime_for(path: &str) -> &'static str {
+    match path.rsplit('.').next() {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") => "application/javascript",
+        Some("css") => "text/css",
+        Some("svg") => "image/svg+xml",
+        Some("json" | "map") => "application/json",
+        Some("png") => "image/png",
+        Some("ico") => "image/x-icon",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+fn serve_next_asset(rel: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    // The app is a hash router, so any non-asset path resolves to the shell.
+    let (resolved, file) = match NextUiAssets::get(rel) {
+        Some(f) => (rel, Some(f)),
+        None => ("index.html", NextUiAssets::get("index.html")),
+    };
+    match file {
+        Some(f) => {
+            // Vite content-hashes everything under assets/, so those may cache
+            // forever; the shell must revalidate or stale bundles keep serving
+            // after a rebuild (Chrome heuristically caches validator-less 200s).
+            let cache = if resolved.starts_with("assets/") {
+                "public, max-age=31536000, immutable"
+            } else {
+                "no-cache"
+            };
+            (
+                axum::http::StatusCode::OK,
+                [
+                    (axum::http::header::CONTENT_TYPE, mime_for(resolved)),
+                    (axum::http::header::CACHE_CONTROL, cache),
+                ],
+                f.data.into_owned(),
+            )
+                .into_response()
+        }
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            "New dashboard assets were not embedded in this build.",
+        )
+            .into_response(),
+    }
+}
+
+async fn next_ui_root() -> axum::response::Response {
+    serve_next_asset("index.html")
+}
+
+async fn next_ui_asset(
+    axum::extract::Path(path): axum::extract::Path<String>,
+) -> axum::response::Response {
+    serve_next_asset(&path)
 }
 
 async fn graph_renderer_js_handler() -> (

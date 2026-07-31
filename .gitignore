@@ -44,6 +44,11 @@ Desktop.ini
 # ProductForge knowledge
 .forge/
 
+# Dashboard frontend (dashboard-ui/) — build output stays in Cargo's OUT_DIR;
+# dist/ only appears from a manual `bun run build` without VITE_OUT_DIR
+dashboard-ui/node_modules/
+dashboard-ui/dist/
+
 # Ariadne local data
 .ariadne/
 .ariadne.db

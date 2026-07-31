@@ -49,7 +49,7 @@ pub fn search(
     let mut results = Vec::new();
 
     // Try FTS5 first
-    match fts_search(db, query, limit) {
+    match fts_search(db, query, limit, options) {
         Ok(fts) => results = fts,
         Err(e) => {
             // LIKE below covers the miss, but a broken FTS index should not
@@ -60,13 +60,13 @@ pub fn search(
 
     // Fall back to LIKE-based search if FTS returns nothing
     if results.is_empty() {
-        results = like_search(db, query, limit)?;
+        results = like_search(db, query, limit, options)?;
     }
 
     // If fuzzy is enabled and results are too few, supplement with fuzzy
     if options.fuzzy && results.len() < limit {
         let remaining = limit - results.len();
-        let fuzzy = fuzzy_search(db, query, remaining)?;
+        let fuzzy = fuzzy_search(db, query, remaining, options)?;
         results.extend(fuzzy);
         // The fuzzy pass re-finds symbols the passes above already returned —
         // keep the first (higher-priority) occurrence of each symbol id.
@@ -93,38 +93,84 @@ pub fn search(
     Ok(results)
 }
 
+/// Build the extra WHERE fragment and parameter values for the optional
+/// kind/language/file filters. Numbering starts at `?3` because every search
+/// query binds the match pattern as `?1` and the limit as `?2`. Applying
+/// filters in SQL (not post-filtering) keeps LIMIT from starving results.
+fn filter_sql(options: &SearchOptions) -> (String, Vec<String>) {
+    let mut sql = String::new();
+    let mut params = Vec::new();
+    let mut idx = 3;
+    if let Some(kind) = &options.kind_filter {
+        sql.push_str(&format!(" AND s.kind = ?{idx}"));
+        params.push(kind.clone());
+        idx += 1;
+    }
+    if let Some(lang) = &options.language_filter {
+        sql.push_str(&format!(" AND f.language = ?{idx}"));
+        params.push(lang.clone());
+        idx += 1;
+    }
+    if let Some(file) = &options.file_filter {
+        sql.push_str(&format!(" AND f.path LIKE ?{idx} ESCAPE '\\'"));
+        params.push(format!("%{}%", crate::db::escape_like(file)));
+    }
+    (sql, params)
+}
+
+/// Bind (pattern, limit, filters...) positionally: iterator order matches
+/// the `?1`, `?2`, `?3`… numbering used by all three search queries.
+fn bind_params(
+    pattern: &str,
+    limit: i64,
+    filters: &[String],
+) -> Vec<Box<dyn rusqlite::types::ToSql>> {
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
+        vec![Box::new(pattern.to_string()), Box::new(limit)];
+    for f in filters {
+        params.push(Box::new(f.clone()));
+    }
+    params
+}
+
 /// FTS5-based full-text search on the symbols_fts table.
 fn fts_search(
     db: &crate::db::Database,
     query: &str,
     limit: usize,
+    options: &SearchOptions,
 ) -> anyhow::Result<Vec<SearchResult>> {
     let conn = db.conn();
     let escaped = query.replace('"', "\"\"");
     let fts_query = format!("\"{}\"*", escaped);
-    let mut stmt = conn.prepare(
+    let (extra_sql, filter_params) = filter_sql(options);
+    let mut stmt = conn.prepare(&format!(
         "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start, rank
          FROM symbols_fts fts
          JOIN symbols s ON fts.rowid = s.id
          JOIN files f ON s.file_id = f.id
-         WHERE symbols_fts MATCH ?1
+         WHERE symbols_fts MATCH ?1{extra_sql}
          ORDER BY rank
          LIMIT ?2",
-    )?;
+    ))?;
 
+    let params = bind_params(&fts_query, limit as i64, &filter_params);
     let results = stmt
-        .query_map(rusqlite::params![fts_query, limit as i64], |row| {
-            Ok(SearchResult {
-                symbol_id: Some(row.get(0)?),
-                name: row.get(1)?,
-                qualified_name: Some(row.get(2)?),
-                kind: row.get(3)?,
-                file: row.get(4)?,
-                line: row.get(5)?,
-                score: -(row.get::<_, f64>(6)?),
-                snippet: None,
-            })
-        })?
+        .query_map(
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            |row| {
+                Ok(SearchResult {
+                    symbol_id: Some(row.get(0)?),
+                    name: row.get(1)?,
+                    qualified_name: Some(row.get(2)?),
+                    kind: row.get(3)?,
+                    file: row.get(4)?,
+                    line: row.get(5)?,
+                    score: -(row.get::<_, f64>(6)?),
+                    snippet: None,
+                })
+            },
+        )?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
@@ -135,31 +181,37 @@ fn like_search(
     db: &crate::db::Database,
     query: &str,
     limit: usize,
+    options: &SearchOptions,
 ) -> anyhow::Result<Vec<SearchResult>> {
     let conn = db.conn();
-    let mut stmt = conn.prepare(
+    let (extra_sql, filter_params) = filter_sql(options);
+    let mut stmt = conn.prepare(&format!(
         "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start
          FROM symbols s
          JOIN files f ON s.file_id = f.id
-         WHERE s.name LIKE ?1 ESCAPE '\\'
+         WHERE s.name LIKE ?1 ESCAPE '\\'{extra_sql}
          ORDER BY s.name
          LIMIT ?2",
-    )?;
+    ))?;
 
     let pattern = format!("%{}%", crate::db::escape_like(query));
+    let params = bind_params(&pattern, limit as i64, &filter_params);
     let results = stmt
-        .query_map(rusqlite::params![pattern, limit as i64], |row| {
-            Ok(SearchResult {
-                symbol_id: Some(row.get(0)?),
-                name: row.get(1)?,
-                qualified_name: Some(row.get(2)?),
-                kind: row.get(3)?,
-                file: row.get(4)?,
-                line: row.get(5)?,
-                score: 1.0,
-                snippet: None,
-            })
-        })?
+        .query_map(
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            |row| {
+                Ok(SearchResult {
+                    symbol_id: Some(row.get(0)?),
+                    name: row.get(1)?,
+                    qualified_name: Some(row.get(2)?),
+                    kind: row.get(3)?,
+                    file: row.get(4)?,
+                    line: row.get(5)?,
+                    score: 1.0,
+                    snippet: None,
+                })
+            },
+        )?
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(results)
@@ -170,6 +222,7 @@ fn fuzzy_search(
     db: &crate::db::Database,
     query: &str,
     limit: usize,
+    options: &SearchOptions,
 ) -> anyhow::Result<Vec<SearchResult>> {
     let conn = db.conn();
     // Fetch a bounded number of candidates, then compute Levenshtein distance in Rust.
@@ -182,35 +235,40 @@ fn fuzzy_search(
         "%".to_string()
     };
     let fetch_limit = (limit * 10).min(5000) as i64;
-    let mut stmt = conn.prepare(
+    let (extra_sql, filter_params) = filter_sql(options);
+    let mut stmt = conn.prepare(&format!(
         "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start
          FROM symbols s JOIN files f ON s.file_id = f.id
-         WHERE s.name LIKE ?1 ESCAPE '\\'
+         WHERE s.name LIKE ?1 ESCAPE '\\'{extra_sql}
          LIMIT ?2",
-    )?;
+    ))?;
 
+    let params = bind_params(&prefix_pattern, fetch_limit, &filter_params);
     let mut results: Vec<SearchResult> = stmt
-        .query_map(rusqlite::params![prefix_pattern, fetch_limit], |row| {
-            let name: String = row.get(1)?;
-            let distance = strsim::levenshtein(query, &name);
-            let max_len = query.len().max(name.len());
-            let score = if max_len > 0 {
-                1.0 - (distance as f64 / max_len as f64)
-            } else {
-                0.0
-            };
+        .query_map(
+            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            |row| {
+                let name: String = row.get(1)?;
+                let distance = strsim::levenshtein(query, &name);
+                let max_len = query.len().max(name.len());
+                let score = if max_len > 0 {
+                    1.0 - (distance as f64 / max_len as f64)
+                } else {
+                    0.0
+                };
 
-            Ok(SearchResult {
-                symbol_id: Some(row.get(0)?),
-                name,
-                qualified_name: Some(row.get(2)?),
-                kind: row.get(3)?,
-                file: row.get(4)?,
-                line: row.get(5)?,
-                score,
-                snippet: None,
-            })
-        })?
+                Ok(SearchResult {
+                    symbol_id: Some(row.get(0)?),
+                    name,
+                    qualified_name: Some(row.get(2)?),
+                    kind: row.get(3)?,
+                    file: row.get(4)?,
+                    line: row.get(5)?,
+                    score,
+                    snippet: None,
+                })
+            },
+        )?
         .collect::<Result<Vec<_>, _>>()?;
 
     results.sort_by(|a, b| {

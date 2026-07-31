@@ -44,7 +44,7 @@ console = "0.15"
 
 # Dashboard
 axum = "0.8"
-rust-embed = "8"
+rust-embed = { version = "8", features = ["debug-embed", "interpolate-folder-path"] }
 tower-http = { version = "0.6", features = ["cors", "fs"] }
 
 # Config

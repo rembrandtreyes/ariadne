@@ -156,3 +156,74 @@ fn test_search_never_returns_duplicate_symbols() {
         }
     }
 }
+
+// ── Filter application (previously dead fields — fixed in dashboard rebuild) ─
+
+#[test]
+fn test_search_kind_filter_applies() {
+    let (_dir, db) = setup_search_db();
+
+    let all = search(&db, "greet", &SearchOptions::default()).unwrap();
+    assert!(!all.is_empty(), "fixture should match 'greet'");
+
+    let options = SearchOptions {
+        kind_filter: Some("function".to_string()),
+        ..Default::default()
+    };
+    let functions = search(&db, "greet", &options).unwrap();
+    assert!(
+        functions.iter().all(|r| r.kind == "function"),
+        "kind_filter must exclude non-function results, got kinds: {:?}",
+        functions.iter().map(|r| &r.kind).collect::<Vec<_>>()
+    );
+
+    let options = SearchOptions {
+        kind_filter: Some("nonexistent_kind".to_string()),
+        ..Default::default()
+    };
+    let none = search(&db, "greet", &options).unwrap();
+    assert!(
+        none.is_empty(),
+        "a kind filter matching nothing must return empty"
+    );
+}
+
+#[test]
+fn test_search_language_filter_applies() {
+    let (_dir, db) = setup_search_db();
+
+    let options = SearchOptions {
+        language_filter: Some("python".to_string()),
+        ..Default::default()
+    };
+    let python = search(&db, "greet", &options).unwrap();
+    assert!(
+        !python.is_empty(),
+        "python filter should match the python fixture"
+    );
+
+    let options = SearchOptions {
+        language_filter: Some("go".to_string()),
+        ..Default::default()
+    };
+    let go = search(&db, "greet", &options).unwrap();
+    assert!(
+        go.is_empty(),
+        "go filter must return nothing for a python-only fixture"
+    );
+}
+
+#[test]
+fn test_search_file_filter_applies() {
+    let (_dir, db) = setup_search_db();
+
+    let options = SearchOptions {
+        file_filter: Some("definitely_not_a_real_path".to_string()),
+        ..Default::default()
+    };
+    let none = search(&db, "greet", &options).unwrap();
+    assert!(
+        none.is_empty(),
+        "file filter matching no path must return empty"
+    );
+}

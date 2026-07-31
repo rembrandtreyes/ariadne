@@ -1072,6 +1072,199 @@ fn fetch_source(db: &Database, symbol_id: i64, context: u32) -> anyhow::Result<S
     })
 }
 
+// ── F8 API-alignment endpoints (dashboard rebuild) ──────────────────────────
+// These surface engine intelligence the old client reimplemented weaker
+// versions of: server-computed health, engine SCC cycles, churn ranking, and
+// FTS5-backed search. Module identity is always server-derived
+// (query::extract_module_name), never client path-slicing.
+
+/// Server-computed overview: the shared health report (analysis::health) plus
+/// index-health signals (counts, resolution rate, parse errors, last indexed).
+#[derive(Serialize)]
+pub struct OverviewResponse {
+    pub health: crate::analysis::health::HealthReport,
+    pub files: u64,
+    pub symbols: u64,
+    pub calls: u64,
+    pub resolution_rate: f64,
+    pub dead_functions: u64,
+    pub languages: Vec<String>,
+    pub parse_error_files: u64,
+    pub last_indexed: Option<String>,
+}
+
+pub async fn overview(State(db_path): State<DbState>) -> Result<Json<OverviewResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let health = crate::analysis::health::compute_health_report(&db);
+    let stats = build_stats(&db).map_err(log_query_failure("Failed to load stats."))?;
+    let parse_error_files = crate::db::query::get_files_with_parse_errors(&db)
+        .map(|v| v.len() as u64)
+        .unwrap_or(0);
+    let last_indexed = db.get_metadata("last_indexed").unwrap_or(None);
+
+    Ok(Json(OverviewResponse {
+        health,
+        files: stats.files,
+        symbols: stats.symbols,
+        calls: stats.calls,
+        resolution_rate: stats.resolution_rate,
+        dead_functions: stats.dead_functions,
+        languages: stats.languages,
+        parse_error_files,
+        last_indexed,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct CyclesQuery {
+    pub limit: Option<usize>,
+}
+
+/// Engine SCC cycles (length >= 2) via petgraph Kosaraju — replaces the old
+/// SQL mutual-pair subset that could only ever see 2-cycles.
+#[derive(Serialize)]
+pub struct CyclesResponse {
+    pub total: usize,
+    pub cycles: Vec<crate::graph::circular::CircularDependency>,
+}
+
+pub async fn cycles(
+    State(db_path): State<DbState>,
+    Query(query): Query<CyclesQuery>,
+) -> Result<Json<CyclesResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let graph = crate::db::query::build_call_graph(&db, None)
+        .map_err(log_query_failure("Failed to build call graph."))?;
+    let mut cycles = crate::graph::circular::detect_circular_dependencies(&graph);
+    let total = cycles.len();
+    let limit = query.limit.unwrap_or(50).clamp(1, 500);
+    cycles.truncate(limit);
+    Ok(Json(CyclesResponse { total, cycles }))
+}
+
+#[derive(Deserialize)]
+pub struct ChurnQuery {
+    pub limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct ChurnEntry {
+    pub id: i64,
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file: String,
+    pub module: String,
+    pub line_start: u32,
+    pub modification_count: i64,
+    pub author_count: i64,
+    pub is_volatile: bool,
+    pub last_modified_at: Option<i64>,
+}
+
+#[derive(Serialize)]
+pub struct ChurnResponse {
+    pub entries: Vec<ChurnEntry>,
+}
+
+/// Churn ranking from symbol_history (git blame aggregated per symbol),
+/// most-modified first — the engine signal the old UI collapsed into a
+/// single unlabeled bar.
+pub async fn churn(
+    State(db_path): State<DbState>,
+    Query(query): Query<ChurnQuery>,
+) -> Result<Json<ChurnResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let limit = query.limit.unwrap_or(25).clamp(1, 200);
+    let entries = build_churn(&db, limit).map_err(log_query_failure("Failed to load churn."))?;
+    Ok(Json(ChurnResponse { entries }))
+}
+
+fn build_churn(db: &Database, limit: i64) -> anyhow::Result<Vec<ChurnEntry>> {
+    let conn = db.conn();
+    let mut stmt = conn.prepare(
+        "SELECT s.id, s.name, s.qualified_name, s.kind, f.path, s.line_start,
+                sh.modification_count, sh.author_count, sh.is_volatile, sh.last_modified_at
+         FROM symbol_history sh
+         JOIN symbols s ON sh.symbol_id = s.id
+         JOIN files f ON s.file_id = f.id
+         WHERE sh.modification_count > 0
+         ORDER BY sh.modification_count DESC, sh.author_count DESC, s.name
+         LIMIT ?1",
+    )?;
+    let entries = stmt
+        .query_map(params![limit], |row| {
+            let file: String = row.get(4)?;
+            Ok(ChurnEntry {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                module: crate::db::query::extract_module_name(&file),
+                file,
+                line_start: row.get(5)?,
+                modification_count: row.get(6)?,
+                author_count: row.get(7)?,
+                is_volatile: row.get(8)?,
+                last_modified_at: row.get(9)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(entries)
+}
+
+#[derive(Deserialize)]
+pub struct SymbolSearchQuery {
+    pub q: Option<String>,
+    pub kind: Option<String>,
+    pub lang: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub struct SymbolSearchResult {
+    #[serde(flatten)]
+    pub result: crate::search::SearchResult,
+    pub module: String,
+}
+
+#[derive(Serialize)]
+pub struct SymbolSearchResponse {
+    pub results: Vec<SymbolSearchResult>,
+}
+
+/// FTS5-backed symbol search with kind/language filters — routes through the
+/// real search engine (src/search) instead of the raw LIKE query the legacy
+/// /api/search endpoint uses.
+pub async fn symbol_search(
+    State(db_path): State<DbState>,
+    Query(query): Query<SymbolSearchQuery>,
+) -> Result<Json<SymbolSearchResponse>, ApiError> {
+    let q = query.q.unwrap_or_default();
+    if q.is_empty() || q.len() > 500 {
+        return Ok(Json(SymbolSearchResponse {
+            results: Vec::new(),
+        }));
+    }
+    let db = open_db(&db_path)?;
+    let options = crate::search::SearchOptions {
+        limit: Some(query.limit.unwrap_or(50).clamp(1, 200)),
+        kind_filter: query.kind.filter(|s| !s.is_empty()),
+        language_filter: query.lang.filter(|s| !s.is_empty()),
+        file_filter: None,
+        fuzzy: false,
+    };
+    let results = crate::search::search(&db, &q, &options)
+        .map_err(log_query_failure("Search query failed."))?
+        .into_iter()
+        .map(|result| SymbolSearchResult {
+            module: crate::db::query::extract_module_name(&result.file),
+            result,
+        })
+        .collect();
+    Ok(Json(SymbolSearchResponse { results }))
+}
+
 fn do_search(db: &Database, query: &str) -> anyhow::Result<Vec<GraphNode>> {
     let conn = db.conn();
 
