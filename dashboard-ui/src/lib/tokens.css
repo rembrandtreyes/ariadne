@@ -99,6 +99,21 @@
   /* ── Focus ring (ISC-5) ── */
   --focus-ring: 2px solid var(--accent);
   --focus-offset: 2px;
+
+  /* ── Atlas: community hues. The WebGL renderer reads these at init via
+        getComputedStyle, so even shader colors stay token-sourced. ── */
+  --atlas-1: #d4a853;
+  --atlas-2: #4ade80;
+  --atlas-3: #60a5fa;
+  --atlas-4: #f87171;
+  --atlas-5: #c084fc;
+  --atlas-6: #2dd4bf;
+  --atlas-7: #fb923c;
+  --atlas-8: #f472b6;
+  --atlas-9: #a3e635;
+  --atlas-10: #67e8f9;
+  --atlas-11: #818cf8;
+  --atlas-12: #a8a29e;
 }
 
 @media (prefers-reduced-motion: reduce) {

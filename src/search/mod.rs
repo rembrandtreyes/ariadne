@@ -34,6 +34,10 @@ pub struct SearchOptions {
     pub file_filter: Option<String>,
     /// Whether to use fuzzy matching
     pub fuzzy: bool,
+    /// Populate each result's `snippet` with its declaration line read from
+    /// disk. Off by default: only callers that render snippets (the dashboard
+    /// search UI) pay the file I/O.
+    pub include_snippets: bool,
 }
 
 /// Execute a search query against the indexed codebase.
@@ -90,7 +94,58 @@ pub fn search(
     }
 
     results.truncate(limit);
+
+    if options.include_snippets {
+        populate_snippets(db, &mut results);
+    }
+
     Ok(results)
+}
+
+/// Fill `snippet` with each result's declaration line, best-effort: a moved
+/// or unreadable file leaves that result's snippet None rather than failing
+/// the search. File contents are cached per call so N results in one file
+/// cost one read.
+fn populate_snippets(db: &crate::db::Database, results: &mut [SearchResult]) {
+    const MAX_SNIPPET_CHARS: usize = 160;
+    let conn = db.conn();
+    let mut file_cache: std::collections::HashMap<String, Option<Vec<String>>> =
+        std::collections::HashMap::new();
+
+    for result in results.iter_mut() {
+        let lines = file_cache.entry(result.file.clone()).or_insert_with(|| {
+            let absolute: Option<String> = conn
+                .query_row(
+                    "SELECT absolute_path FROM files WHERE path = ?1 LIMIT 1",
+                    rusqlite::params![result.file],
+                    |row| row.get(0),
+                )
+                .ok();
+            absolute
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .map(|content| content.lines().map(str::to_string).collect())
+        });
+
+        let Some(lines) = lines else { continue };
+        let Some(raw) = result
+            .line
+            .checked_sub(1)
+            .and_then(|i| lines.get(i as usize))
+        else {
+            continue;
+        };
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let snippet: String = if trimmed.chars().count() > MAX_SNIPPET_CHARS {
+            let cut: String = trimmed.chars().take(MAX_SNIPPET_CHARS).collect();
+            format!("{cut}…")
+        } else {
+            trimmed.to_string()
+        };
+        result.snippet = Some(snippet);
+    }
 }
 
 /// Build the extra WHERE fragment and parameter values for the optional

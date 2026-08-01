@@ -1253,6 +1253,7 @@ pub async fn symbol_search(
         language_filter: query.lang.filter(|s| !s.is_empty()),
         file_filter: None,
         fuzzy: false,
+        include_snippets: true,
     };
     let results = crate::search::search(&db, &q, &options)
         .map_err(log_query_failure("Search query failed."))?
@@ -1263,6 +1264,160 @@ pub async fn symbol_search(
         })
         .collect();
     Ok(Json(SymbolSearchResponse { results }))
+}
+
+// ── P2 Atlas endpoints (dashboard rebuild) ──────────────────────────────────
+// Purpose-built graph payload for the Atlas view: nodes carry server-derived
+// module identity and community membership so the client can render the
+// clustered default view (ISC-19) without re-deriving structure.
+
+#[derive(Deserialize)]
+pub struct AtlasQuery {
+    pub limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub struct AtlasNode {
+    pub id: i64,
+    pub name: String,
+    pub kind: String,
+    pub module: String,
+    pub community: Option<i64>,
+    pub in_degree: u32,
+    pub out_degree: u32,
+    pub is_dead: bool,
+}
+
+#[derive(Serialize)]
+pub struct AtlasEdge {
+    pub source: i64,
+    pub target: i64,
+}
+
+#[derive(Serialize)]
+pub struct AtlasResponse {
+    pub nodes: Vec<AtlasNode>,
+    pub edges: Vec<AtlasEdge>,
+    pub communities: Vec<crate::db::query::CommunityRow>,
+    pub total_symbols: u64,
+    pub truncated: bool,
+}
+
+pub async fn atlas(
+    State(db_path): State<DbState>,
+    Query(query): Query<AtlasQuery>,
+) -> Result<Json<AtlasResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let limit = query.limit.unwrap_or(5000).clamp(10, 20000);
+    let data = build_atlas(&db, limit).map_err(log_query_failure("Failed to build atlas data."))?;
+    Ok(Json(data))
+}
+
+fn build_atlas(db: &Database, limit: usize) -> anyhow::Result<AtlasResponse> {
+    let conn = db.conn();
+
+    // All resolved call pairs in one pass; degrees are computed globally so a
+    // truncated node set still reports each symbol's true connectivity.
+    let mut call_stmt = conn.prepare(
+        "SELECT caller_symbol_id, callee_symbol_id FROM calls
+         WHERE callee_symbol_id IS NOT NULL",
+    )?;
+    let pairs: Vec<(i64, i64)> = call_stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let mut in_degree: HashMap<i64, u32> = HashMap::new();
+    let mut out_degree: HashMap<i64, u32> = HashMap::new();
+    for (source, target) in &pairs {
+        *out_degree.entry(*source).or_insert(0) += 1;
+        *in_degree.entry(*target).or_insert(0) += 1;
+    }
+
+    let mut sym_stmt = conn.prepare(
+        "SELECT s.id, s.name, s.kind, f.path, s.community_id, s.is_dead
+         FROM symbols s JOIN files f ON s.file_id = f.id",
+    )?;
+    let mut nodes: Vec<AtlasNode> = sym_stmt
+        .query_map([], |row| {
+            let id: i64 = row.get(0)?;
+            let file: String = row.get(3)?;
+            Ok(AtlasNode {
+                id,
+                name: row.get(1)?,
+                kind: row.get(2)?,
+                module: crate::db::query::extract_module_name(&file),
+                community: row.get(4)?,
+                in_degree: 0,
+                out_degree: 0,
+                is_dead: row.get(5).unwrap_or(false),
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for node in &mut nodes {
+        node.in_degree = in_degree.get(&node.id).copied().unwrap_or(0);
+        node.out_degree = out_degree.get(&node.id).copied().unwrap_or(0);
+    }
+
+    let total_symbols = nodes.len() as u64;
+    let truncated = nodes.len() > limit;
+    if truncated {
+        // Keep the most-connected symbols; id tiebreak keeps the cut stable
+        // across requests.
+        nodes.sort_by(|a, b| {
+            (b.in_degree + b.out_degree)
+                .cmp(&(a.in_degree + a.out_degree))
+                .then(a.id.cmp(&b.id))
+        });
+        nodes.truncate(limit);
+    }
+
+    let kept: HashSet<i64> = nodes.iter().map(|n| n.id).collect();
+    let edges: Vec<AtlasEdge> = pairs
+        .into_iter()
+        .filter(|(source, target)| kept.contains(source) && kept.contains(target))
+        .map(|(source, target)| AtlasEdge { source, target })
+        .collect();
+
+    let communities = crate::db::query::get_communities(db)?;
+
+    Ok(AtlasResponse {
+        nodes,
+        edges,
+        communities,
+        total_symbols,
+        truncated,
+    })
+}
+
+/// Distinct symbol kinds and file languages present in the index — the
+/// search UI's filter options come from the data, not a hardcoded list.
+#[derive(Serialize)]
+pub struct SearchFacetsResponse {
+    pub kinds: Vec<String>,
+    pub languages: Vec<String>,
+}
+
+pub async fn search_facets(
+    State(db_path): State<DbState>,
+) -> Result<Json<SearchFacetsResponse>, ApiError> {
+    let db = open_db(&db_path)?;
+    let facets =
+        build_search_facets(&db).map_err(log_query_failure("Failed to load search facets."))?;
+    Ok(Json(facets))
+}
+
+fn build_search_facets(db: &Database) -> anyhow::Result<SearchFacetsResponse> {
+    let conn = db.conn();
+    let mut kind_stmt = conn.prepare("SELECT DISTINCT kind FROM symbols ORDER BY kind")?;
+    let kinds = kind_stmt
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<String>, _>>()?;
+    let mut lang_stmt = conn.prepare("SELECT DISTINCT language FROM files ORDER BY language")?;
+    let languages = lang_stmt
+        .query_map([], |row| row.get(0))?
+        .collect::<Result<Vec<String>, _>>()?;
+    Ok(SearchFacetsResponse { kinds, languages })
 }
 
 fn do_search(db: &Database, query: &str) -> anyhow::Result<Vec<GraphNode>> {

@@ -1091,3 +1091,150 @@ async fn test_symbol_search_fts_with_filters() {
     .expect("empty query should succeed");
     assert!(empty.0.results.is_empty());
 }
+
+// ── P2 Atlas + search-facet endpoints (dashboard rebuild) ───────────────────
+
+#[tokio::test]
+async fn test_atlas_endpoint_nodes_edges_and_module_identity() {
+    use ariadne::dashboard::api::{atlas, AtlasQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    let result = atlas(State(state), Query(AtlasQuery { limit: None }))
+        .await
+        .expect("atlas should succeed");
+    let a = result.0;
+
+    assert!(!a.nodes.is_empty(), "expected atlas nodes");
+    // Fixture is far below the default cap: untruncated and complete.
+    assert!(
+        !a.truncated,
+        "fixture must not be truncated at default limit"
+    );
+    assert_eq!(a.total_symbols, a.nodes.len() as u64);
+
+    let ids: std::collections::HashSet<i64> = a.nodes.iter().map(|n| n.id).collect();
+    for e in &a.edges {
+        assert!(
+            ids.contains(&e.source) && ids.contains(&e.target),
+            "every edge endpoint must be a returned node"
+        );
+    }
+    for n in &a.nodes {
+        assert!(
+            !n.module.is_empty(),
+            "module identity must be server-derived"
+        );
+    }
+    // Untruncated: every resolved call pair among symbols is an edge, so
+    // global out-degrees must sum to the edge count.
+    let degree_sum: u64 = a.nodes.iter().map(|n| n.out_degree as u64).sum();
+    assert_eq!(
+        degree_sum,
+        a.edges.len() as u64,
+        "global degrees must match returned edges when untruncated"
+    );
+}
+
+#[tokio::test]
+async fn test_atlas_truncation_keeps_most_connected() {
+    use ariadne::dashboard::api::{atlas, AtlasQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    let full = atlas(State(state.clone()), Query(AtlasQuery { limit: None }))
+        .await
+        .expect("atlas should succeed")
+        .0;
+    let capped = atlas(State(state), Query(AtlasQuery { limit: Some(10) }))
+        .await
+        .expect("capped atlas should succeed")
+        .0;
+
+    assert!(capped.nodes.len() <= 10, "limit must cap the node count");
+    assert_eq!(
+        capped.truncated,
+        full.total_symbols > 10,
+        "truncated flag must reflect the cut honestly"
+    );
+    assert_eq!(
+        capped.total_symbols, full.total_symbols,
+        "total_symbols reports the whole index, not the cut"
+    );
+    if capped.truncated {
+        // The kept set must be the most-connected symbols.
+        let min_kept = capped
+            .nodes
+            .iter()
+            .map(|n| n.in_degree + n.out_degree)
+            .min()
+            .unwrap_or(0);
+        let kept: std::collections::HashSet<i64> = capped.nodes.iter().map(|n| n.id).collect();
+        for n in &full.nodes {
+            if !kept.contains(&n.id) {
+                assert!(
+                    n.in_degree + n.out_degree <= min_kept,
+                    "a dropped symbol may not out-rank a kept one"
+                );
+            }
+        }
+    }
+    // Edges must stay closed over the kept nodes.
+    let kept: std::collections::HashSet<i64> = capped.nodes.iter().map(|n| n.id).collect();
+    for e in &capped.edges {
+        assert!(kept.contains(&e.source) && kept.contains(&e.target));
+    }
+}
+
+#[tokio::test]
+async fn test_search_facets_come_from_the_index() {
+    use ariadne::dashboard::api::search_facets;
+    let (_dir, state) = setup_indexed_db();
+
+    let facets = search_facets(State(state))
+        .await
+        .expect("facets should succeed")
+        .0;
+
+    assert!(
+        facets.kinds.iter().any(|k| k == "function"),
+        "python fixture must surface the function kind, got {:?}",
+        facets.kinds
+    );
+    assert!(
+        facets.languages.iter().any(|l| l == "python"),
+        "python fixture must surface its language, got {:?}",
+        facets.languages
+    );
+}
+
+#[tokio::test]
+async fn test_symbol_search_returns_declaration_snippets() {
+    use ariadne::dashboard::api::{symbol_search, SymbolSearchQuery};
+    let (_dir, state) = setup_indexed_db();
+
+    let result = symbol_search(
+        State(state),
+        Query(SymbolSearchQuery {
+            q: Some("greet".into()),
+            kind: None,
+            lang: None,
+            limit: None,
+        }),
+    )
+    .await
+    .expect("search should succeed");
+
+    assert!(!result.0.results.is_empty(), "expected results for 'greet'");
+    for r in &result.0.results {
+        let snippet = r
+            .result
+            .snippet
+            .as_deref()
+            .expect("dashboard search must include a snippet (ISC-28)");
+        assert!(!snippet.trim().is_empty(), "snippet must be non-empty");
+        assert!(
+            snippet.contains(&r.result.name),
+            "declaration line should mention the symbol: {snippet:?} vs {}",
+            r.result.name
+        );
+    }
+}

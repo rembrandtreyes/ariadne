@@ -114,6 +114,148 @@ export interface OverviewData {
   churn: ChurnEntry[];
 }
 
+/* ── Atlas (P2) ── */
+
+export interface AtlasNode {
+  id: number;
+  name: string;
+  kind: string;
+  module: string;
+  community: number | null;
+  in_degree: number;
+  out_degree: number;
+  is_dead: boolean;
+}
+
+export interface AtlasEdge {
+  source: number;
+  target: number;
+}
+
+export interface CommunityInfo {
+  id: number;
+  name: string;
+  symbol_count: number;
+  internal_edges: number;
+  external_edges: number;
+  modularity: number;
+}
+
+export interface AtlasData {
+  nodes: AtlasNode[];
+  edges: AtlasEdge[];
+  communities: CommunityInfo[];
+  total_symbols: number;
+  truncated: boolean;
+}
+
+export function loadAtlasData(): Promise<AtlasData> {
+  return fetchJson<AtlasData>('/api/atlas');
+}
+
+/* ── Symbol dossier (P2) ── */
+
+export interface DescribeMetrics {
+  fan_in: number;
+  fan_out: number;
+  modification_count: number;
+  author_count: number;
+  is_volatile: boolean;
+  blast_radius: number;
+  coupled_file_count: number;
+  max_coupling_strength: number;
+}
+
+export interface DescribeResult {
+  description: string;
+  role: string;
+  risk_level: string;
+  risk_score: number;
+  metrics: DescribeMetrics;
+}
+
+/** Node shape of the legacy graph endpoints (string ids). */
+export interface NeighborNode {
+  id: string;
+  name: string;
+  kind: string;
+  file: string;
+  in_degree: number;
+  out_degree: number;
+  is_dead: boolean;
+  line_start: number;
+  line_end: number;
+  signature: string;
+}
+
+export interface NeighborhoodData {
+  nodes: NeighborNode[];
+  edges: { source: string; target: string; confidence: number }[];
+}
+
+export interface SourceData {
+  code: string;
+  line_start: number;
+  line_end: number;
+  line_count: number;
+  language: string;
+  file: string;
+}
+
+export interface SymbolCore {
+  describe: DescribeResult;
+  hood: NeighborhoodData;
+}
+
+/** Everything the dossier header/relations render, one round-trip. Source is
+ * fetched separately so a moved file degrades one panel, not the dossier. */
+export async function loadSymbolCore(id: number): Promise<SymbolCore> {
+  const [describe, hood] = await Promise.all([
+    fetchJson<DescribeResult>(`/api/describe?id=${id}`),
+    fetchJson<NeighborhoodData>(`/api/graph/neighborhood?id=${id}&depth=1`),
+  ]);
+  return { describe, hood };
+}
+
+export function loadSource(id: number): Promise<SourceData> {
+  return fetchJson<SourceData>(`/api/source?id=${id}&context=3`);
+}
+
+/* ── Search (P2) ── */
+
+export interface SearchFacets {
+  kinds: string[];
+  languages: string[];
+}
+
+export interface SearchHit {
+  name: string;
+  qualified_name: string | null;
+  symbol_id: number | null;
+  kind: string;
+  file: string;
+  line: number;
+  score: number;
+  snippet: string | null;
+  module: string;
+}
+
+export function loadSearchFacets(): Promise<SearchFacets> {
+  return fetchJson<SearchFacets>('/api/search_facets');
+}
+
+export async function searchSymbols(
+  q: string,
+  kind: string,
+  lang: string
+): Promise<SearchHit[]> {
+  const params = new URLSearchParams({ q, limit: '50' });
+  if (kind) params.set('kind', kind);
+  if (lang) params.set('lang', lang);
+  const res = await fetchJson<{ results: SearchHit[] }>(`/api/symbol_search?${params}`);
+  return res.results;
+}
+
 /** One round-trip for everything the Overview renders. */
 export async function loadOverviewData(): Promise<OverviewData> {
   const [overview, hotspotsRes, modulesRes, churnRes] = await Promise.all([
